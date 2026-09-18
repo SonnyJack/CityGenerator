@@ -30,6 +30,8 @@ export interface Thumbnail {
 export interface EngineStats {
   terrainMs: number;
   landcoverMs: number;
+  settlementsMs: number;
+  roadsMs: number;
   tilesMs: number;
   totalMs: number;
   memoHits: number;
@@ -44,4 +46,17 @@ export interface EngineStats {
     lakes: number;
     contourIntervalM: number;
   };
+  settlements: {
+    id: string;
+    kind: string;
+    name?: string;
+    population: number;
+    center: [number, number];
+    radiusM: number;
+    patches: number;
+    walled: boolean;
+    blocks: number;
+  }[];
+  roads: { links: number; roadKm: number; bridges: number };
+  blocks: number;
 }

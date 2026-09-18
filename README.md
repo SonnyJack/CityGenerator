@@ -24,11 +24,14 @@ and extended with:
 
 ## Status
 
-Phases 0 and 1 are complete: the monorepo, CI and GitHub Pages deployment,
-the document format and deterministic engine, and terrain generation with
-hydrology, land cover, contours, hillshade and 3-D terrain rendered through
-MapLibre in atlas and ink themes, with a generate panel and a variations strip.
-Settlements and the classic town are next (Phase 2).
+Phases 0 to 2 are complete: the monorepo, CI and GitHub Pages deployment,
+the document format and deterministic engine, terrain with hydrology, land
+cover, contours, hillshade and 3-D terrain, and settlements: sited on the
+terrain, laid out as organic towns with walls, gates, plazas, wards and
+streets, with buildings generated lazily per block as you zoom in, and roads
+routed between them. Both an atlas and an ink theme render everything.
+Year-based eras, wealth and density fields and modern street patterns are
+next (Phase 3).
 
 ## Development
 

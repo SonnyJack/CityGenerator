@@ -3,6 +3,7 @@ import { biomeIdSchema, terrainPresetSchema } from '@citygen/core';
 import { biomes } from '@citygen/features';
 import { themes, type LayerGroup } from '@citygen/themes';
 import { randomSeed, useApp } from '../store.js';
+import { SettlementsPanel } from './SettlementsPanel.js';
 
 const PRESET_LABELS: Record<string, string> = {
   plains: 'Plains',
@@ -24,6 +25,9 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'rivers', label: 'Rivers' },
   { id: 'contours', label: 'Contours' },
   { id: 'graticule', label: 'Grid (1 km)' },
+  { id: 'settlements', label: 'Settlements' },
+  { id: 'buildings', label: 'Buildings' },
+  { id: 'parcels', label: 'Parcels' },
 ];
 
 /** A slider that dispatches on release (and on keyboard steps) rather than every pixel. */
@@ -214,6 +218,8 @@ export function GenerateDock() {
         />
       </section>
 
+      <SettlementsPanel />
+
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">View</h2>
         <label className="flex items-center gap-2 text-xs">
@@ -275,6 +281,12 @@ export function GenerateDock() {
             <span className="font-mono">{stats.terrain.lakes}</span>
             <span>Contours</span>
             <span className="font-mono">every {stats.terrain.contourIntervalM} m</span>
+            <span>Settlements</span>
+            <span className="font-mono">{stats.settlements.length}</span>
+            <span>Blocks</span>
+            <span className="font-mono">{stats.blocks.toLocaleString()}</span>
+            <span>Roads</span>
+            <span className="font-mono">{stats.roads.roadKm.toFixed(0)} km</span>
             <span>Generated in</span>
             <span className="font-mono">{stats.totalMs.toFixed(0)} ms</span>
           </div>

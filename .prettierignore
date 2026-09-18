@@ -4,3 +4,4 @@ pnpm-lock.yaml
 playwright-report
 test-results
 *.tsbuildinfo
+packages/core/src/vendor/*.js

@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { annotationSchema, authoredFeatureSchema, geometrySchema, authoredPropsSchema } from '@citygen/core';
+import {
+  annotationSchema,
+  authoredFeatureSchema,
+  geometrySchema,
+  authoredPropsSchema,
+  settlementSpecSchema,
+} from '@citygen/core';
 
 /**
  * Every mutation of a MapDocument, from the UI or the LLM assistant, is one of
@@ -20,6 +26,13 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('spec.patch'), ops: z.array(jsonPatchOp).min(1) }),
   z.object({ type: z.literal('spec.setSeed'), seed: z.string().min(1) }),
   z.object({ type: z.literal('year.set'), year: z.number().int().min(1100).max(2100) }),
+  z.object({ type: z.literal('settlement.add'), settlement: settlementSpecSchema }),
+  z.object({
+    type: z.literal('settlement.update'),
+    id: z.string(),
+    patch: settlementSpecSchema.partial().omit({ id: true }),
+  }),
+  z.object({ type: z.literal('settlement.remove'), id: z.string() }),
   z.object({ type: z.literal('authored.add'), features: z.array(authoredFeatureSchema).min(1) }),
   z.object({
     type: z.literal('authored.update'),

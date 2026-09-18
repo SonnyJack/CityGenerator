@@ -37,7 +37,7 @@ export function Toolbar() {
   return (
     <header className="flex flex-wrap items-center gap-2 border-b border-stone-300 bg-stone-50 px-3 py-2 text-sm">
       <span className="font-semibold tracking-tight">CityGenerator</span>
-      <span className="text-xs text-stone-500">Phase 1</span>
+      <span className="text-xs text-stone-500">Phase 2</span>
 
       <label className="ml-4 flex items-center gap-1">
         <span className="text-stone-600">Name</span>
@@ -93,7 +93,7 @@ export function Toolbar() {
         {status === 'generating' && 'Generating…'}
         {status === 'idle' &&
           stats &&
-          `Ready · terrain ${stats.terrainMs.toFixed(0)} ms · land cover ${stats.landcoverMs.toFixed(0)} ms · tiles ${stats.tilesMs.toFixed(0)} ms · memo ${stats.memoHits}/${stats.memoHits + stats.memoMisses}`}
+          `Ready · terrain ${stats.terrainMs.toFixed(0)} ms · land cover ${stats.landcoverMs.toFixed(0)} ms · settlements ${stats.settlementsMs.toFixed(0)} ms · roads ${stats.roadsMs.toFixed(0)} ms · tiles ${stats.tilesMs.toFixed(0)} ms · memo ${stats.memoHits}/${stats.memoHits + stats.memoMisses}`}
         {status === 'idle' && !stats && 'Starting engine…'}
         {error && <span className="ml-2 text-red-700">{error}</span>}
       </div>

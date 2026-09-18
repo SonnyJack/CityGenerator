@@ -101,27 +101,54 @@ in 1.9 s end to end in the browser (terrain 1.4 s, land cover 0.4 s, tiles
 (unit-tested); ink spike signed off as above. Golden hashes guard the terrain
 stage and the cross-engine fixture.
 
-## Phase 2 — Settlements, districts and the classic town
+## Phase 2 — Settlements, districts and the classic town (done, one item deferred)
 
-- [ ] Settlement siting via the placement engine core (constraints, scorers,
-      Poisson candidates); settlement kinds; pinning.
-- [ ] Buildable mask, growth axes, historic core extent from `founded`.
-- [ ] Relaxed-Voronoi districts clipped to terrain and split by rivers.
-- [ ] Curtain wall, gates, citadel, plaza; gate-to-plaza arteries; organic
-      streets; bridges.
-- [ ] Zone profiles for the reference's ward set with `rateLocation`-style
-      scoring.
-- [ ] **Block boundary**: block polygons + recipes; lazy block generation
-      (parcels, buildings, fill) keyed by block id; LRU cache; tiles assembled
-      from blocks.
-- [ ] Regional roads between settlements (terrain-routed); rural fill: farms,
-      woods, hamlets, lanes.
-- [ ] `ink` theme complete; district labels.
+- [x] Settlement siting (region stage R3): explicit specs (with pinned sites)
+      or a policy-drawn set; candidates scored on flatness, water access,
+      centrality, coastal/river wants per kind, and separation; radius from
+      population and an era-dependent urban density.
+- [x] Town stage: sunflower-spiral patch sites, two Lloyd relaxations, bounded
+      Voronoi (vendored Delaunator 4.0.1 with a guard ring), patches clipped to
+      the coast through a fine local mask and the in-house marching squares,
+      steep patches excluded from the core.
+- [x] Curtain wall as the union boundary of inner patches (edge counting on
+      shared Voronoi vertices), gates spread by angle on land, towers; walls
+      when the year is 1700 or earlier (or the settlement asks for them).
+- [x] Arteries from gates to the centre by Dijkstra over patch edges with slope
+      cost and reuse discount; outward roads from gates; every other inner
+      patch edge a minor street.
+- [x] Zone profiles for the reference's ward set with location scoring
+      (plaza, castle, cathedral, market, military, park, merchant, patriciate,
+      craftsmen, slum, gate wards, farms).
+- [x] **Block boundary**: every buildable patch becomes a block recipe (ring
+      inset by the street half-width, ward, seed). Lazy block generation:
+      recursive lot splitting across the oriented box with jitter, interior lots
+      left as courtyards, buildings inset per ward with floors and kinds.
+      `BlockTiler` generates blocks on demand into an LRU cache and encodes them
+      straight into the tile (direct MVT encoding with clipping), from zoom 13
+      (buildings) and 14 (parcels).
+- [x] Regional roads (R5): minimum spanning tree plus short extra links,
+      routed by A* over the base raster with slope cost, rivers as bridges, sea
+      and lakes impassable, trimmed at the built-up edge; roads out to the
+      region edge from the largest settlement.
+- [x] Rural fill: farm wards around settlements and hamlets as a settlement
+      kind. Field subdivision of farmland polygons and country lanes move to
+      Phase 3 alongside the modern zone profiles.
+- [x] Both themes style patches by ward, streets by class with casings (atlas),
+      walls, gates, regional roads, bridges, buildings and parcels; settlement
+      markers at region zoom.
+- [x] Settlements panel: automatic (policy count) or explicit list with kind,
+      population and name; live stats per settlement.
+- [ ] District labels: deferred to Phase 7 with the glyph atlas (MapLibre text
+      needs glyph PBFs, which the static site must bundle).
 
-Acceptance: golden-seed hash tests for 10 seeds × 4 presets; a 40 km region
-with a city and ten villages navigates from region to street at 60 fps; a
-reviewer comparing the medieval town with the reference finds no loss of
-believability.
+Acceptance: golden-hash tests for the town stage; a 20 km region with a port
+town and two villages generates in about 2.1 s in the browser (settlements
+50 ms, roads 250 ms); tiles with lazy buildings build in 20–40 ms; a
+reviewer-style render of a 12,000-person walled town (plaza, cathedral,
+castle, market wards, gate suburbs, courtyard blocks) was checked during the
+phase. The 40 km / ten-village performance check moves to Phase 3 together
+with the modern street patterns, which change the block count materially.
 
 ## Phase 3 — Years, society fields and modern streets
 

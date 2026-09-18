@@ -19,6 +19,21 @@ export interface ThemePalette {
   river: string;
 }
 
+export type WardKind =
+  | 'plaza'
+  | 'market'
+  | 'craftsmen'
+  | 'merchant'
+  | 'patriciate'
+  | 'slum'
+  | 'military'
+  | 'cathedral'
+  | 'castle'
+  | 'park'
+  | 'gate'
+  | 'farm'
+  | 'common';
+
 export type LandcoverKind = 'snow' | 'rock' | 'marsh' | 'forest' | 'farmland' | 'open' | 'sand' | 'mangrove';
 
 export interface LandcoverPaint {
@@ -38,10 +53,25 @@ export interface PatternSpec {
   dots?: [number, number, number][];
 }
 
+export interface TownPaint {
+  building: string;
+  buildingOutline: string;
+  buildingPattern?: string;
+  street: string;
+  streetCasing?: string;
+  wall: string;
+  road: string;
+  parcel: string;
+  plaza: string;
+  ward: Record<string, string>;
+  settlementMarker: string;
+}
+
 export interface Theme {
   id: string;
   name: string;
   palette: ThemePalette;
+  town: TownPaint;
   landcover: Record<LandcoverKind, LandcoverPaint>;
   patterns: PatternSpec[];
   /** Hypsometric tint stops [elevation m, colour]; empty disables colour relief. */
@@ -78,6 +108,32 @@ export const atlas: Theme = {
     open: { color: '#d9e0c4' },
     sand: { color: '#ece0b8' },
     mangrove: { color: '#9dbfa2' },
+  },
+  town: {
+    building: '#8d7b6a',
+    buildingOutline: '#5f5045',
+    street: '#fbfaf5',
+    streetCasing: '#b9b1a3',
+    wall: '#3a332c',
+    road: '#d9c9a8',
+    parcel: '#c9bfae',
+    plaza: '#f2ead3',
+    ward: {
+      plaza: '#f2ead3',
+      market: '#f0d9b5',
+      craftsmen: '#e9e1cf',
+      merchant: '#e4d6bd',
+      patriciate: '#dfe6d3',
+      slum: '#e6d8d0',
+      military: '#d6d6d2',
+      cathedral: '#d9d2e8',
+      castle: '#cfcfcf',
+      park: '#c9dcb2',
+      gate: '#ece3c9',
+      farm: '#eceddb',
+      common: '#e9e5da',
+    },
+    settlementMarker: '#5f5045',
   },
   patterns: [],
   relief: [
@@ -191,6 +247,17 @@ export const ink: Theme = {
       ],
     },
   ],
+  town: {
+    building: '#2a2a2a',
+    buildingOutline: '#1a1a1a',
+    street: '#f7f3ea',
+    wall: '#1a1a1a',
+    road: '#1a1a1a',
+    parcel: '#9a948a',
+    plaza: '#f7f3ea',
+    ward: {},
+    settlementMarker: '#1a1a1a',
+  },
   relief: [],
   hillshade: {
     exaggeration: 0.35,

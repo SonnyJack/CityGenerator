@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.4** (Phase 1 delivered; see §16)
+Status: **Draft v0.5** (Phase 2 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -932,6 +932,8 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.5** — Phase 2 delivered: settlement siting, the organic town, lazy
+  blocks and regional roads (decision log 12–13).
 - **v0.4** — Phase 1 delivered: recorded the marching-squares, noise and PNG
   decisions and the ink-spike verdict (decision log 10–11).
 - **v0.3** — Closed the remaining questions: MIT licence held by

@@ -4,17 +4,23 @@ import {
   computeFixtureHash,
   landcoverStage,
   regionOutlineStage,
+  roadsStage,
+  sitingStage,
   terrainStage,
+  townStage,
   type MapDocument,
   type TerrainInput,
   type TerrainOutput,
+  type TownOutput,
 } from '@citygen/core';
-import { biomeTerrain } from '@citygen/features';
+import { biomeTerrain, eraForYear } from '@citygen/features';
 import {
+  BlockTiler,
   TileSource,
   createDemSampler,
   demTilePng,
   renderThumbnail,
+  settlementLayers,
   terrainLayers,
   type DemSampler,
 } from '@citygen/tiles';
@@ -73,16 +79,53 @@ const api: EngineApi = {
       { signal },
     );
 
+    // Settlements: siting, one town stage per site, then roads between them.
+    const t3 = performance.now();
+    const siting = await runner.run(
+      sitingStage,
+      {
+        seed: doc.spec.seed,
+        terrain,
+        year: doc.spec.year,
+        settlements: doc.spec.settlements,
+        policy: doc.spec.settlementPolicy,
+      },
+      { signal },
+    );
+    const era = eraForYear(doc.spec.year);
+    const towns: TownOutput[] = [];
+    for (const site of siting.sites) {
+      const blockSizeM = site.spec.layout.blockSizeM ?? era.blockSizeM.core;
+      towns.push(
+        await runner.run(
+          townStage,
+          { seed: doc.spec.seed, site, terrain, year: doc.spec.year, blockSizeM },
+          { signal },
+        ),
+      );
+    }
+    const settlementsMs = performance.now() - t3;
+    const t4 = performance.now();
+    const roads = await runner.run(
+      roadsStage,
+      { seed: doc.spec.seed, terrain, sites: siting.sites },
+      { signal },
+    );
+    const roadsMs = performance.now() - t4;
+
     const t2 = performance.now();
     version += 1;
+    const blocks = towns.flatMap((t) => t.blocks);
     source = new TileSource(
       [
         { name: 'region', features: { type: 'FeatureCollection', features: [outline.boundary] } },
         { name: 'graticule', features: outline.graticule, minZoom: 9 },
         ...terrainLayers(terrain, landcover, options.sketch ? { sketch: { seed: doc.spec.seed } } : {}),
+        ...settlementLayers(towns, roads, siting),
         { name: 'authored', features: doc.authored },
       ],
       version,
+      [new BlockTiler(blocks, doc.spec.year, { minZoom: 13 })],
     );
     dem = { sampler: createDemSampler(terrain, doc.spec.seed), extent: doc.spec.extent };
     const tilesMs = performance.now() - t2;
@@ -90,11 +133,26 @@ const api: EngineApi = {
     const stats: EngineStats = {
       terrainMs,
       landcoverMs,
+      settlementsMs,
+      roadsMs,
       tilesMs,
       totalMs: performance.now() - started,
       memoHits: runner.hits,
       memoMisses: runner.misses,
       terrain: { ...terrain.stats, contourIntervalM: terrain.contourIntervalM },
+      settlements: towns.map((t, i) => ({
+        id: t.id,
+        kind: siting.sites[i]!.kind,
+        name: siting.sites[i]!.name,
+        population: siting.sites[i]!.population,
+        center: siting.sites[i]!.center,
+        radiusM: t.radiusM,
+        patches: t.stats.patches,
+        walled: t.stats.walled,
+        blocks: t.blocks.length,
+      })),
+      roads: roads.stats,
+      blocks: blocks.length,
     };
     return { version, stats };
   },

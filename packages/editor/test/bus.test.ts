@@ -82,6 +82,39 @@ describe('CommandBus', () => {
     expect(b.document.spec.terrain.preset).toBe('bay');
   });
 
+  it('adds, updates and removes settlements', () => {
+    const b = bus();
+    b.dispatch({
+      type: 'settlement.add',
+      settlement: {
+        id: 'arkham',
+        kind: 'city',
+        population: 20000,
+        layout: { streetPattern: 'organic' },
+        features: [],
+      },
+    });
+    b.dispatch({ type: 'settlement.update', id: 'arkham', patch: { population: 25000, name: 'Arkham' } });
+    expect(b.document.spec.settlements[0]!.population).toBe(25000);
+    expect(b.document.spec.settlements[0]!.name).toBe('Arkham');
+    expect(() =>
+      b.dispatch({
+        type: 'settlement.add',
+        settlement: {
+          id: 'arkham',
+          kind: 'town',
+          population: 1,
+          layout: { streetPattern: 'mixed' },
+          features: [],
+        },
+      }),
+    ).toThrow(/already exists/);
+    b.dispatch({ type: 'settlement.remove', id: 'arkham' });
+    expect(b.document.spec.settlements).toHaveLength(0);
+    b.undo();
+    expect(b.document.spec.settlements).toHaveLength(1);
+  });
+
   it('sets presentation state without history', () => {
     const b = bus();
     b.dispatch({ type: 'ui.set', theme: 'ink', layers: { contours: false } });

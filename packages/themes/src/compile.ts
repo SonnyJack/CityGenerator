@@ -17,7 +17,17 @@ export interface CompileOptions {
 }
 
 export type LayerGroup =
-  'relief' | 'hillshade' | 'landcover' | 'water' | 'rivers' | 'contours' | 'graticule' | 'authored';
+  | 'relief'
+  | 'hillshade'
+  | 'landcover'
+  | 'water'
+  | 'rivers'
+  | 'contours'
+  | 'graticule'
+  | 'authored'
+  | 'settlements'
+  | 'buildings'
+  | 'parcels';
 
 const LANDCOVER_KINDS: LandcoverKind[] = [
   'snow',
@@ -168,6 +178,169 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
       'line-color': p.contourMajor,
       'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.5, 14, 1.2],
       'line-opacity': 0.75,
+    },
+  });
+
+  // --- Settlements ---------------------------------------------------------
+  const t = theme.town;
+  const wardEntries = Object.entries(t.ward);
+  layers.push({
+    id: 'patches',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'patches',
+    layout: { visibility: visible('settlements') },
+    paint: {
+      'fill-color': wardEntries.length
+        ? (['match', ['get', 'ward'], ...wardEntries.flat(), p.land] as unknown as ExpressionSpecification)
+        : p.land,
+      'fill-opacity': theme.sketch ? 1 : 0.9,
+      'fill-antialias': false,
+    },
+  });
+  layers.push({
+    id: 'roads',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'roads',
+    layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': t.road,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 2, 16, 6],
+      ...(theme.sketch ? { 'line-dasharray': [4, 2] } : {}),
+    },
+  });
+  layers.push({
+    id: 'bridges',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'bridges',
+    layout: { visibility: visible('settlements'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': p.ink,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 11, 3, 16, 10],
+      'line-opacity': 0.8,
+    },
+  });
+  layers.push({
+    id: 'parcels',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'parcels',
+    minzoom: 15,
+    layout: { visibility: visible('parcels') },
+    paint: { 'line-color': t.parcel, 'line-width': 0.5, 'line-opacity': 0.8 },
+  });
+  layers.push({
+    id: 'buildings',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'buildings',
+    minzoom: 13,
+    layout: { visibility: visible('buildings') },
+    paint: {
+      'fill-color': t.building,
+      'fill-outline-color': t.buildingOutline,
+      ...(t.buildingPattern ? { 'fill-pattern': t.buildingPattern } : {}),
+    },
+  });
+  if (t.streetCasing) {
+    layers.push({
+      id: 'streets-casing',
+      type: 'line',
+      source: options.sourceId,
+      'source-layer': 'streets',
+      minzoom: 12,
+      layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': t.streetCasing,
+        'line-width': [
+          'interpolate',
+          ['exponential', 1.6],
+          ['zoom'],
+          12,
+          ['match', ['get', 'class'], 'artery', 2.2, 'road', 1.8, 1.2],
+          17,
+          ['match', ['get', 'class'], 'artery', 12, 'road', 9, 6],
+        ],
+      },
+    });
+  }
+  layers.push({
+    id: 'streets',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'streets',
+    minzoom: 11,
+    layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': theme.sketch ? p.ink : t.street,
+      'line-width': theme.sketch
+        ? [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            11,
+            ['match', ['get', 'class'], 'artery', 1.2, 0.5],
+            17,
+            ['match', ['get', 'class'], 'artery', 3, 1.2],
+          ]
+        : [
+            'interpolate',
+            ['exponential', 1.6],
+            ['zoom'],
+            12,
+            ['match', ['get', 'class'], 'artery', 1.4, 'road', 1.2, 0.7],
+            17,
+            ['match', ['get', 'class'], 'artery', 9, 'road', 7, 4],
+          ],
+    },
+  });
+  layers.push({
+    id: 'walls',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'walls',
+    layout: { visibility: visible('settlements'), 'line-join': 'miter' },
+    paint: {
+      'line-color': t.wall,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 14, 4, 17, 9],
+    },
+  });
+  layers.push({
+    id: 'gates',
+    type: 'circle',
+    source: options.sourceId,
+    'source-layer': 'gates',
+    minzoom: 12,
+    layout: { visibility: visible('settlements') },
+    paint: {
+      'circle-radius': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        12,
+        ['match', ['get', 'kind'], 'gate', 2.5, 1.5],
+        17,
+        ['match', ['get', 'kind'], 'gate', 9, 5],
+      ],
+      'circle-color': t.wall,
+      'circle-stroke-color': p.labelHalo,
+      'circle-stroke-width': 1,
+    },
+  });
+  layers.push({
+    id: 'settlement-markers',
+    type: 'circle',
+    source: options.sourceId,
+    'source-layer': 'settlements',
+    maxzoom: 11,
+    layout: { visibility: visible('settlements') },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['get', 'population'], 100, 2.5, 5000, 5, 50000, 9],
+      'circle-color': t.settlementMarker,
+      'circle-stroke-color': p.labelHalo,
+      'circle-stroke-width': 1.5,
     },
   });
 

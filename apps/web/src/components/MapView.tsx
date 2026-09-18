@@ -117,7 +117,7 @@ export function MapView() {
       return () => clearTimeout(id);
     }
     map.on('error', (e) => {
-      console.error('MapLibre error', e.error);
+      console.error('MapLibre error', e.error?.message, (e.error as { stack?: string } | undefined)?.stack);
       if (/WebGL/i.test(String(e.error?.message))) setWebglError(String(e.error?.message));
     });
     map.on('style.load', () => ensurePatterns(map, useApp.getState().document.ui?.theme));

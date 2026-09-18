@@ -21,6 +21,29 @@ describe('TileSource', () => {
     expect(z12).not.toBeNull();
   });
 
+  it('drops undefined property values, which vector tiles cannot encode', () => {
+    const source = new TileSource([
+      {
+        name: 'pts',
+        features: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              id: 'p',
+              properties: { name: undefined, kind: 'x' },
+              geometry: { type: 'Point', coordinates: [0, 0] },
+            },
+          ],
+        },
+      },
+    ]);
+    const tile = source.getTile(0, 0, 0)!;
+    const text = new TextDecoder('latin1').decode(tile);
+    expect(text).toContain('kind');
+    expect(text).not.toContain('name');
+  });
+
   it('is deterministic', async () => {
     const out = await new StageRunner().run(regionOutlineStage, FIXTURE_INPUT);
     const make = () => new TileSource([{ name: 'samples', features: out.samples }]);

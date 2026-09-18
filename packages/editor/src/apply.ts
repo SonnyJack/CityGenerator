@@ -38,6 +38,24 @@ export function applyCommand(doc: MapDocument, command: Command, now: string): A
     case 'year.set':
       next.spec.year = command.year;
       break;
+    case 'settlement.add':
+      if (next.spec.settlements.some((s) => s.id === command.settlement.id)) {
+        throw new CommandError(`Settlement "${command.settlement.id}" already exists`);
+      }
+      next.spec.settlements.push(command.settlement);
+      break;
+    case 'settlement.update': {
+      const s = next.spec.settlements.find((x) => x.id === command.id);
+      if (!s) throw new CommandError(`Settlement "${command.id}" not found`);
+      Object.assign(s, command.patch);
+      break;
+    }
+    case 'settlement.remove': {
+      const before = next.spec.settlements.length;
+      next.spec.settlements = next.spec.settlements.filter((s) => s.id !== command.id);
+      if (next.spec.settlements.length === before) warnings.push(`No settlement "${command.id}" to remove`);
+      break;
+    }
     case 'authored.add': {
       const existing = new Set(next.authored.features.map((f) => f.id));
       for (const f of command.features) {

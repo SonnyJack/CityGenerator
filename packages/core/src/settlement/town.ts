@@ -1,0 +1,577 @@
+import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
+import { defineStage } from '../pipeline/stage.js';
+import { Raster } from '../raster/raster.js';
+import { contourPolygons } from '../raster/contours.js';
+import {
+  area,
+  centroid,
+  compactness,
+  distToRing,
+  inset,
+  open,
+  pointInRing,
+  type Pt,
+} from '../geometry/polygon.js';
+import { relax, unionBoundary, voronoi, type VoronoiCell } from '../geometry/voronoi.js';
+import { WATER, type TerrainOutput } from '../terrain/stage.js';
+import type { SettlementSite } from './siting.js';
+import { FILL_WARDS, WARDS, type WardContext, type WardId } from './wards.js';
+import type { Ring } from '../raster/contours.js';
+
+/**
+ * Settlement stage for organic towns (the reference's approach, on terrain):
+ * relaxed Voronoi patches around the site, clipped to the coast; a wall around
+ * the inner patches with gates and towers; plaza, castle, cathedral and other
+ * wards by location score; artery streets from the gates to the plaza along
+ * patch edges; every inner patch becomes a block with a generation recipe.
+ */
+
+export interface TownInput {
+  seed: string;
+  site: SettlementSite;
+  terrain: TerrainOutput;
+  year: number;
+  /** Target block (patch) spacing in metres. */
+  blockSizeM: number;
+}
+
+export interface BlockRecipe {
+  id: string;
+  settlementId: string;
+  ring: Ring;
+  ward: WardId;
+  /** Street half-widths already removed from the ring. */
+  areaM2: number;
+  seed: string;
+  /** Rough elevation at the block, metres. */
+  elevationM: number;
+}
+
+export interface TownOutput {
+  key: string;
+  id: string;
+  center: Pt;
+  radiusM: number;
+  patches: FeatureCollection<Polygon, { settlement: string; ward: WardId; inner: boolean }>;
+  streets: FeatureCollection<LineString, { settlement: string; class: 'artery' | 'street' | 'road' }>;
+  walls: FeatureCollection<LineString, { settlement: string; kind: 'wall' }>;
+  gates: FeatureCollection<Point, { settlement: string; kind: 'gate' | 'tower' }>;
+  blocks: BlockRecipe[];
+  stats: { patches: number; inner: number; walled: boolean; streetsKm: number };
+}
+
+interface Patch {
+  index: number;
+  cell: VoronoiCell;
+  ring: Ring;
+  centroid: Pt;
+  inner: boolean;
+  land: boolean;
+  ward: WardId | null;
+  waterfront: boolean;
+  slope: number;
+  elevation: number;
+}
+
+const ARTERY_HALF_WIDTH = 4;
+const STREET_HALF_WIDTH = 2;
+
+export const townStage = defineStage<TownInput, TownOutput>({
+  id: 'town',
+  version: 1,
+  seedOf: (i) => `${i.seed}/${i.site.id}`,
+  keyOf: (i) => `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}`,
+  run(input, ctx) {
+    const { site, terrain, year } = input;
+    const rng = ctx.rng;
+    const R = site.radiusM;
+    const outerR = R * 1.7;
+    const [cx, cy] = site.center;
+    const { height, water, slope } = terrain;
+
+    // --- Sample helpers over the terrain rasters -----------------------------
+    const cellAt = (x: number, y: number) => {
+      const col = Math.min(Math.max(Math.round(height.col(x)), 0), height.width - 1);
+      const row = Math.min(Math.max(Math.round(height.row(y)), 0), height.height - 1);
+      return row * height.width + col;
+    };
+    const isLand = (x: number, y: number) => {
+      const w = water[cellAt(x, y)]!;
+      return (w === WATER.land || w === WATER.river) && height.sample(x, y) >= terrain.seaLevel;
+    };
+
+    // --- 1. Patch sites: sunflower spiral, denser inside the town ------------
+    const spacing = input.blockSizeM;
+    const innerCount = Math.max(6, Math.round((Math.PI * R * R) / (spacing * spacing)));
+    const outerCount = Math.max(
+      6,
+      Math.round((Math.PI * (outerR * outerR - R * R)) / (spacing * spacing * 3)),
+    );
+    const sites: Pt[] = [];
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    const jitter = rng.fork('jitter');
+    for (let i = 0; i < innerCount; i++) {
+      const r = R * Math.sqrt((i + 0.5) / innerCount);
+      const t = i * golden;
+      sites.push([
+        cx + Math.cos(t) * r + jitter.range(-spacing, spacing) * 0.2,
+        cy + Math.sin(t) * r + jitter.range(-spacing, spacing) * 0.2,
+      ]);
+    }
+    for (let i = 0; i < outerCount; i++) {
+      const r = Math.sqrt(R * R + (outerR * outerR - R * R) * ((i + 0.5) / outerCount));
+      const t = i * golden + 1.3;
+      sites.push([
+        cx + Math.cos(t) * r + jitter.range(-spacing, spacing) * 0.3,
+        cy + Math.sin(t) * r + jitter.range(-spacing, spacing) * 0.3,
+      ]);
+    }
+    const bounds = {
+      minX: cx - outerR * 1.15,
+      minY: cy - outerR * 1.15,
+      maxX: cx + outerR * 1.15,
+      maxY: cy + outerR * 1.15,
+    };
+    const relaxed = relax(sites, bounds, 2);
+    const cells = voronoi(relaxed, bounds);
+    ctx.checkpoint();
+
+    // --- 2. Patches: keep those within the outer radius, clip to the coast ---
+    const patches: Patch[] = [];
+    const localCell = Math.max(8, Math.min(20, spacing / 8));
+    for (let i = 0; i < cells.length; i++) {
+      const cell = cells[i]!;
+      if (cell.ring.length < 3) continue;
+      const c = centroid(cell.ring);
+      const d = Math.hypot(c[0] - cx, c[1] - cy);
+      if (d > outerR) continue;
+      const siteLand = isLand(cell.site[0], cell.site[1]);
+      let ring = open(cell.ring);
+      let allLand = siteLand;
+      let waterfront = false;
+      if (siteLand) {
+        for (const [x, y] of ring) if (!isLand(x, y)) allLand = false;
+        if (!allLand) {
+          const clipped = clipToLand(ring, cell.site, isLand, localCell);
+          if (!clipped) continue;
+          ring = clipped;
+          waterfront = true;
+        }
+      }
+      if (!siteLand) continue;
+      if (area(ring) < spacing * spacing * 0.15) continue;
+      const idx = cellAt(c[0], c[1]);
+      const s = slope[idx]!;
+      patches.push({
+        index: patches.length,
+        cell,
+        ring,
+        centroid: centroid(ring),
+        inner: d <= R && s < 0.35,
+        land: true,
+        ward: null,
+        waterfront,
+        slope: s,
+        elevation: height.data[idx]!,
+      });
+    }
+    // Map original cell index → patch for adjacency.
+    const patchByCell = new Map<number, Patch>();
+    for (const p of patches) patchByCell.set(cells.indexOf(p.cell), p);
+    const neighbours = (p: Patch): Patch[] =>
+      p.cell.neighbours.map((n) => patchByCell.get(n)).filter((q): q is Patch => !!q);
+    ctx.checkpoint();
+
+    const inner = patches.filter((p) => p.inner);
+    const innerSet = new Set(inner.map((p) => cells.indexOf(p.cell)));
+    const walled =
+      (year <= 1700 || site.spec.layout.walls === true) && site.population >= 800 && inner.length >= 6;
+
+    // --- 3. Wall, gates, towers ----------------------------------------------
+    let wallRing: Ring = [];
+    const gates: Pt[] = [];
+    const towers: Pt[] = [];
+    if (walled) {
+      const rings = unionBoundary(cells, innerSet);
+      if (rings[0]) wallRing = rings[0];
+    }
+    const edgeRing: Ring = wallRing.length ? wallRing : (unionBoundary(cells, innerSet)[0] ?? []);
+    if (edgeRing.length >= 3) {
+      const gateCount = Math.min(6, Math.max(2, Math.round(2 + Math.sqrt(inner.length) / 2)));
+      // Candidate vertices sorted by angle; pick spread-out ones on land.
+      const withAngle = edgeRing
+        .map((p, i) => ({ p, i, angle: Math.atan2(p[1] - cy, p[0] - cx) }))
+        .sort((a, b) => a.angle - b.angle);
+      const start = rng.range(0, Math.PI * 2);
+      for (let g = 0; g < gateCount; g++) {
+        const want = ((start + (g / gateCount) * Math.PI * 2 + Math.PI) % (Math.PI * 2)) - Math.PI;
+        let best: (typeof withAngle)[number] | null = null;
+        let bestD = Infinity;
+        for (const v of withAngle) {
+          let dA = Math.abs(v.angle - want);
+          if (dA > Math.PI) dA = Math.PI * 2 - dA;
+          const outward: Pt = [v.p[0] + (v.p[0] - cx) * 0.15, v.p[1] + (v.p[1] - cy) * 0.15];
+          if (!isLand(outward[0], outward[1])) continue;
+          if (gates.some((q) => Math.hypot(q[0] - v.p[0], q[1] - v.p[1]) < spacing * 1.5)) continue;
+          if (dA < bestD) {
+            bestD = dA;
+            best = v;
+          }
+        }
+        if (best) gates.push(best.p);
+      }
+      if (walled) {
+        for (let i = 0; i < edgeRing.length; i += 2) {
+          const p = edgeRing[i]!;
+          if (!gates.some((g) => g[0] === p[0] && g[1] === p[1])) towers.push(p);
+        }
+      }
+    }
+    ctx.checkpoint();
+
+    // --- 4. Streets: arteries from gates to the centre along patch edges -----
+    const graph = buildEdgeGraph(patches);
+    const centrePatch = inner.reduce<Patch | null>((best, p) => {
+      if (!best) return p;
+      const db = Math.hypot(best.centroid[0] - cx, best.centroid[1] - cy);
+      const dp = Math.hypot(p.centroid[0] - cx, p.centroid[1] - cy);
+      return dp < db ? p : best;
+    }, null);
+    const centreVertices = centrePatch ? centrePatch.ring.map((p) => graph.key(p)) : [];
+    const arteryEdges = new Set<string>();
+    const arteries: Ring[] = [];
+    for (const g of gates) {
+      const path = graph.shortestPath(
+        graph.key(g),
+        new Set(centreVertices),
+        (edgeKey) => (arteryEdges.has(edgeKey) ? 0.45 : 1),
+        slopeAt(height, slope),
+      );
+      if (path.length < 2) continue;
+      arteries.push(path);
+      for (let i = 1; i < path.length; i++) arteryEdges.add(graph.edgeKey(path[i - 1]!, path[i]!));
+    }
+    // Roads: from each gate outward to the far edge of the outer ring.
+    const roads: Ring[] = [];
+    const outerVertices = new Set<string>();
+    for (const p of patches)
+      if (!p.inner)
+        for (const v of p.ring)
+          if (Math.hypot(v[0] - cx, v[1] - cy) > outerR * 0.92) outerVertices.add(graph.key(v));
+    for (const g of gates) {
+      const dir = Math.atan2(g[1] - cy, g[0] - cx);
+      const targets = new Set<string>();
+      for (const k of outerVertices) {
+        const v = graph.point(k);
+        let dA = Math.abs(Math.atan2(v[1] - cy, v[0] - cx) - dir);
+        if (dA > Math.PI) dA = Math.PI * 2 - dA;
+        if (dA < 0.6) targets.add(k);
+      }
+      if (!targets.size) continue;
+      const path = graph.shortestPath(graph.key(g), targets, () => 1, slopeAt(height, slope));
+      if (path.length >= 2) roads.push(path);
+    }
+    ctx.checkpoint();
+
+    // --- 5. Wards ----------------------------------------------------------
+    const plaza = centrePatch;
+    if (plaza && site.population >= 1000) plaza.ward = 'plaza';
+    let castle: Patch | null = null;
+    const gateSet = gates;
+    const arteryPatchSet = new Set<Patch>();
+    for (const p of patches) {
+      for (let i = 0; i < p.ring.length; i++) {
+        if (arteryEdges.has(graph.edgeKey(p.ring[i]!, p.ring[(i + 1) % p.ring.length]!))) {
+          arteryPatchSet.add(p);
+          break;
+        }
+      }
+    }
+    const medianArea = median(inner.map((p) => area(p.ring))) || 1;
+    function contextOf(p: Patch): WardContext {
+      const dC = Math.hypot(p.centroid[0] - cx, p.centroid[1] - cy) / R;
+      const dG = gateSet.length
+        ? Math.min(...gateSet.map((g) => Math.hypot(g[0] - p.centroid[0], g[1] - p.centroid[1]))) / R
+        : 1;
+      const dW = edgeRing.length ? distToRing(p.centroid, edgeRing) / R : 1;
+      const ns = neighbours(p);
+      return {
+        centreDist: dC,
+        gateDist: dG,
+        wallDist: dW,
+        onArtery: arteryPatchSet.has(p),
+        adjacentToPlaza: !!plaza && ns.includes(plaza),
+        adjacentToCastle: !!castle && ns.includes(castle),
+        compactness: compactness(p.ring),
+        relativeArea: area(p.ring) / medianArea,
+        slope: p.slope,
+        waterfront: p.waterfront,
+      };
+    }
+    if (walled && site.population >= 2000) {
+      castle = pickBest(inner, (p) => (p.ward ? -Infinity : WARDS.castle.score(contextOf(p))));
+      if (castle) castle.ward = 'castle';
+    }
+    for (const wardId of ['cathedral', 'market', 'military', 'park'] as WardId[]) {
+      const profile = WARDS[wardId];
+      const count = profile.count ? profile.count(inner.length, site.population) : 0;
+      for (let k = 0; k < count; k++) {
+        const best = pickBest(inner, (p) => (p.ward ? -Infinity : profile.score(contextOf(p))));
+        if (best) best.ward = wardId;
+      }
+    }
+    const fillRng = rng.fork('wards');
+    for (const p of inner) {
+      if (p.ward) continue;
+      const c = contextOf(p);
+      const weights = FILL_WARDS.map((w) =>
+        Math.max(0.01, WARDS[w].fillWeight * Math.exp(WARDS[w].score(c))),
+      );
+      p.ward = fillRng.weighted(FILL_WARDS, weights);
+    }
+    for (const p of patches) {
+      if (p.inner) continue;
+      const near = gateSet.some(
+        (g) => Math.hypot(g[0] - p.centroid[0], g[1] - p.centroid[1]) < spacing * 1.6,
+      );
+      p.ward = near && p.slope < 0.2 ? 'gate' : 'farm';
+    }
+    ctx.checkpoint();
+
+    // --- 6. Outputs ----------------------------------------------------------
+    const id = site.id;
+    const patchFeatures: TownOutput['patches']['features'] = patches.map((p) => ({
+      type: 'Feature',
+      id: `${id}-patch-${p.index}`,
+      geometry: { type: 'Polygon', coordinates: [[...p.ring, p.ring[0]!]] },
+      properties: { settlement: id, ward: p.ward ?? 'common', inner: p.inner },
+    }));
+    const streetFeatures: TownOutput['streets']['features'] = [];
+    let streetsKm = 0;
+    const pushLine = (pts: Ring, cls: 'artery' | 'street' | 'road', k: number) => {
+      streetFeatures.push({
+        type: 'Feature',
+        id: `${id}-${cls}-${k}`,
+        geometry: { type: 'LineString', coordinates: pts },
+        properties: { settlement: id, class: cls },
+      });
+      for (let i = 1; i < pts.length; i++)
+        streetsKm += Math.hypot(pts[i]![0] - pts[i - 1]![0], pts[i]![1] - pts[i - 1]![1]) / 1000;
+    };
+    arteries.forEach((a, k) => pushLine(a, 'artery', k));
+    roads.forEach((r, k) => pushLine(r, 'road', k));
+    // Minor streets: every inner patch edge not already an artery.
+    const seenEdges = new Set<string>();
+    let sk = 0;
+    for (const p of inner) {
+      if (p.ward === 'plaza') continue;
+      for (let i = 0; i < p.ring.length; i++) {
+        const a = p.ring[i]!;
+        const b = p.ring[(i + 1) % p.ring.length]!;
+        const ek = graph.edgeKey(a, b);
+        if (seenEdges.has(ek) || arteryEdges.has(ek)) continue;
+        seenEdges.add(ek);
+        pushLine([a, b], 'street', sk++);
+      }
+    }
+    const wallFeatures: TownOutput['walls']['features'] = wallRing.length
+      ? [
+          {
+            type: 'Feature',
+            id: `${id}-wall`,
+            geometry: { type: 'LineString', coordinates: [...wallRing, wallRing[0]!] },
+            properties: { settlement: id, kind: 'wall' },
+          },
+        ]
+      : [];
+    const gateFeatures: TownOutput['gates']['features'] = [
+      ...gates.map((g, k) => ({
+        type: 'Feature' as const,
+        id: `${id}-gate-${k}`,
+        geometry: { type: 'Point' as const, coordinates: g },
+        properties: { settlement: id, kind: 'gate' as const },
+      })),
+      ...towers.map((t, k) => ({
+        type: 'Feature' as const,
+        id: `${id}-tower-${k}`,
+        geometry: { type: 'Point' as const, coordinates: t },
+        properties: { settlement: id, kind: 'tower' as const },
+      })),
+    ];
+    const blocks: BlockRecipe[] = [];
+    for (const p of patches) {
+      if (!p.ward || p.ward === 'plaza' || p.ward === 'farm') continue;
+      const halfWidth = arteryPatchSet.has(p) ? ARTERY_HALF_WIDTH : STREET_HALF_WIDTH;
+      const ring = inset(p.ring, halfWidth);
+      if (ring.length < 3) continue;
+      blocks.push({
+        id: `${id}-b${p.index}`,
+        settlementId: id,
+        ring,
+        ward: p.ward,
+        areaM2: area(ring),
+        seed: `${input.seed}/settlement:${id}/block:${p.index}`,
+        elevationM: p.elevation,
+      });
+    }
+    return {
+      key: ctx.key,
+      id,
+      center: site.center,
+      radiusM: R,
+      patches: { type: 'FeatureCollection', features: patchFeatures },
+      streets: { type: 'FeatureCollection', features: streetFeatures },
+      walls: { type: 'FeatureCollection', features: wallFeatures },
+      gates: { type: 'FeatureCollection', features: gateFeatures },
+      blocks,
+      stats: { patches: patches.length, inner: inner.length, walled: wallRing.length > 0, streetsKm },
+    };
+  },
+});
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)]!;
+}
+
+function pickBest(patches: Patch[], score: (p: Patch) => number): Patch | null {
+  let best: Patch | null = null;
+  let bestScore = -Infinity;
+  for (const p of patches) {
+    const s = score(p);
+    if (s > bestScore) {
+      bestScore = s;
+      best = p;
+    }
+  }
+  return best;
+}
+
+function slopeAt(height: Raster, slope: Float32Array) {
+  return (x: number, y: number) => {
+    const col = Math.min(Math.max(Math.round(height.col(x)), 0), height.width - 1);
+    const row = Math.min(Math.max(Math.round(height.row(y)), 0), height.height - 1);
+    return slope[row * height.width + col]!;
+  };
+}
+
+/**
+ * Clip a patch to land with a fine local mask: rasterise "inside ring and on
+ * land", polygonise, and keep the piece containing (or nearest to) the site.
+ */
+function clipToLand(
+  ring: Ring,
+  site: Pt,
+  isLand: (x: number, y: number) => boolean,
+  cellM: number,
+): Ring | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of ring) {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  const pad = cellM * 2;
+  const width = Math.ceil((maxX - minX + 2 * pad) / cellM) + 1;
+  const height = Math.ceil((maxY - minY + 2 * pad) / cellM) + 1;
+  if (width * height > 250_000) return ring;
+  const r = new Raster({ width, height, cellSizeM: cellM, originX: minX - pad, originY: minY - pad });
+  for (let row = 0; row < height; row++) {
+    const y = r.y(row);
+    for (let col = 0; col < width; col++) {
+      const x = r.x(col);
+      r.set(col, row, pointInRing(x, y, ring) && isLand(x, y) ? 1 : 0);
+    }
+  }
+  const polys = contourPolygons(r, 0.5);
+  if (!polys.length) return null;
+  const containing = polys.find((p) => pointInRing(site[0], site[1], p.rings[0]!));
+  const chosen = containing ?? polys[0]!;
+  const out = open(chosen.rings[0]!);
+  return out.length >= 3 ? out : null;
+}
+
+/** Graph over patch edges with Dijkstra shortest paths (deterministic tie-breaking by key). */
+function buildEdgeGraph(patches: Patch[]) {
+  const key = (p: Pt) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
+  const points = new Map<string, Pt>();
+  const adj = new Map<string, Map<string, number>>();
+  const addEdge = (a: Pt, b: Pt) => {
+    const ka = key(a);
+    const kb = key(b);
+    if (ka === kb) return;
+    points.set(ka, a);
+    points.set(kb, b);
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    (adj.get(ka) ?? adj.set(ka, new Map()).get(ka)!).set(kb, d);
+    (adj.get(kb) ?? adj.set(kb, new Map()).get(kb)!).set(ka, d);
+  };
+  for (const p of patches)
+    for (let i = 0; i < p.ring.length; i++) addEdge(p.ring[i]!, p.ring[(i + 1) % p.ring.length]!);
+  const edgeKey = (a: Pt, b: Pt) => {
+    const ka = key(a);
+    const kb = key(b);
+    return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+  };
+  return {
+    key,
+    edgeKey,
+    point: (k: string) => points.get(k)!,
+    shortestPath(
+      from: string,
+      targets: Set<string>,
+      edgeFactor: (edgeKey: string) => number,
+      slopeAt: (x: number, y: number) => number,
+    ): Ring {
+      if (!adj.has(from)) return [];
+      const dist = new Map<string, number>([[from, 0]]);
+      const prev = new Map<string, string>();
+      const open: string[] = [from];
+      const done = new Set<string>();
+      let found: string | null = null;
+      while (open.length) {
+        // Deterministic extract-min (small graphs; keys break ties).
+        let bi = 0;
+        for (let i = 1; i < open.length; i++) {
+          const a = dist.get(open[i]!)!;
+          const b = dist.get(open[bi]!)!;
+          if (a < b || (a === b && open[i]! < open[bi]!)) bi = i;
+        }
+        const u = open.splice(bi, 1)[0]!;
+        if (done.has(u)) continue;
+        done.add(u);
+        if (targets.has(u)) {
+          found = u;
+          break;
+        }
+        const pu = points.get(u)!;
+        for (const [v, d] of adj.get(u) ?? []) {
+          if (done.has(v)) continue;
+          const pv = points.get(v)!;
+          const s = (slopeAt(pu[0], pu[1]) + slopeAt(pv[0], pv[1])) / 2;
+          const ek = u < v ? `${u}|${v}` : `${v}|${u}`;
+          const cost = d * (1 + 4 * s) * edgeFactor(ek);
+          const nd = dist.get(u)! + cost;
+          if (nd < (dist.get(v) ?? Infinity)) {
+            dist.set(v, nd);
+            prev.set(v, u);
+            open.push(v);
+          }
+        }
+      }
+      if (!found) return [];
+      const path: Ring = [];
+      let cur: string | undefined = found;
+      while (cur) {
+        path.push(points.get(cur)!);
+        cur = prev.get(cur);
+      }
+      return path.reverse();
+    },
+  };
+}

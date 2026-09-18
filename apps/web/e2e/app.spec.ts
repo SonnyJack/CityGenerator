@@ -154,3 +154,69 @@ test('the map renders terrain layers with hillshade from DEM tiles', async ({ pa
   expect(counts.dem).toBe(true);
   expect(counts.hillshade).toBe(true);
 });
+
+test('settlements are generated automatically and can be added explicitly', async ({ page }) => {
+  await ready(page);
+  const auto = (await page.evaluate(() => window.__citygen.stats())) as {
+    settlements: { id: string; blocks: number }[];
+    blocks: number;
+    roads: { roadKm: number };
+  };
+  expect(auto.settlements.length).toBeGreaterThanOrEqual(1);
+  expect(auto.blocks).toBeGreaterThan(10);
+  const before = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.getByRole('button', { name: '+ Add settlement' }).click();
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    before,
+    { timeout: 60_000 },
+  );
+  await expect(page.getByTestId('settlement-row')).toHaveCount(1);
+  const explicit = (await page.evaluate(() => window.__citygen.stats())) as {
+    settlements: { id: string; kind: string; walled: boolean }[];
+  };
+  expect(explicit.settlements).toHaveLength(1);
+  expect(explicit.settlements[0]!.kind).toBe('city');
+  await page.getByLabel('Kind of settlement-1').selectOption('village');
+  await page.waitForFunction(() => window.__citygen.status() === 'idle');
+  const doc = (await page.evaluate(() => window.__citygen.getDocument())) as {
+    spec: { settlements: { kind: string; population: number }[] };
+  };
+  expect(doc.spec.settlements[0]!.kind).toBe('village');
+});
+
+test('buildings appear when zooming into a town', async ({ page }) => {
+  await ready(page);
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  test.skip(webglMissing, 'WebGL is not available in this browser build');
+  // The initial fit-to-region runs on the map's load event; wait for it so the jump is not undone.
+  await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 60_000 });
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as {
+    settlements: { center: [number, number] }[];
+  };
+  const [x, y] = stats.settlements[0]!.center;
+  await page.evaluate(
+    ([cx, cy]) => window.__citygenMap!.jumpTo({ center: [cx / 111319.490793, cy / 111319.490793], zoom: 15 }),
+    [x, y],
+  );
+  // Lazy block tiles are requested after the jump; poll until buildings are on screen.
+  await page.waitForFunction(
+    () => {
+      const map = window.__citygenMap!;
+      return map.areTilesLoaded() && map.queryRenderedFeatures({ layers: ['buildings'] }).length > 20;
+    },
+    undefined,
+    { timeout: 60_000 },
+  );
+  const counts = await page.evaluate(() => {
+    const map = window.__citygenMap!;
+    return {
+      buildings: map.queryRenderedFeatures({ layers: ['buildings'] }).length,
+      streets: map.queryRenderedFeatures({ layers: ['streets'] }).length,
+      patches: map.queryRenderedFeatures({ layers: ['patches'] }).length,
+    };
+  });
+  expect(counts.buildings).toBeGreaterThan(20);
+  expect(counts.streets).toBeGreaterThan(5);
+  expect(counts.patches).toBeGreaterThan(3);
+});

@@ -1,0 +1,216 @@
+import type { Feature, Point } from 'geojson';
+import { defineStage } from '../pipeline/stage.js';
+import type { SettlementKind, SettlementSpec } from '../document/schema.js';
+import { WATER, type TerrainOutput } from '../terrain/stage.js';
+import type { Rng } from '../random/rng.js';
+
+/**
+ * Region stage R3: where settlements go. Explicit settlement specs are honoured
+ * (pinned sites are used as given); when the spec lists none, a set is drawn
+ * from the settlement policy. Sites are scored on flatness, water access,
+ * centrality and separation, largest settlements first.
+ */
+
+export interface SettlementSite {
+  id: string;
+  kind: SettlementKind;
+  name?: string;
+  population: number;
+  center: [number, number];
+  /** Radius of the built-up area, metres. */
+  radiusM: number;
+  founded: number;
+  /** Original spec (explicit or synthesised). */
+  spec: SettlementSpec;
+  /** True when the site touches the sea within a short distance. */
+  coastal: boolean;
+  /** True when a river passes within the settlement radius. */
+  riverside: boolean;
+}
+
+export interface SitingInput {
+  seed: string;
+  terrain: TerrainOutput;
+  year: number;
+  settlements: SettlementSpec[];
+  policy: { count: [number, number]; kinds: Partial<Record<SettlementKind, number>> };
+}
+
+export interface SitingOutput {
+  key: string;
+  sites: SettlementSite[];
+  points: Feature<Point, { kind: SettlementKind; population: number; name?: string; radiusM: number }>[];
+}
+
+export const DEFAULT_POPULATION: Record<SettlementKind, number> = {
+  metropolis: 250_000,
+  city: 30_000,
+  town: 6_000,
+  village: 600,
+  hamlet: 120,
+  portTown: 8_000,
+  fishingVillage: 400,
+  millTown: 3_000,
+  miningTown: 2_500,
+  resort: 2_000,
+  universityTown: 8_000,
+  suburb: 5_000,
+  industrialSatellite: 6_000,
+};
+
+/** Persons per km² of built-up area by year (dense cores in early eras, sprawl later). */
+export function urbanDensity(year: number): number {
+  if (year < 1800) return 13_000;
+  if (year < 1900) return 10_000;
+  if (year < 1950) return 7_000;
+  if (year < 1990) return 4_500;
+  return 3_500;
+}
+
+export function radiusForPopulation(population: number, year: number): number {
+  const areaM2 = (population / urbanDensity(year)) * 1e6;
+  return Math.max(90, Math.sqrt(areaM2 / Math.PI));
+}
+
+const DEFAULT_KIND_WEIGHTS: Partial<Record<SettlementKind, number>> = {
+  village: 6,
+  town: 2,
+  hamlet: 3,
+  fishingVillage: 1,
+  millTown: 1,
+};
+
+function synthesiseSpecs(rng: Rng, policy: SitingInput['policy'], coastal: boolean): SettlementSpec[] {
+  const specs: SettlementSpec[] = [];
+  const [lo, hi] = policy.count;
+  const count = Math.max(1, rng.int(Math.min(lo, hi), Math.max(lo, hi)));
+  const weights = Object.keys(policy.kinds).length ? policy.kinds : DEFAULT_KIND_WEIGHTS;
+  const kinds = Object.keys(weights) as SettlementKind[];
+  const ws = kinds.map((k) =>
+    k === 'fishingVillage' || k === 'portTown' ? (coastal ? weights[k]! : 0) : weights[k]!,
+  );
+  specs.push({
+    id: 'city',
+    kind: coastal && rng.chance(0.5) ? 'portTown' : 'city',
+    population: DEFAULT_POPULATION.city,
+    layout: { streetPattern: 'mixed' },
+    features: [],
+  });
+  specs[0]!.population = DEFAULT_POPULATION[specs[0]!.kind];
+  for (let i = 1; i < count; i++) {
+    const kind = ws.some((w) => w > 0) ? rng.weighted(kinds, ws) : 'village';
+    const pop = Math.round(DEFAULT_POPULATION[kind] * rng.range(0.6, 1.5));
+    specs.push({ id: `s${i}`, kind, population: pop, layout: { streetPattern: 'mixed' }, features: [] });
+  }
+  return specs;
+}
+
+export const sitingStage = defineStage<SitingInput, SitingOutput>({
+  id: 'siting',
+  version: 1,
+  seedOf: (i) => i.seed,
+  keyOf: (i) =>
+    `${i.terrain.key}|${i.year}|${JSON.stringify(i.settlements)}|${JSON.stringify(i.policy)}|${i.seed}`,
+  run(input, ctx) {
+    const { terrain, year } = input;
+    const { height, water, slope, distToSea, distToWater } = terrain;
+    const { width, height: rows, cellSizeM } = height;
+    const n = width * rows;
+    const rng = ctx.rng;
+    let seaCells = 0;
+    for (let i = 0; i < n; i++) if (water[i] === WATER.sea) seaCells++;
+    const regionCoastal = seaCells > n * 0.03;
+    const specs = input.settlements.length
+      ? input.settlements
+      : synthesiseSpecs(rng.fork('specs'), input.policy, regionCoastal);
+
+    // Candidate cells: land, gentle, above the sea. Sampled deterministically.
+    const candRng = rng.fork('candidates');
+    const candidates: number[] = [];
+    const target = Math.min(6000, Math.max(500, Math.floor(n / 40)));
+    for (let k = 0; k < target * 4 && candidates.length < target; k++) {
+      const i = candRng.int(0, n - 1);
+      if (water[i] !== WATER.land && water[i] !== WATER.river) continue;
+      if (slope[i]! > 0.12) continue;
+      if (height.data[i]! < terrain.seaLevel + 1) continue;
+      candidates.push(i);
+    }
+    const halfW = ((width - 1) * cellSizeM) / 2;
+    const halfH = ((rows - 1) * cellSizeM) / 2;
+    const maxDist = Math.hypot(halfW, halfH);
+
+    const ordered = [...specs].sort((a, b) => b.population - a.population || (a.id < b.id ? -1 : 1));
+    const placed: SettlementSite[] = [];
+    for (const spec of ordered) {
+      const radiusM = radiusForPopulation(spec.population, year);
+      const wantsCoast = spec.kind === 'portTown' || spec.kind === 'fishingVillage' || spec.kind === 'resort';
+      const wantsRiver = spec.kind === 'millTown';
+      let best: { i: number; score: number } | null = null;
+      let center: [number, number] | null = spec.site?.center ?? null;
+      if (!center) {
+        for (const i of candidates) {
+          const x = height.x(i % width);
+          const y = height.y((i / width) | 0);
+          // Hard constraints.
+          if (Math.abs(x) > halfW - radiusM * 0.6 || Math.abs(y) > halfH - radiusM * 0.6) continue;
+          if (wantsCoast && distToSea[i]! > radiusM * 0.9 + 300) continue;
+          let score = 1 - slope[i]! / 0.12;
+          const dSea = distToSea[i]!;
+          const dWater = distToWater[i]!;
+          if (wantsCoast) score += 1.5 * (1 - Math.min(dSea, 1500) / 1500);
+          else if (wantsRiver) score += 1.5 * (1 - Math.min(dWater, 800) / 800);
+          else score += 0.6 * (1 - Math.min(dWater, 2500) / 2500);
+          if (spec.kind === 'city' || spec.kind === 'metropolis')
+            score += 0.8 * (1 - Math.hypot(x, y) / maxDist);
+          // Avoid sitting in the sea's reach but not flooding: prefer a few metres above sea level.
+          const hAbove = height.data[i]! - terrain.seaLevel;
+          if (hAbove < 3) score -= 0.5;
+          // Separation from placed settlements.
+          let ok = true;
+          for (const p of placed) {
+            const d = Math.hypot(p.center[0] - x, p.center[1] - y);
+            const minD = (p.radiusM + radiusM) * 2.5 + 800;
+            if (d < minD) {
+              ok = false;
+              break;
+            }
+            score += 0.15 * Math.min(1, d / 15_000);
+          }
+          if (!ok) continue;
+          score += candRng.range(0, 0.15);
+          if (!best || score > best.score) best = { i, score };
+        }
+        if (!best) continue; // nowhere to put it; reported through stats
+        center = [height.x(best.i % width), height.y((best.i / width) | 0)];
+      }
+      const ci = Math.min(Math.max(Math.round(height.col(center[0])), 0), width - 1);
+      const ri = Math.min(Math.max(Math.round(height.row(center[1])), 0), rows - 1);
+      const idx = ri * width + ci;
+      placed.push({
+        id: spec.id,
+        kind: spec.kind,
+        name: spec.name,
+        population: spec.population,
+        center,
+        radiusM,
+        founded:
+          spec.founded ??
+          Math.min(
+            year,
+            spec.kind === 'city' || spec.kind === 'town' || spec.kind === 'portTown' ? 1250 : 1500,
+          ),
+        spec,
+        coastal: distToSea[idx]! < radiusM + 300,
+        riverside: distToWater[idx]! < radiusM && distToSea[idx]! > radiusM,
+      });
+      ctx.checkpoint();
+    }
+    const points: SitingOutput['points'] = placed.map((s) => ({
+      type: 'Feature',
+      id: `settlement-${s.id}`,
+      geometry: { type: 'Point', coordinates: s.center },
+      properties: { kind: s.kind, population: s.population, name: s.name, radiusM: s.radiusM },
+    }));
+    return { key: ctx.key, sites: placed, points };
+  },
+});
