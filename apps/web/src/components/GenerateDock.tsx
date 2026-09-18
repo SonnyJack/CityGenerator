@@ -301,7 +301,7 @@ export function GenerateDock() {
           </select>
         </label>
         <Slider
-          label="Relief"
+          label={t('Relief')}
           value={terrain.relief}
           min={0}
           max={1}
@@ -309,7 +309,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/terrain/relief', v)}
         />
         <Slider
-          label="Roughness"
+          label={t('Roughness')}
           value={terrain.roughness}
           min={0}
           max={1}
@@ -317,7 +317,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/terrain/roughness', v)}
         />
         <Slider
-          label="Erosion"
+          label={t('Erosion')}
           value={terrain.erosion}
           min={0}
           max={1}
@@ -325,7 +325,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/terrain/erosion', v)}
         />
         <Slider
-          label="Sea level"
+          label={t('Sea level')}
           value={terrain.seaLevel}
           min={-60}
           max={120}
@@ -334,7 +334,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/terrain/seaLevel', v)}
         />
         <Slider
-          label="Major rivers"
+          label={t('Major rivers')}
           value={terrain.rivers.major}
           min={0}
           max={4}
@@ -342,7 +342,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/terrain/rivers/major', v)}
         />
         <Slider
-          label="Minor rivers"
+          label={t('Minor rivers')}
           value={terrain.rivers.minor}
           min={0}
           max={8}
@@ -354,7 +354,7 @@ export function GenerateDock() {
       <section className="space-y-2" data-testid="timeline">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Timeline')}</h2>
         <Slider
-          label={`Year · ${eraForYear(doc.spec.year).name}`}
+          label={`${t('Year')} · ${eraForYear(doc.spec.year).name}`}
           value={doc.spec.year}
           min={1100}
           max={2100}
@@ -363,7 +363,9 @@ export function GenerateDock() {
         />
         <TimelinePlayer />
         <p className="text-[11px] text-stone-500">
-          Populations are as of {doc.spec.anchorYear}; the slider moves along that history.{' '}
+          {t('Populations are as of {year}; the slider moves along that history.', {
+            year: doc.spec.anchorYear,
+          })}{' '}
           {doc.spec.anchorYear !== doc.spec.year && (
             <button
               className="underline"
@@ -383,7 +385,7 @@ export function GenerateDock() {
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Society')}</h2>
         <Slider
-          label="Inequality"
+          label={t('Inequality')}
           value={doc.spec.society.inequality}
           min={0}
           max={1}
@@ -391,7 +393,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/society/inequality', v)}
         />
         <Slider
-          label="Wealth baseline"
+          label={t('Wealth baseline')}
           value={doc.spec.society.wealth.baseline}
           min={0}
           max={1}
@@ -399,7 +401,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/society/wealth/baseline', v)}
         />
         <Slider
-          label="Wealth contrast"
+          label={t('Wealth contrast')}
           value={doc.spec.society.wealth.gradient}
           min={0}
           max={1}
@@ -407,7 +409,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/society/wealth/gradient', v)}
         />
         <Slider
-          label="Density baseline"
+          label={t('Density baseline')}
           value={doc.spec.society.density.baseline}
           min={0}
           max={1}
@@ -415,7 +417,7 @@ export function GenerateDock() {
           onCommit={(v) => patch('/society/density/baseline', v)}
         />
         <Slider
-          label="Density contrast"
+          label={t('Density contrast')}
           value={doc.spec.society.density.gradient}
           min={0}
           max={1}
@@ -469,7 +471,7 @@ export function GenerateDock() {
           {t('Railways and trams (from the 1840s; branch lines close after the 1960s)')}
         </label>
         <Slider
-          label="Mainlines leaving the region"
+          label={t('Mainlines leaving the region')}
           value={doc.spec.networks.rail.mainlines}
           min={0}
           max={4}

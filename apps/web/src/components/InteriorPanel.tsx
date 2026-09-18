@@ -82,7 +82,11 @@ export function InteriorPanel({
               {plan.floors.map((f) => (
                 <button
                   key={f.floor}
-                  className={`${btn} ${f.floor === floor ? 'bg-stone-800 text-white hover:bg-stone-700' : ''}`}
+                  className={
+                    f.floor === floor
+                      ? 'rounded border border-stone-800 bg-stone-800 px-2 py-0.5 text-xs text-white hover:bg-stone-700'
+                      : btn
+                  }
                   onClick={() => setFloor(f.floor)}
                   aria-pressed={f.floor === floor}
                 >
