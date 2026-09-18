@@ -1,0 +1,34 @@
+[
+  {
+    "file": "arkham-coast-1925.citygen.json",
+    "name": "Arkham Coast, 1925",
+    "seed": "arkham-coast",
+    "description": "A New England city on a drowned coast in the classic era: port, gasworks, mills and a walled old town.",
+    "year": 1925,
+    "culture": "newEngland"
+  },
+  {
+    "file": "cairo-delta-1925.citygen.json",
+    "name": "Nile Delta town, 1925",
+    "seed": "delta-1925",
+    "description": "Egypt and the Levant pack on a river delta: organic medina, colonial quarter names from 1882, desert biome.",
+    "year": 1925,
+    "culture": "egyptLevant"
+  },
+  {
+    "file": "castle-town-1650.citygen.json",
+    "name": "Japanese castle town, 1650",
+    "seed": "joka-1650",
+    "description": "Japan pack in the early modern era: grid-planned castle town, timber machiya, mountains and a bay.",
+    "year": 1650,
+    "culture": "japan"
+  },
+  {
+    "file": "innsmouth-decline-1955.citygen.json",
+    "name": "Declining fishing port, 1955",
+    "seed": "innsmouth-1955",
+    "description": "A port that peaked in 1890 and lost two thirds of its people: abandoned outskirts, ruins, a flood in 1938.",
+    "year": 1955,
+    "culture": "newEngland"
+  }
+]

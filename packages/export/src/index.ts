@@ -29,3 +29,10 @@ export {
   type GltfResult,
   type HeightGrid,
 } from './gltf.js';
+export {
+  interiorSvg,
+  interiorVtt,
+  interiorFrame,
+  type InteriorSvgOptions,
+  type InteriorVttOptions,
+} from './interior.js';

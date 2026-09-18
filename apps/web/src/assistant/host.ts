@@ -234,6 +234,11 @@ export class WebHost implements ToolHost {
       : null;
   }
 
+  async interior(buildingId: string) {
+    await this.settle();
+    return engine().interior(buildingId);
+  }
+
   freezeGenerated(hit: GeneratedHit): string {
     const before = this.document().authored.features.map((f) => f.id);
     const s = useApp.getState();

@@ -253,6 +253,11 @@ export class EngineHost implements ToolHost {
       : null;
   }
 
+  async interior(buildingId: string) {
+    await this.settle();
+    return this.engine.interior(buildingId);
+  }
+
   freezeGenerated(hit: GeneratedHit): string {
     const id = this.newId('frozen');
     const layer = hit.layer === 'buildings' ? 'building' : hit.layer === 'streets' ? 'street' : 'zone';

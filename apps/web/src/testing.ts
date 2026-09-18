@@ -31,6 +31,8 @@ export function installTestApi() {
     thumbnails: () => useApp.getState().thumbnails.length,
     inspect: (x, y) => engine().inspect(x, y),
     directory: (settlement, query, limit) => engine().directory(settlement, query, limit),
+    interior: (id) => engine().interior(id),
+    inspectAt: (x, y) => useApp.getState().inspect(x, y),
     exportSvg: (req) => exportSvg(req as never),
     exportPng: (req) => exportPng(req as never),
     exportGeoJson: (req) => exportGeoJsonText(req as never),
@@ -89,6 +91,8 @@ declare global {
       thumbnails(): number;
       inspect(x: number, y: number): Promise<unknown>;
       directory(settlement: string | null, query: string, limit: number): Promise<unknown>;
+      interior(id: string): Promise<unknown>;
+      inspectAt(x: number, y: number): void;
       exportSvg(req: unknown): Promise<string>;
       exportPng(req: unknown): Promise<{ dataUrl: string; width: number; height: number }>;
       exportGeoJson(req: unknown): Promise<string>;

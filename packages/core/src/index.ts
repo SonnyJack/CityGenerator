@@ -9,4 +9,5 @@ export * from './society/index.js';
 export * from './networks/index.js';
 export * from './placement/index.js';
 export * from './naming/index.js';
+export * from './interiors/index.js';
 export * from './document/heightmap.js';

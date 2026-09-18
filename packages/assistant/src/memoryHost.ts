@@ -1,4 +1,4 @@
-import { createDocument, type MapDocument } from '@citygen/core';
+import { createDocument, generateInterior, type Interior, type MapDocument } from '@citygen/core';
 import { CommandBus, type Command } from '@citygen/editor';
 import type {
   AreaDescription,
@@ -469,6 +469,19 @@ export class MemoryHost implements ToolHost {
       geometry: { type: 'Polygon', coordinates: [[...b.ring, b.ring[0]!]] },
       properties: { kind: b.kind, name: b.name, floors: 3 },
     };
+  }
+
+  async interior(buildingId: string): Promise<Interior | null> {
+    const b = this.world.buildings.find((x) => x.id === buildingId);
+    if (!b) return null;
+    return generateInterior({
+      id: b.id,
+      footprint: b.ring,
+      floors: 3,
+      use: b.use,
+      kind: b.kind,
+      year: this.document().spec.year,
+    });
   }
 
   freezeGenerated(hit: GeneratedHit): string {

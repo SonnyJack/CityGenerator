@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useApp } from '../store.js';
+import { InteriorPanel } from './InteriorPanel.js';
 
 /** "Why is this here?": what the engine knows about the clicked point. */
 export function Inspector() {
   const inspection = useApp((s) => s.inspection);
   const clear = useApp((s) => s.clearInspection);
   const dispatch = useApp((s) => s.dispatch);
+  const [plans, setPlans] = useState<{ id: string; name: string } | null>(null);
   if (!inspection) return null;
   const i = inspection;
   return (
@@ -108,6 +111,16 @@ export function Inspector() {
             <dd className="text-stone-600">
               {i.building.useLabel} · {i.building.kindLabel} · {i.building.material} · {i.building.floors}{' '}
               {i.building.floors === 1 ? 'floor' : 'floors'}
+              {i.building.built ? ` · built ${i.building.built}` : ''}
+              {i.building.state && i.building.state !== 'sound' ? ` · ${i.building.state}` : ''}{' '}
+              <button
+                className="rounded border border-stone-300 bg-white px-1 text-[11px] hover:bg-stone-100"
+                onClick={() =>
+                  setPlans({ id: i.building!.id, name: i.building!.name || i.building!.kindLabel })
+                }
+              >
+                Floor plans
+              </button>
             </dd>
           </>
         )}
@@ -124,6 +137,14 @@ export function Inspector() {
           </>
         )}
       </dl>
+      {plans && (
+        <InteriorPanel
+          key={plans.id}
+          buildingId={plans.id}
+          name={plans.name}
+          onClose={() => setPlans(null)}
+        />
+      )}
     </aside>
   );
 }

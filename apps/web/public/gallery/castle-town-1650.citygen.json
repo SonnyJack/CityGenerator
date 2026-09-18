@@ -1,0 +1,76 @@
+{
+  "format": "citygen",
+  "version": 3,
+  "meta": {
+    "name": "Castle Town",
+    "created": "2026-09-18T12:00:00.000Z",
+    "modified": "2026-09-18T12:00:00.000Z",
+    "app": "citygenerator"
+  },
+  "spec": {
+    "seed": "joka-1650",
+    "extent": {
+      "widthM": 16000,
+      "heightM": 12000
+    },
+    "year": 1650,
+    "anchorYear": 1650,
+    "events": [],
+    "biome": "subtropicalHumid",
+    "culture": "japan",
+    "terrain": {
+      "preset": "bay",
+      "relief": 0.7,
+      "roughness": 0.6,
+      "seaLevel": 0,
+      "erosion": 0.5,
+      "rivers": {
+        "major": 1,
+        "minor": 3
+      }
+    },
+    "settlements": [],
+    "settlementPolicy": {
+      "count": [3, 8],
+      "kinds": {}
+    },
+    "society": {
+      "wealth": {
+        "baseline": 0.5,
+        "gradient": 0.5,
+        "noise": 0.2
+      },
+      "density": {
+        "baseline": 0.5,
+        "gradient": 0.5,
+        "noise": 0.2
+      },
+      "inequality": 0.5
+    },
+    "networks": {
+      "roads": {
+        "motorways": true,
+        "ringRoad": false
+      },
+      "rail": {
+        "enabled": true,
+        "mainlines": 1
+      },
+      "water": {
+        "ferries": true,
+        "canals": false
+      }
+    },
+    "features": [],
+    "scaleCompression": true,
+    "customFeatureTypes": [],
+    "customCulturePacks": [],
+    "defaultFacilities": true
+  },
+  "authored": {
+    "type": "FeatureCollection",
+    "features": []
+  },
+  "overrides": [],
+  "annotations": []
+}

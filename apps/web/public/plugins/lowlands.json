@@ -1,0 +1,89 @@
+{
+  "id": "lowlands",
+  "name": "Lowlands",
+  "language": "nl",
+  "naming": {
+    "given": ["Jan", "Pieter", "Maria", "Anna", "Willem", "Geertje"],
+    "family": ["de Vries", "Jansen", "Bakker", "Visser", "Smit", "Mulder"],
+    "settlement": {
+      "patterns": ["{family}dam", "{water}dijk", "Nieuw {given}stad", "{water}sluis"],
+      "parts": {
+        "water": ["Amstel", "Vecht", "Spaarne"]
+      }
+    },
+    "street": {
+      "patterns": ["{family}{suffix}", "{tree}{suffix}", "Oude {suffix}"],
+      "parts": {
+        "tree": ["Linden", "Eiken", "Beuken"]
+      }
+    },
+    "streetSuffix": {
+      "artery": ["weg", "laan"],
+      "road": ["dijk", "weg"],
+      "collector": ["straat", "kade"],
+      "street": ["straat", "gracht"],
+      "lane": ["steeg", "hof"]
+    },
+    "district": {
+      "patterns": ["{family}kwartier", "{side}buurt"],
+      "parts": {
+        "side": ["Noord", "Zuid", "Oost", "West"]
+      }
+    },
+    "water": {
+      "patterns": ["{name}"],
+      "parts": {
+        "name": ["Amstel", "Vecht", "Spaarne", "Maas"]
+      }
+    },
+    "business": {
+      "patterns": ["{family} & Zonen", "Handelshuis {family}"]
+    },
+    "quarters": {
+      "core": "Binnenstad",
+      "cathedral": "Kerkbuurt",
+      "castle": "Burcht",
+      "market": "Grote Markt",
+      "port": "Haven",
+      "industrial": "Werkstad",
+      "station": "Stationsbuurt"
+    }
+  },
+  "conventions": {
+    "earlyPattern": "grid",
+    "modernFrom": 1650,
+    "blockSizeScale": 0.85,
+    "buildingKinds": {
+      "house": "grachtenpand",
+      "townhouse": "herenhuis",
+      "warehouse": "pakhuis"
+    },
+    "religious": ["Grote Kerk", "Oude Kerk", "Doopsgezinde kerk"],
+    "civic": ["stadhuis", "waag", "gasthuis"],
+    "materials": {
+      "preIndustrial": {
+        "brick": 6,
+        "timber": 2
+      },
+      "industrial": {
+        "brick": 6,
+        "stone": 1
+      },
+      "modern": {
+        "brick": 3,
+        "concrete": 3,
+        "glass": 1
+      }
+    },
+    "transport": {
+      "rail": 1839,
+      "tram": 1880
+    },
+    "walls": true
+  },
+  "colonial": {
+    "culture": "england",
+    "from": 1900,
+    "share": 0.1
+  }
+}

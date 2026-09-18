@@ -522,6 +522,20 @@ terrain mesh and buildings.
 - [x] Installable and offline (PWA): manifest, icons and a precaching
       service worker for the app shell, engine worker and fonts.
 - [x] Open from URL (a raw gist or any hosted document) from the Open menu.
-- [ ] Still open: a curated gallery of shared documents, localisation, a
-      registry index for community packs (packs work from any URL today),
-      building interiors.
+- [x] Building interiors: floor plans from a footprint, its floors, use and
+      era. Room programmes per use (houses, flats, pubs, hotels, banks,
+      police stations, schools, libraries, theatres, lodges, offices,
+      shops, warehouses, churches), a recursive area partition that keeps
+      front rooms on the street, convex decomposition for odd footprints, a
+      stair well in the same place on every floor, a spanning tree of doors
+      from the front door, windows on outside walls. In the inspector
+      (floor selector, SVG per floor, Universal VTT with walls and door
+      portals and the plan as the scene image), the `citygen interior`
+      command, and the assistant's `floor_plan` tool.
+- [x] Gallery: four curated example regions shipped with the app (a 1925
+      New England coast, a Nile delta town, a 1650 castle town, a declining
+      fishing port with a flood), a community pack index with the guide's
+      example pack and type, and share links (`?doc=<url>`) that open any
+      hosted document.
+- [ ] Still open: localisation; a hosted registry beyond the site's own
+      plugin index; interiors for facility parts.

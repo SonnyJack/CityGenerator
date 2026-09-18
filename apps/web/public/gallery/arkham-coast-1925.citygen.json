@@ -1,0 +1,76 @@
+{
+  "format": "citygen",
+  "version": 3,
+  "meta": {
+    "name": "Arkham Coast",
+    "created": "2026-09-18T12:00:00.000Z",
+    "modified": "2026-09-18T12:00:00.000Z",
+    "app": "citygenerator"
+  },
+  "spec": {
+    "seed": "arkham-coast",
+    "extent": {
+      "widthM": 20000,
+      "heightM": 15000
+    },
+    "year": 1925,
+    "anchorYear": 1925,
+    "events": [],
+    "biome": "temperateMaritime",
+    "culture": "newEngland",
+    "terrain": {
+      "preset": "coast",
+      "relief": 0.4,
+      "roughness": 0.5,
+      "seaLevel": 0,
+      "erosion": 0.5,
+      "rivers": {
+        "major": 1,
+        "minor": 3
+      }
+    },
+    "settlements": [],
+    "settlementPolicy": {
+      "count": [3, 8],
+      "kinds": {}
+    },
+    "society": {
+      "wealth": {
+        "baseline": 0.5,
+        "gradient": 0.5,
+        "noise": 0.2
+      },
+      "density": {
+        "baseline": 0.5,
+        "gradient": 0.5,
+        "noise": 0.2
+      },
+      "inequality": 0.5
+    },
+    "networks": {
+      "roads": {
+        "motorways": true,
+        "ringRoad": false
+      },
+      "rail": {
+        "enabled": true,
+        "mainlines": 1
+      },
+      "water": {
+        "ferries": true,
+        "canals": false
+      }
+    },
+    "features": [],
+    "scaleCompression": true,
+    "customFeatureTypes": [],
+    "customCulturePacks": [],
+    "defaultFacilities": true
+  },
+  "authored": {
+    "type": "FeatureCollection",
+    "features": []
+  },
+  "overrides": [],
+  "annotations": []
+}

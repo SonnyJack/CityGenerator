@@ -1,0 +1,119 @@
+{
+  "format": "citygen",
+  "version": 3,
+  "meta": {
+    "name": "Innsmouth",
+    "created": "2026-09-18T12:00:00.000Z",
+    "modified": "2026-09-18T12:00:00.000Z",
+    "app": "citygenerator"
+  },
+  "spec": {
+    "seed": "innsmouth-1955",
+    "extent": {
+      "widthM": 14000,
+      "heightM": 10000
+    },
+    "year": 1955,
+    "anchorYear": 1955,
+    "events": [
+      {
+        "id": "flood-1938",
+        "kind": "flood",
+        "year": 1938,
+        "center": [0, 0],
+        "radiusM": 900,
+        "magnitude": 0.7,
+        "levelM": 3,
+        "durationYears": 2
+      }
+    ],
+    "biome": "temperateMaritime",
+    "culture": "newEngland",
+    "terrain": {
+      "preset": "coast",
+      "relief": 0.4,
+      "roughness": 0.5,
+      "seaLevel": 0,
+      "erosion": 0.5,
+      "rivers": {
+        "major": 1,
+        "minor": 3
+      }
+    },
+    "settlements": [
+      {
+        "id": "innsmouth",
+        "kind": "portTown",
+        "population": 2400,
+        "founded": 1643,
+        "growth": [
+          {
+            "year": 1890,
+            "population": 7500
+          }
+        ],
+        "layout": {
+          "streetPattern": "organic"
+        },
+        "features": [
+          {
+            "id": "fish",
+            "type": "harbour.fishing",
+            "lock": false
+          }
+        ]
+      },
+      {
+        "id": "rowley",
+        "kind": "village",
+        "population": 600,
+        "layout": {
+          "streetPattern": "mixed"
+        },
+        "features": []
+      }
+    ],
+    "settlementPolicy": {
+      "count": [3, 8],
+      "kinds": {}
+    },
+    "society": {
+      "wealth": {
+        "baseline": 0.5,
+        "gradient": 0.5,
+        "noise": 0.2
+      },
+      "density": {
+        "baseline": 0.5,
+        "gradient": 0.5,
+        "noise": 0.2
+      },
+      "inequality": 0.5
+    },
+    "networks": {
+      "roads": {
+        "motorways": true,
+        "ringRoad": false
+      },
+      "rail": {
+        "enabled": true,
+        "mainlines": 1
+      },
+      "water": {
+        "ferries": true,
+        "canals": false
+      }
+    },
+    "features": [],
+    "scaleCompression": true,
+    "customFeatureTypes": [],
+    "customCulturePacks": [],
+    "defaultFacilities": true
+  },
+  "authored": {
+    "type": "FeatureCollection",
+    "features": []
+  },
+  "overrides": [],
+  "annotations": []
+}

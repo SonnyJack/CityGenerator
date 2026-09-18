@@ -226,6 +226,46 @@ export function buildCli(out: (line: string) => void = (l) => process.stdout.wri
     );
 
   program
+    .command('interior <doc>')
+    .description('Floor plans of a building: rooms as text, an SVG per floor, or a Universal VTT scene')
+    .requiredOption('--building <id>', 'building id (see `directory`)')
+    .option('--floor <n>', 'floor index, 0 = ground (default: all for SVG, 0 for VTT)', (v) => Number(v))
+    .option('--svg <file>', 'SVG path; with several floors, -1, -2… is inserted before the extension')
+    .option('--uvtt <file>', 'Universal VTT path (walls and doors; no image without a browser)')
+    .option('--px-per-m <n>', 'SVG scale', (v) => Number(v), 40)
+    .action(
+      async (
+        path: string,
+        o: { building: string; floor?: number; svg?: string; uvtt?: string; pxPerM: number },
+      ) => {
+        const host = await EngineHost.open(path);
+        const plan = await host.interior(o.building);
+        if (!plan) throw new Error(`no generated building ${o.building}`);
+        const { interiorSvg, interiorVtt } = await import('@citygen/export');
+        const { writeFile } = await import('node:fs/promises');
+        const floors = o.floor !== undefined ? plan.floors.filter((f) => f.floor === o.floor) : plan.floors;
+        for (const f of floors) {
+          out(
+            `${f.name}: ${f.rooms.map((r) => `${r.name} (${r.areaM2} m²)`).join(', ')} · ${f.doors.length} doors, ${f.windows.length} windows`,
+          );
+          if (o.svg) {
+            const file = floors.length > 1 ? o.svg.replace(/(\.svg)?$/i, `-${f.floor + 1}$1`) : o.svg;
+            await writeFile(file, interiorSvg(plan, f.floor, { pxPerM: o.pxPerM }));
+            out(`  ${file}`);
+          }
+        }
+        if (o.uvtt) {
+          const floor = o.floor ?? 0;
+          await writeFile(
+            o.uvtt,
+            JSON.stringify(interiorVtt(plan, floor, { name: `${o.building} floor ${floor + 1}` })),
+          );
+          out(`${o.uvtt}: walls and doors of floor ${floor + 1} (add the SVG as the image in your VTT)`);
+        }
+      },
+    );
+
+  program
     .command('mcp')
     .description('Serve the assistant tools over MCP on stdio')
     .option('--doc <file>', 'document to open')

@@ -1,0 +1,57 @@
+{
+  "id": "cannery",
+  "name": "Cannery",
+  "category": "industry",
+  "years": [1860, 1990],
+  "footprintM": [140, 70],
+  "orientation": "alignCoast",
+  "radial": [0.6, 1.4],
+  "placement": {
+    "shore": true,
+    "maxSlope": 0.08,
+    "nearRail": 0.6,
+    "downwind": 0.5
+  },
+  "connectors": {
+    "rail": true,
+    "road": true
+  },
+  "nuisance": {
+    "radiusM": 300,
+    "strength": 0.5
+  },
+  "ward": "industrial",
+  "parts": [
+    {
+      "shape": "rect",
+      "kind": "shed",
+      "u": 0,
+      "v": 0,
+      "lengthM": 90,
+      "widthM": 40,
+      "name": "Packing hall",
+      "floors": 2
+    },
+    {
+      "shape": "rect",
+      "kind": "quay",
+      "u": 0,
+      "v": 0.5,
+      "lengthM": 120,
+      "widthM": 8
+    },
+    {
+      "shape": "circle",
+      "kind": "tank",
+      "u": -0.4,
+      "v": -0.3,
+      "radiusM": 6
+    },
+    {
+      "shape": "point",
+      "kind": "chimney",
+      "u": 0.4,
+      "v": -0.3
+    }
+  ]
+}

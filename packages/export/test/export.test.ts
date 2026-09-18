@@ -338,3 +338,39 @@ describe('gltf', () => {
     ).toHaveLength(9);
   });
 });
+
+describe('interiors', () => {
+  it('renders a floor plan SVG and a Universal VTT scene with walls and door portals', async () => {
+    const { generateInterior } = await import('@citygen/core');
+    const { interiorSvg, interiorVtt, interiorFrame } = await import('../src/index.js');
+    const plan = generateInterior({
+      id: 'b',
+      footprint: [
+        [0, 0],
+        [10, 0],
+        [10, 14],
+        [0, 14],
+      ],
+      floors: 2,
+      use: 'inn',
+      kind: 'shophouse',
+      year: 1890,
+    });
+    const svg = interiorSvg(plan, 0, { pxPerM: 20 });
+    expect(svg.startsWith('<svg')).toBe(true);
+    expect(svg).toContain('class="walls"');
+    expect(svg).toContain('class="doors"');
+    expect(svg).toContain('taproom');
+    expect(svg).toContain('m²');
+    const frame = interiorFrame(plan);
+    expect(frame.maxX - frame.minX).toBe(12);
+    const vtt = interiorVtt(plan, 0, { name: 'inn' });
+    expect(vtt.format).toBe(0.3);
+    expect(vtt.line_of_sight.length).toBe(plan.floors[0]!.walls.length);
+    expect(vtt.portals.length).toBe(plan.floors[0]!.doors.length);
+    const portal = vtt.portals[0] as { bounds: { x: number; y: number }[]; closed: boolean };
+    expect(portal.bounds).toHaveLength(2);
+    expect(portal.closed).toBe(true);
+    expect(() => interiorSvg(plan, 5, { pxPerM: 20 })).toThrow();
+  });
+});

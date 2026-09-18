@@ -1166,3 +1166,79 @@ test('the app is installable: a web manifest and a service worker are served', a
   expect(await sw.text()).toContain('precache');
   await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
 });
+
+test('a building opens floor plans from the inspector with rooms, doors and downloads', async ({ page }) => {
+  test.setTimeout(120_000);
+  await ready(page);
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  const city = stats.settlements[0]!;
+  const { entries } = (await page.evaluate((id) => window.__citygen.directory(id, 'hotel', 5), city.id)) as {
+    entries: { id: string; center: [number, number]; floors: number; name: string }[];
+  };
+  const b =
+    entries[0] ??
+    (
+      (await page.evaluate((id) => window.__citygen.directory(id, '', 1), city.id)) as typeof stats & {
+        entries: { id: string; center: [number, number]; floors: number; name: string }[];
+      }
+    ).entries[0]!;
+  // The engine's plan.
+  const plan = (await page.evaluate((id) => window.__citygen.interior(id), b.id)) as {
+    floors: { rooms: { name: string; connects: string[] }[]; doors: unknown[]; walls: unknown[] }[];
+  };
+  expect(plan.floors.length).toBeGreaterThan(0);
+  expect(plan.floors[0]!.rooms.length).toBeGreaterThan(0);
+  expect(plan.floors[0]!.rooms.some((r) => r.connects.includes('outside'))).toBe(true);
+  expect(plan.floors[0]!.walls.length).toBeGreaterThan(3);
+  // Through the inspector.
+  await page.evaluate(([x, y]) => window.__citygen.inspectAt(x!, y!), b.center);
+  await expect(page.getByTestId('inspector-building')).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Floor plans' }).click();
+  await expect(page.getByTestId('interior-panel')).toBeVisible();
+  await expect(page.getByTestId('interior-svg').locator('svg')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId('interior-rooms')).toContainText('m²');
+  const floorButtons = page
+    .getByTestId('interior-panel')
+    .getByRole('button', { pressed: false })
+    .filter({ hasText: /floor/ });
+  if ((await floorButtons.count()) > 0) {
+    await floorButtons.first().click();
+    await expect(page.getByTestId('interior-svg').locator('svg')).toHaveCount(1);
+  }
+  await page.getByRole('button', { name: 'Close floor plans' }).click();
+  await expect(page.getByTestId('interior-panel')).toHaveCount(0);
+});
+
+test('the gallery opens example regions and share links open hosted documents', async ({ page }) => {
+  test.setTimeout(120_000);
+  await ready(page);
+  await page.getByRole('button', { name: 'Gallery', exact: true }).click();
+  await expect(page.getByTestId('gallery-list')).toContainText('Arkham Coast');
+  await expect(page.getByTestId('plugin-list')).toContainText('Lowlands');
+  await page.getByTestId('plugin-list').getByRole('button', { name: 'Import' }).first().click();
+  await expect(page.getByTestId('gallery-report')).toContainText('Lowlands');
+  const v = await page.evaluate(() => window.__citygen.tileVersion());
+  await page
+    .getByTestId('gallery-list')
+    .locator('li')
+    .filter({ hasText: 'Declining fishing port' })
+    .getByRole('button', { name: 'Open' })
+    .click();
+  await waitForRegen(page, v);
+  await expect(page.getByLabel('Document name')).toHaveValue('Innsmouth');
+  type PortStats = { id: string; abandonedBlocks: number; peakPopulation: number; peakYear: number };
+  const readPort = async () =>
+    (
+      (await page.evaluate(() => window.__citygen.stats())) as { settlements: PortStats[] } | null
+    )?.settlements.find((s) => s.id === 'innsmouth');
+  await expect.poll(readPort, { timeout: 60_000 }).toBeTruthy();
+  const port = (await readPort())!;
+  expect(port.peakPopulation).toBeGreaterThan(7000);
+  expect(port.peakYear).toBeLessThan(1955);
+  expect(port.abandonedBlocks).toBeGreaterThan(0);
+  // A share link opens the document on load.
+  await page.goto('/?doc=' + encodeURIComponent('/gallery/castle-town-1650.citygen.json'));
+  await page.waitForFunction(() => typeof window.__citygen !== 'undefined');
+  await expect(page.getByLabel('Document name')).toHaveValue('Castle Town', { timeout: 60_000 });
+  await page.waitForFunction(() => !window.location.search.includes('doc='));
+});

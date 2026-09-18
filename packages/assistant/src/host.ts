@@ -1,4 +1,4 @@
-import type { MapDocument } from '@citygen/core';
+import type { Interior, MapDocument } from '@citygen/core';
 import type { Command } from '@citygen/editor';
 
 /**
@@ -138,4 +138,6 @@ export interface ToolHost {
   generatedAt(x: number, y: number, toleranceM: number): Promise<GeneratedHit | null>;
   /** Turn a generated feature into an authored (frozen) one; returns its new id. */
   freezeGenerated(hit: GeneratedHit): string;
+  /** Floor plans of a generated building, or null when the id is unknown or plans are unavailable. */
+  interior(buildingId: string): Promise<Interior | null>;
 }

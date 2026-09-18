@@ -468,6 +468,33 @@ export async function executeTool(name: string, rawInput: unknown, host: ToolHos
         run({ type: 'spec.patch', ops: [{ op: 'remove', path: `/events/${idx}` }] });
         return ok({ removed: i.id }, `Removed event ${i.id}`);
       }
+      case 'floor_plan': {
+        const i = input as ToolInput<'floor_plan'>;
+        const plan = await host.interior(i.id);
+        if (!plan) return fail(`no building ${i.id} (only generated buildings have plans)`);
+        const floors = (i.floor != null ? plan.floors.filter((f) => f.floor === i.floor) : plan.floors).map(
+          (f) => ({
+            floor: f.floor,
+            name: f.name,
+            rooms: f.rooms.map((r) => ({
+              id: r.id,
+              name: r.name,
+              areaM2: r.areaM2,
+              opensTo: r.connects.map((c) =>
+                c === 'outside' ? 'outside' : (f.rooms.find((x) => x.id === c)?.name ?? c),
+              ),
+              windows: f.windows.filter((w) => w.room === r.id).length,
+            })),
+            doors: f.doors.length,
+            stairs: f.stairs ? (f.rooms.find((r) => r.id === f.stairs)?.name ?? 'stairs') : null,
+          }),
+        );
+        if (!floors.length) return fail(`no floor ${i.floor}`);
+        return ok(
+          { id: plan.id, floorHeightM: plan.floorHeightM, floors },
+          `Floor plan of ${i.id}: ${floors.map((f) => `${f.name} ${f.rooms.length} rooms`).join(', ')}`,
+        );
+      }
       case 'undo':
         return host.undo() ? ok({ undone: true }, 'Undid the last command') : fail('nothing to undo');
       case 'redo':

@@ -164,6 +164,16 @@ export const TOOL_SCHEMAS = {
       .describe('Floods: years the water stays.'),
   }),
   remove_event: z.object({ id: z.string() }),
+  floor_plan: z.object({
+    id: z.string().describe('Building id (from find_features or describe_area).'),
+    floor: z
+      .number()
+      .int()
+      .min(0)
+      .nullable()
+      .optional()
+      .describe('Floor index, 0 = ground; omit for all floors.'),
+  }),
   undo: z.object({}),
   redo: z.object({}),
 } as const;
@@ -208,6 +218,8 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   add_event:
     'Put a disaster on the timeline: a fire (burnt buildings rebuild over the following years), a storm (damage that heals) or a flood (low ground under water for a while). Centre, radius and year.',
   remove_event: 'Remove a disaster by id.',
+  floor_plan:
+    'Rooms, doors, windows and stairs of a building, floor by floor, generated from its footprint, use and era. Use it to describe an interior or plan a scene.',
   undo: 'Undo the last command.',
   redo: 'Redo the last undone command.',
 };
@@ -220,6 +232,7 @@ export const READ_ONLY_TOOLS: ReadonlySet<ToolName> = new Set<ToolName>([
   'find_features',
   'render_snapshot',
   'get_spec',
+  'floor_plan',
 ]);
 
 type JsonSchema = Record<string, unknown>;

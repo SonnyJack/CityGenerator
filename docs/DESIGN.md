@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.10** (Phases 3–10 delivered; see §16)
+Status: **Draft v0.11** (Phases 3–10 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -963,6 +963,14 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.11** — Phase 10 second slice: building interiors (the stretch
+  project from §12), the gallery, community pack index and share links.
+  Implementation notes: plans are pure functions of the building id,
+  footprint, floors, use and built year; the area partition cuts
+  perpendicular to the oriented box's long axis to the programme's shares,
+  front rooms on the street end; doors form a spanning tree with halls and
+  corridors as hubs; VTT scenes carry the walls as line of sight and doors
+  as portals.
 - **v0.10** — Phase 10 (ecosystem) first slice: the headless engine package,
   the command line and MCP server (§11.5), OSM and heightmap import,
   plugins carried in the document, offline install, open from URL.

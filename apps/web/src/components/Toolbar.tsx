@@ -6,6 +6,7 @@ import { ExportPanel } from './ExportPanel.js';
 import { useAssistant } from '../assistant/store.js';
 import { imagePixels, importText } from '../import/importFile.js';
 import { HeightmapDialog } from './HeightmapDialog.js';
+import { GalleryPanel } from './GalleryPanel.js';
 
 export function Toolbar() {
   const doc = useApp((s) => s.document);
@@ -24,6 +25,7 @@ export function Toolbar() {
   } = useApp();
   const fileInput = useRef<HTMLInputElement>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const directoryOpen = useApp((s) => s.directoryOpen);
   const setDirectoryOpen = useApp((s) => s.setDirectoryOpen);
   const assistantOpen = useAssistant((s) => s.open);
@@ -52,7 +54,7 @@ export function Toolbar() {
   return (
     <header className="flex flex-wrap items-center gap-2 border-b border-stone-300 bg-stone-50 px-3 py-2 text-sm">
       <span className="font-semibold tracking-tight">CityGenerator</span>
-      <span className="text-xs text-stone-500">Phase 8</span>
+      <span className="text-xs text-stone-500">Phase 10</span>
 
       <label className="ml-4 flex items-center gap-1">
         <span className="text-stone-600">Name</span>
@@ -85,6 +87,9 @@ export function Toolbar() {
           className="hidden"
           onChange={onFile}
         />
+        <button className={btn} onClick={() => setGalleryOpen(true)}>
+          Gallery
+        </button>
         <button className={btn} onClick={() => setDirectoryOpen(!directoryOpen)} aria-pressed={directoryOpen}>
           Directory
         </button>
@@ -96,6 +101,7 @@ export function Toolbar() {
         </button>
       </div>
       {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
+      {galleryOpen && <GalleryPanel onClose={() => setGalleryOpen(false)} />}
       {heightmap && (
         <HeightmapDialog
           name={heightmap.name}

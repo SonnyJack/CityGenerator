@@ -13,6 +13,7 @@ import {
   townNamesStage,
   StreetIndex,
   culturePack,
+  generateInterior,
   registerCulturePacks,
   radiusAt,
   decodeHeightmap,
@@ -707,6 +708,30 @@ export function createEngine(): EngineApi {
         settlement,
         patch,
       };
+    },
+
+    async interior(buildingId) {
+      if (!latest) return null;
+      const { towns, tiler } = latest;
+      const cut = buildingId.lastIndexOf('-h');
+      if (cut < 0) return null;
+      const blockId = buildingId.slice(0, cut);
+      for (const town of towns) {
+        const block = town.blocks.find((b) => b.id === blockId);
+        if (!block) continue;
+        const b = tiler.model(block).buildings.find((x) => String(x.id) === buildingId);
+        if (!b) return null;
+        const p = b.properties;
+        return generateInterior({
+          id: buildingId,
+          footprint: b.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]),
+          floors: p.floors,
+          use: p.use ?? 'residential',
+          kind: p.kind,
+          year: typeof p.built === 'number' ? p.built : (currentDoc?.spec.year ?? 1925),
+        });
+      }
+      return null;
     },
 
     async exportFrame(frame) {

@@ -352,3 +352,19 @@ describe('AssistantSession', () => {
     expect(r.value.npcs[0]!.name).toBe('Obed');
   });
 });
+
+describe('floor plans', () => {
+  it('describes a building floor by floor and fails cleanly for unknown ids', async () => {
+    const host = new MemoryHost();
+    const plan = await executeTool('floor_plan', { id: 'b-1' }, host);
+    expect(plan.isError).toBe(false);
+    const text = (plan.content[0] as { text: string }).text;
+    const parsed = JSON.parse(text) as { floors: { rooms: { name: string; opensTo: string[] }[] }[] };
+    expect(parsed.floors.length).toBeGreaterThan(1);
+    expect(parsed.floors[0]!.rooms.some((r) => r.opensTo.includes('outside'))).toBe(true);
+    const one = await executeTool('floor_plan', { id: 'b-1', floor: 1 }, host);
+    expect(JSON.parse((one.content[0] as { text: string }).text).floors).toHaveLength(1);
+    expect((await executeTool('floor_plan', { id: 'nope' }, host)).isError).toBe(true);
+    expect(host.historyLength()).toBe(0);
+  });
+});

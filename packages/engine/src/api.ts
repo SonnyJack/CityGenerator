@@ -1,3 +1,4 @@
+import type { Interior } from '@citygen/core';
 import type { Geometry } from 'geojson';
 import type { MapDocument } from '@citygen/core';
 import type { ExportModel, Frame } from '@citygen/export';
@@ -26,6 +27,8 @@ export interface EngineApi {
   generatedAt(x: number, y: number, toleranceM: number): Promise<GeneratedHit | null>;
   /** Everything an exporter needs for a frame (buildings generated for the blocks it touches). */
   exportFrame(frame: Frame): Promise<ExportModel>;
+  /** Floor plans of a generated building by id (rooms, doors, windows, walls per floor), or null. */
+  interior(buildingId: string): Promise<Interior | null>;
   /** Business and resident directory: every building of a settlement (or all), filtered by text. */
   directory(
     settlement: string | null,
@@ -88,6 +91,9 @@ export interface SettlementSummary {
 
 export interface DirectoryEntry {
   id: string;
+  built?: number;
+  state?: string;
+  condition?: number;
   settlement: string;
   name: string;
   use: string;
