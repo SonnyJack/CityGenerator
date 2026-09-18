@@ -4,6 +4,8 @@ import { HistoryMenu } from './HistoryMenu.js';
 import { RecentMenu } from './RecentMenu.js';
 import { ExportPanel } from './ExportPanel.js';
 import { useAssistant } from '../assistant/store.js';
+import { imagePixels, importText } from '../import/importFile.js';
+import { HeightmapDialog } from './HeightmapDialog.js';
 
 export function Toolbar() {
   const doc = useApp((s) => s.document);
@@ -28,10 +30,23 @@ export function Toolbar() {
   const setAssistantOpen = useAssistant((s) => s.setOpen);
   void exportJson;
 
+  const [heightmap, setHeightmap] = useState<{
+    name: string;
+    pixels: { width: number; height: number; rgba: Uint8ClampedArray };
+  } | null>(null);
+  const [report, setReport] = useState<string | null>(null);
+  void importJson;
+
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) importJson(await file.text());
     e.target.value = '';
+    if (!file) return;
+    if (/\.(png|jpe?g|webp)$/i.test(file.name)) {
+      setHeightmap({ name: file.name, pixels: await imagePixels(file) });
+      return;
+    }
+    const r = importText(file.name, await file.text());
+    setReport(r.message);
   }
 
   return (
@@ -66,7 +81,7 @@ export function Toolbar() {
         <input
           ref={fileInput}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.osm,.xml,.png,.jpg,.jpeg,.webp,application/json"
           className="hidden"
           onChange={onFile}
         />
@@ -81,6 +96,28 @@ export function Toolbar() {
         </button>
       </div>
       {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
+      {heightmap && (
+        <HeightmapDialog
+          name={heightmap.name}
+          pixels={heightmap.pixels}
+          onClose={(message) => {
+            setHeightmap(null);
+            if (message) setReport(message);
+          }}
+        />
+      )}
+      {report && (
+        <span className="text-xs text-stone-600" data-testid="import-report">
+          {report}{' '}
+          <button
+            className="text-stone-400 hover:text-stone-700"
+            aria-label="Dismiss import report"
+            onClick={() => setReport(null)}
+          >
+            ×
+          </button>
+        </span>
+      )}
 
       <div className="basis-full text-xs text-stone-500" data-testid="status">
         {status === 'generating' && 'Generating…'}

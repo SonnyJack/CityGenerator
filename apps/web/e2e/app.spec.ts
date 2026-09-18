@@ -1031,3 +1031,138 @@ test('the timeline plays forward and the condition brush is available', async ({
   await page.getByRole('button', { name: 'Brush' }).click();
   await expect(page.getByRole('option', { name: 'Condition ± (repair / decay)' })).toBeAttached();
 });
+
+// ---------------------------------------------------------------------------
+// Phase 10: import, plugins, offline install.
+
+test('imports OpenStreetMap data, a heightmap and a culture pack, and opens a document from a URL', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await ready(page);
+  // OSM: two streets and a railway around the origin.
+  const osm = `<osm><node id="1" lat="42" lon="-71"/><node id="2" lat="42.003" lon="-71"/><node id="3" lat="42.003" lon="-70.997"/>
+    <way id="1"><nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/><tag k="name" v="Federal Street"/></way>
+    <way id="2"><nd ref="2"/><nd ref="3"/><tag k="highway" v="residential"/></way>
+    <way id="3"><nd ref="1"/><nd ref="3"/><tag k="railway" v="rail"/></way></osm>`;
+  const v0 = await page.evaluate(() => window.__citygen.tileVersion());
+  const osmReport = await page.evaluate((text) => window.__citygen.importText('town.osm', text), osm);
+  expect(osmReport.ok).toBe(true);
+  expect(osmReport.message).toContain('3 features');
+  await waitForRegen(page, v0);
+  let doc = (await page.evaluate(() => window.__citygen.getDocument())) as {
+    authored: { features: { properties: { layer: string; name?: string } }[] };
+    spec: {
+      customCulturePacks: { id: string }[];
+      culture: string;
+      terrain: { importedHeightmap?: { width: number } };
+    };
+  };
+  expect(doc.authored.features.map((f) => f.properties.layer).sort()).toEqual(['rail', 'street', 'street']);
+  expect(doc.authored.features.some((f) => f.properties.name === 'Federal Street')).toBe(true);
+
+  // A culture pack: a copy of the built-in with a new id and a distinctive settlement grammar.
+  const pack = {
+    id: 'e2e-pack',
+    name: 'E2E Pack',
+    naming: {
+      given: ['Ada', 'Bram', 'Cora', 'Dov'],
+      family: ['Arkwright', 'Bessel', 'Corliss', 'Dunmore'],
+      settlement: { patterns: ['Zz{family}ton'] },
+      street: { patterns: ['{family}{suffix}'] },
+      streetSuffix: {
+        artery: [' Way'],
+        road: [' Road'],
+        collector: [' Street'],
+        street: [' Street'],
+        lane: [' Lane'],
+      },
+      district: { patterns: ['{family} Quarter'] },
+      water: { patterns: ['{name} Water'], parts: { name: ['Grey', 'Cold', 'Long', 'Mill'] } },
+      business: { patterns: ['{family} & Co'] },
+      quarters: {
+        core: 'Old Quarter',
+        cathedral: 'Minster',
+        castle: 'Keep',
+        market: 'Market',
+        port: 'Docks',
+        industrial: 'Works',
+        station: 'Station',
+      },
+    },
+    conventions: {
+      religious: ['chapel', 'meeting house', 'church'],
+      civic: ['town hall', 'court'],
+      materials: { preIndustrial: { timber: 3 }, industrial: { brick: 3 }, modern: { concrete: 3 } },
+    },
+  };
+  const packReport = await page.evaluate(
+    (text) => window.__citygen.importText('pack.json', text),
+    JSON.stringify(pack),
+  );
+  expect(packReport.ok).toBe(true);
+  expect(packReport.message).toContain('E2E Pack');
+  await expect(page.getByLabel('Culture')).toContainText('E2E Pack');
+  const v1 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.getByLabel('Culture').selectOption('e2e-pack');
+  await waitForRegen(page, v1);
+  const named = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  expect(named.culture).toBe('e2e-pack');
+  expect(named.settlements.every((s) => /^Zz/.test(s.name ?? ''))).toBe(true);
+
+  // A heightmap: a 16 × 16 ramp from 0 to 400 m makes a ridge where the synthetic coast was.
+  const w = 16;
+  const rgba: number[] = [];
+  for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) rgba.push(y * 16, y * 16, y * 16, 255);
+  const v2 = await page.evaluate(() => window.__citygen.tileVersion());
+  const hmReport = await page.evaluate(
+    ([px, min, max]) =>
+      window.__citygen.importHeightmap(16, 16, px as number[], min as number, max as number),
+    [rgba, -100, 400],
+  );
+  expect(hmReport.ok).toBe(true);
+  await waitForRegen(page, v2);
+  const after = (await page.evaluate(() => window.__citygen.stats())) as {
+    terrain: { maxM: number; minM: number };
+  };
+  expect(after.terrain.maxM).toBeGreaterThan(200);
+  expect(after.terrain.minM).toBeLessThan(0);
+  doc = (await page.evaluate(() => window.__citygen.getDocument())) as typeof doc;
+  expect(doc.spec.terrain.importedHeightmap?.width).toBe(16);
+
+  // Open from URL: a document served by the test.
+  const exported = (await page.evaluate(() => window.__citygen.exportJson())) as string;
+  const other = JSON.parse(exported) as { meta: { name: string }; spec: { seed: string } };
+  other.meta.name = 'From a gist';
+  other.spec.seed = 'gist-seed';
+  await page.route('https://gist.example/raw/region.citygen.json', (route) =>
+    route.fulfill({ body: JSON.stringify(other), contentType: 'application/json' }),
+  );
+  const urlReport = await page.evaluate(
+    (u) => window.__citygen.importFromUrl(u),
+    'https://gist.example/raw/region.citygen.json',
+  );
+  expect(urlReport.ok).toBe(true);
+  await expect(page.getByLabel('Document name')).toHaveValue('From a gist');
+  // The Open menu offers the same.
+  await page.getByRole('button', { name: 'Open ▾' }).click();
+  await page.getByLabel('Document URL').fill('https://gist.example/raw/region.citygen.json');
+  await page.getByRole('button', { name: 'Open URL' }).click();
+  await expect(page.getByTestId('url-report')).toContainText('Opened');
+});
+
+test('the app is installable: a web manifest and a service worker are served', async ({ page, request }) => {
+  await ready(page);
+  const manifest = await request.get('/manifest.webmanifest');
+  expect(manifest.ok()).toBe(true);
+  const m = (await manifest.json()) as { name: string; icons: { src: string }[]; display: string };
+  expect(m.name).toBe('CityGenerator');
+  expect(m.display).toBe('standalone');
+  expect(m.icons.length).toBeGreaterThanOrEqual(2);
+  const icon = await request.get(`/${m.icons[0]!.src}`);
+  expect(icon.ok()).toBe(true);
+  const sw = await request.get('/sw.js');
+  expect(sw.ok()).toBe(true);
+  expect(await sw.text()).toContain('precache');
+  await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
+});

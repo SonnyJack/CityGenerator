@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { customFeatureTypeSchema } from '../placement/custom.js';
+import { culturePackSchema } from '../naming/schema.js';
 
 /**
  * MapDocument schema, version 2.
@@ -210,8 +211,16 @@ export const regionSpecSchema = z.object({
           major: 1,
           minor: 3,
         }),
+      /** Imported heights replacing the synthetic field: a width × height grid of 16-bit samples (base64), south row first, scaled from minM to maxM. */
       importedHeightmap: z
-        .object({ dataUrl: z.string(), minM: z.number(), maxM: z.number(), cellSizeM: z.number().positive() })
+        .object({
+          width: z.number().int().min(2).max(4096),
+          height: z.number().int().min(2).max(4096),
+          minM: z.number(),
+          maxM: z.number(),
+          data: z.string(),
+          source: z.string().optional(),
+        })
         .optional(),
     })
     .default({
@@ -265,6 +274,8 @@ export const regionSpecSchema = z.object({
   scaleCompression: z.boolean().default(true),
   /** Feature types defined in this document, usable in feature requests by id. */
   customFeatureTypes: z.array(customFeatureTypeSchema).default([]),
+  /** Culture packs carried by this document (plugins); they override built-ins with the same id. */
+  customCulturePacks: z.array(culturePackSchema).default([]),
   /** Facilities the engine adds by default from settlement kind, size and year. */
   defaultFacilities: z.boolean().default(true),
 });

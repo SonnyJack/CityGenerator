@@ -245,7 +245,10 @@ export function GenerateDock() {
             value={doc.spec.culture}
             onChange={(e) => patch('/culture', e.target.value)}
           >
-            {CULTURE_PACKS.map((c) => (
+            {[
+              ...doc.spec.customCulturePacks,
+              ...CULTURE_PACKS.filter((b) => !doc.spec.customCulturePacks.some((c) => c.id === b.id)),
+            ].map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -254,7 +257,9 @@ export function GenerateDock() {
         </label>
         {stats && (
           <p className="text-[11px] text-stone-500" data-testid="region-name">
-            {stats.regionName} · {CULTURE_PACKS.find((c) => c.id === stats.culture)?.name ?? stats.culture}
+            {stats.regionName} ·{' '}
+            {[...doc.spec.customCulturePacks, ...CULTURE_PACKS].find((c) => c.id === stats.culture)?.name ??
+              stats.culture}
           </p>
         )}
         <label className="flex items-center gap-2 text-xs">

@@ -1,5 +1,11 @@
 export { culturePackSchema, grammarSchema, type CulturePack, type Grammar } from './schema.js';
-export { CULTURE_PACKS, culturePack, culturePackById } from './packs.js';
+export {
+  CULTURE_PACKS,
+  culturePack,
+  culturePackById,
+  registerCulturePacks,
+  allCulturePacks,
+} from './packs.js';
 export { NameGenerator, type StreetClass } from './generator.js';
 export {
   regionNamesStage,

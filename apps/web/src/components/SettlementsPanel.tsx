@@ -149,7 +149,10 @@ export function SettlementsPanel() {
                   }
                 >
                   <option value="">region culture</option>
-                  {CULTURE_PACKS.map((c) => (
+                  {[
+                    ...doc.spec.customCulturePacks,
+                    ...CULTURE_PACKS.filter((b) => !doc.spec.customCulturePacks.some((c) => c.id === b.id)),
+                  ].map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>

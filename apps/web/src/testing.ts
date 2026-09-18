@@ -1,6 +1,7 @@
 import { useApp } from './store.js';
 import { useAssistant } from './assistant/store.js';
 import { scriptedClient, type ScriptedTurn } from '@citygen/assistant';
+import { importFromUrl, importHeightmap, importText } from './import/importFile.js';
 import { engine } from './engine/client.js';
 import {
   currentViewFrame,
@@ -48,6 +49,10 @@ export function installTestApi() {
     generatedHit: () => useApp.getState().generatedHit,
     recent: () => useApp.getState().recent,
     openRecent: (key) => useApp.getState().openRecent(key),
+    importText: (name, text) => importText(name, text),
+    importFromUrl: (url) => importFromUrl(url),
+    importHeightmap: (width, height, rgba, minM, maxM) =>
+      importHeightmap({ width, height, rgba }, { minM, maxM }),
     assistant: {
       useScripted(turns, structured) {
         useAssistant
@@ -101,6 +106,15 @@ declare global {
       generatedHit(): unknown;
       recent(): { key: string; name: string; seed: string }[];
       openRecent(key: string): Promise<boolean>;
+      importText(name: string, text: string): { kind: string; ok: boolean; message: string };
+      importFromUrl(url: string): Promise<{ kind: string; ok: boolean; message: string }>;
+      importHeightmap(
+        width: number,
+        height: number,
+        rgba: number[],
+        minM: number,
+        maxM: number,
+      ): { kind: string; ok: boolean; message: string };
       assistant: {
         useScripted(turns: unknown[], structured?: unknown[]): void;
         useRealClient(apiKey: string): void;

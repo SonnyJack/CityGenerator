@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../store.js';
+import { importFromUrl } from '../import/importFile.js';
 
 /** Documents stored in this browser (IndexedDB), most recent first. */
 export function RecentMenu() {
@@ -8,6 +9,8 @@ export function RecentMenu() {
   const openRecent = useApp((s) => s.openRecent);
   const forget = useApp((s) => s.forgetRecent);
   const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState('');
+  const [urlReport, setUrlReport] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -35,6 +38,29 @@ export function RecentMenu() {
           role="listbox"
           data-testid="recent-list"
         >
+          <li className="flex items-center gap-1 px-2 py-1">
+            <input
+              aria-label="Document URL"
+              className="min-w-0 flex-1 rounded border border-stone-300 px-1 py-0.5"
+              placeholder="https://… (a raw gist or any .citygen.json)"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void importFromUrl(url).then((r) => setUrlReport(r.message));
+              }}
+            />
+            <button
+              className="rounded border border-stone-300 px-1 py-0.5 hover:bg-stone-100"
+              onClick={() => void importFromUrl(url).then((r) => setUrlReport(r.message))}
+            >
+              Open URL
+            </button>
+          </li>
+          {urlReport && (
+            <li className="px-2 pb-1 text-stone-500" data-testid="url-report">
+              {urlReport}
+            </li>
+          )}
           {recent.map((r) => (
             <li key={r.key} className="flex items-center hover:bg-stone-100">
               <button

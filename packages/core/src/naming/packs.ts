@@ -2274,10 +2274,23 @@ const raw: CulturePack[] = [
 
 export const CULTURE_PACKS: CulturePack[] = raw.map((p) => culturePackSchema.parse(p));
 
+// Packs a document carries with it (plugins); they take precedence over the built-ins by id.
+let extraPacks: CulturePack[] = [];
+
+/** Register document-level culture packs for this engine run (replaces the previous set). */
+export function registerCulturePacks(packs: readonly CulturePack[]): void {
+  extraPacks = packs.map((p) => culturePackSchema.parse(p));
+}
+
+/** Every pack available now: registered plugins first, then the built-ins. */
+export function allCulturePacks(): CulturePack[] {
+  return [...extraPacks, ...CULTURE_PACKS.filter((b) => !extraPacks.some((e) => e.id === b.id))];
+}
+
 export function culturePack(id: string | undefined): CulturePack {
-  return CULTURE_PACKS.find((p) => p.id === id) ?? CULTURE_PACKS[0]!;
+  return extraPacks.find((p) => p.id === id) ?? CULTURE_PACKS.find((p) => p.id === id) ?? CULTURE_PACKS[0]!;
 }
 
 export function culturePackById(id: string): CulturePack | undefined {
-  return CULTURE_PACKS.find((p) => p.id === id);
+  return extraPacks.find((p) => p.id === id) ?? CULTURE_PACKS.find((p) => p.id === id);
 }

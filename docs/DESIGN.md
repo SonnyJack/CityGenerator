@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.9** (Phases 3–9 delivered; see §16)
+Status: **Draft v0.10** (Phases 3–10 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -963,6 +963,13 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.10** — Phase 10 (ecosystem) first slice: the headless engine package,
+  the command line and MCP server (§11.5), OSM and heightmap import,
+  plugins carried in the document, offline install, open from URL.
+  Implementation notes: the worker is a thin Comlink wrapper over
+  `createEngine()`; imported heightmaps are a base64 16-bit grid so no image
+  decoder is needed in the engine; document-level packs are registered per
+  engine run and shadow built-ins by id.
 - **v0.9** — Phase 9 delivered: the timeline, condition, disasters and 3D.
   Decision: the spec's populations are as of an anchor year (`anchorYear`);
   each settlement follows one growth curve through it, so the year slider

@@ -31,6 +31,12 @@
     },
     {
       "path": "../../packages/export"
+    },
+    {
+      "path": "../../packages/engine"
+    },
+    {
+      "path": "../../packages/import"
     }
   ]
 }

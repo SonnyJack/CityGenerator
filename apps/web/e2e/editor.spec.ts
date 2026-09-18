@@ -168,6 +168,7 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
 });
 
 test('the terrain brush raises the ground and the wealth brush shifts the field', async ({ page }) => {
+  test.setTimeout(120_000); // three full regenerations from the terrain up
   await ready(page);
   const [cx, cy] = await townCenter(page);
   const px = cx + 2500;

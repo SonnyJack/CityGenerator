@@ -15,8 +15,10 @@
     "@citygen/assistant": "workspace:*",
     "@citygen/core": "workspace:*",
     "@citygen/editor": "workspace:*",
+    "@citygen/engine": "workspace:*",
     "@citygen/export": "workspace:*",
     "@citygen/features": "workspace:*",
+    "@citygen/import": "workspace:*",
     "@citygen/themes": "workspace:*",
     "@citygen/tiles": "workspace:*",
     "@types/geojson": "^7946.0.16",
@@ -34,6 +36,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vite-plugin-pwa": "1.3.0"
   }
 }

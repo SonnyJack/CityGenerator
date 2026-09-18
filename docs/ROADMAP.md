@@ -499,10 +499,29 @@ terrain mesh and buildings.
 
 ## Phase 10 — Ecosystem (ongoing)
 
-- MCP server and `citygen` CLI over the same commands.
-- Feature-authoring guide; plugin registry for community feature types and
-  culture packs.
-- OSM and DEM import as a starting document.
-- PWA offline install; gallery of shared documents (gists); localisation.
-- Building interiors (floor plans from footprint, floors, use and era) as a
-  stretch project.
+- [x] Headless engine (`@citygen/engine`): the pipeline, tiles and queries
+      behind one `createEngine()` used by the browser worker, the command
+      line and the MCP server, with no DOM.
+- [x] `citygen` command line (`@citygen/cli`): `new`, `generate`, `export`
+      (SVG, GeoJSON, glTF, directory CSV; frames by settlement or bounds),
+      `directory`, `import` (OSM, PNG heightmaps with a built-in decoder)
+      and `mcp`. See docs/CLI.md.
+- [x] MCP server over the assistant's tools plus document tools (new, open,
+      save, get, export), on stdio, with autosave; the same command bus and
+      validation as the editor, so `undo` works and documents round-trip.
+- [x] OpenStreetMap import (.osm XML and Overpass JSON): highways by class,
+      railways and trams, buildings with levels, water, woods, parks,
+      industrial land, cemeteries, city walls and named places, projected
+      locally in metres; from the toolbar, the CLI and a URL.
+- [x] Heightmap import: grey or Terrain-RGB images become the terrain (16-bit
+      grid in the document); rivers, coasts and land cover derive from it.
+- [x] Plugins: culture packs and feature types as JSON in the document
+      (`customCulturePacks`, `customFeatureTypes`), imported from a file or
+      URL, replacing built-ins by id; docs/FEATURES.md is the authoring
+      guide with complete examples.
+- [x] Installable and offline (PWA): manifest, icons and a precaching
+      service worker for the app shell, engine worker and fonts.
+- [x] Open from URL (a raw gist or any hosted document) from the Open menu.
+- [ ] Still open: a curated gallery of shared documents, localisation, a
+      registry index for community packs (packs work from any URL today),
+      building interiors.

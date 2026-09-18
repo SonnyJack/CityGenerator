@@ -17,6 +17,12 @@
       "path": "packages/export"
     },
     {
+      "path": "packages/engine"
+    },
+    {
+      "path": "packages/import"
+    },
+    {
       "path": "packages/editor"
     },
     {
@@ -24,6 +30,9 @@
     },
     {
       "path": "apps/web"
+    },
+    {
+      "path": "packages/cli"
     }
   ]
 }

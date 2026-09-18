@@ -1,0 +1,30 @@
+{
+  "name": "@citygen/engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Headless engine: runs the pipeline for a document, serves tiles and answers queries (browser worker, CLI, MCP)",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@citygen/core": "workspace:*",
+    "@citygen/export": "workspace:*",
+    "@citygen/features": "workspace:*",
+    "@citygen/tiles": "workspace:*",
+    "@types/geojson": "^7946.0.16"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
+  }
+}

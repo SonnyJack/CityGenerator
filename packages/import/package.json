@@ -1,0 +1,27 @@
+{
+  "name": "@citygen/import",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Importers: OpenStreetMap data to authored features, heightmaps to terrain",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@citygen/core": "workspace:*",
+    "@types/geojson": "^7946.0.16"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
+  }
+}

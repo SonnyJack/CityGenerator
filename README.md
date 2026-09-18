@@ -80,7 +80,14 @@ so buildings keep their built years, lots rebuild when zoning changes, towns
 that decline empty from the edges, and fires, storms and floods leave their
 marks. Buildings carry a condition from sound to ruin, a timeline player
 plays the years, buildings extrude in 3D, and any frame exports as a glTF
-model. The ecosystem phase is next.
+model.
+
+Phase 10 opens it up: a headless engine package shared by the browser, a
+`citygen` command line (new, generate, export, directory, import) and an MCP
+server that gives Claude Desktop, Claude Code or any MCP client the same
+tools as the in-app assistant; OpenStreetMap and heightmap import; culture
+packs and feature types as JSON plugins with an authoring guide; an
+installable, offline-capable app; and opening documents from a URL.
 
 ## Development
 

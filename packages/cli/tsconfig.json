@@ -1,0 +1,36 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../editor"
+    },
+    {
+      "path": "../engine"
+    },
+    {
+      "path": "../export"
+    },
+    {
+      "path": "../themes"
+    },
+    {
+      "path": "../assistant"
+    },
+    {
+      "path": "../import"
+    },
+    {
+      "path": "../tiles"
+    }
+  ]
+}
