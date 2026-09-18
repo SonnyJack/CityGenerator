@@ -1,0 +1,27 @@
+{
+  "name": "@citygen/themes",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Theme definitions compiled to MapLibre style JSON (and later SVG styles)",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@citygen/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@maplibre/maplibre-gl-style-spec": "^26.4.4",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@citygen/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CityGenerator editor (static site)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "e2e": "playwright test --config playwright.config.ts"
+  },
+  "dependencies": {
+    "@citygen/core": "workspace:*",
+    "@citygen/editor": "workspace:*",
+    "@citygen/features": "workspace:*",
+    "@citygen/themes": "workspace:*",
+    "@citygen/tiles": "workspace:*",
+    "comlink": "^4.4.2",
+    "idb-keyval": "^6.3.0",
+    "maplibre-gl": "^6.10.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.0"
+  }
+}

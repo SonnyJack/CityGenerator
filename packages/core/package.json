@@ -1,0 +1,31 @@
+{
+  "name": "@citygen/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CityGenerator engine: document schema, deterministic randomness, stage runner, geometry",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@types/geojson": "^7946.0.16",
+    "fast-json-patch": "^3.1.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
+  }
+}

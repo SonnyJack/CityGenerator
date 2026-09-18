@@ -22,7 +22,28 @@ and extended with:
 - a static site on GitHub Pages built with TypeScript, Vite, React and
   MapLibre GL.
 
-The project is at the **design stage**. Start here:
+## Status
+
+Phase 0 (foundation) is complete: the monorepo, CI, GitHub Pages deployment,
+document format, deterministic engine skeleton and an empty editor that renders
+the region through MapLibre. Terrain generation is next (Phase 1).
+
+## Development
+
+```sh
+pnpm install
+pnpm dev          # editor at http://localhost:5173
+pnpm check        # lint, typecheck, unit tests, build
+pnpm e2e          # Playwright end-to-end tests
+```
+
+Deployment: pushes to `main` build the site and publish it with the
+`pages.yml` workflow. The repository's Pages source must be set to
+"GitHub Actions" once (Settings → Pages).
+
+## Documents
+
+Start here:
 
 - [docs/DESIGN.md](docs/DESIGN.md) — architecture, data model, pipeline,
   placement engine, rendering, editor, LLM integration.

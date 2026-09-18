@@ -63,7 +63,7 @@ Companion documents:
 - Real-world geodata import (OpenStreetMap, DEM tiles). Planned later; the data
   model is GeoJSON precisely so this stays possible.
 - Multiplayer or collaborative editing.
-- Economic or traffic simulation. A **growth timeline** (the region at year *t*)
+- Economic or traffic simulation. A **growth timeline** (the region at year _t_)
   is planned, but as a generation parameter, not a simulation.
 - Print tiling to paper. PNG handouts and SVG are in scope; tiled PDF is not
   needed yet.
@@ -72,16 +72,16 @@ Companion documents:
 
 ### 1.3 Primary user stories
 
-- *A Keeper preparing a 1920s campaign* generates a New England-style coastal
+- _A Keeper preparing a 1920s campaign_ generates a New England-style coastal
   region: a decaying fishing port, a university town 20 km inland, farms and
   woods between them, a rail line joining them to the metropolis at the map
   edge. They zoom into the port, drag the cannery next to the wharves, paint the
   waterfront district poorer, add a boarding house and a warehouse by hand, and
   export a period-style handout of the harbour.
-- *A worldbuilder* paints a bay and a river, asks the assistant for "a
+- _A worldbuilder_ paints a bay and a river, asks the assistant for "a
   container port on the deep side of the bay with a rail yard behind it and the
   wealthy suburbs on the opposite shore", then refines by hand.
-- *A developer* adds a new feature type ("gasworks", "asylum") as a JSON
+- _A developer_ adds a new feature type ("gasworks", "asylum") as a JSON
   definition plus an optional TypeScript layout function, without touching the
   core pipeline.
 
@@ -113,16 +113,16 @@ subdivision, seeded determinism, and the clean ink aesthetic as one theme.
 
 **What we change:**
 
-| Limitation in the reference | Our approach |
-|---|---|
-| One town, one Voronoi partition, no terrain | Region → settlements → districts → blocks hierarchy on top of a terrain layer |
-| Everything generated and drawn at once | Settlement-level stages eager; block-level detail generated lazily per tile and cached |
-| Wards are discrete, hand-picked classes | Continuous wealth/density fields discretised per district; ward types become data-driven **zone profiles** |
-| Only pre-modern features | Year-gated feature library: trams, rail, yards, docks, container ports, dry docks, industry, and more |
-| Placement implicit in ward selection | Explicit **placement engine** with constraints, scoring, orientation, manual pins |
-| Empty land outside wards | Multi-pass **fill** system at settlement and rural scale |
-| Streets only from gates to plaza | Road hierarchy, grid/organic/radial patterns; rail, tram and water as separate graphs |
-| No editing after generation | Full editor; authored geometry is part of the document and survives regeneration |
+| Limitation in the reference                 | Our approach                                                                                               |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| One town, one Voronoi partition, no terrain | Region → settlements → districts → blocks hierarchy on top of a terrain layer                              |
+| Everything generated and drawn at once      | Settlement-level stages eager; block-level detail generated lazily per tile and cached                     |
+| Wards are discrete, hand-picked classes     | Continuous wealth/density fields discretised per district; ward types become data-driven **zone profiles** |
+| Only pre-modern features                    | Year-gated feature library: trams, rail, yards, docks, container ports, dry docks, industry, and more      |
+| Placement implicit in ward selection        | Explicit **placement engine** with constraints, scoring, orientation, manual pins                          |
+| Empty land outside wards                    | Multi-pass **fill** system at settlement and rural scale                                                   |
+| Streets only from gates to plaza            | Road hierarchy, grid/organic/radial patterns; rail, tram and water as separate graphs                      |
+| No editing after generation                 | Full editor; authored geometry is part of the document and survives regeneration                           |
 
 ---
 
@@ -168,25 +168,25 @@ Four ideas hold the design together:
 
 ## 4. Technology choices
 
-| Concern | Choice | Why |
-|---|---|---|
-| Language | TypeScript (strict) | Runs in browser and Node (tests, CLI, MCP server) |
-| Build / dev | Vite | Static output, first-class Web Worker support |
-| UI | React 19 + Zustand + Tailwind CSS | Decided; Zustand keeps state serialisable |
-| Forms | JSON Schema (from Zod) for the spec + generated forms | One schema drives validation, the UI, migrations and LLM tool schemas |
-| Map rendering | **MapLibre GL JS** with an in-browser custom tile protocol | Industry-standard vector map engine: LOD, label collision, style JSON, hillshade, `fill-extrusion` 3D, high-DPI export; designed for exactly the "region to street" zoom range |
-| Vector tiles | `geojson-vt` + `vt-pbf` inside the worker | Standard MVT tiles from our GeoJSON, no server |
-| Geometry | `d3-delaunay` (Voronoi), `polygon-clipping`, `flatbush` (spatial index), `simplify-js`, `poisson-disk-sampling`, `@turf/*` selectively | Mature, deterministic |
-| Terrain | `simplex-noise`, `d3-contour`; hillshade via MapLibre `raster-dem` from generated Terrain-RGB tiles | Standard noise and contour extraction; free hillshade/3D terrain |
-| Data model | GeoJSON `FeatureCollection` in local planar metres, typed `properties` | Interoperable (QGIS, turf), trivially serialisable |
-| Randomness | Own seeded PRNG (PCG32) with named sub-streams and per-tile derivation | Determinism across browsers; `Math.random` is banned in `core` |
-| Concurrency | Worker pool via `comlink`; tile requests cancellable | Keeps the UI at 60 fps; parallel tile builds |
-| Persistence | `.citygen.json` import/export; IndexedDB autosave and recent documents; optional URL hash for small documents | No backend; the document is the source of truth |
-| LLM | `@anthropic-ai/sdk` in the browser, bring-your-own-key | Decided: Anthropic only to start |
-| Testing | Vitest (unit, golden-seed hashes), Playwright (e2e, visual regression on Chromium/Firefox/WebKit) | Standard |
-| CI/CD | GitHub Actions → GitHub Pages | Required |
-| Repo | pnpm workspaces monorepo | Engine reusable outside the app |
-| Licence | Clean-room, MIT, copyright "CityGenerator contributors" | Decided |
+| Concern       | Choice                                                                                                                                 | Why                                                                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Language      | TypeScript (strict)                                                                                                                    | Runs in browser and Node (tests, CLI, MCP server)                                                                                                                              |
+| Build / dev   | Vite                                                                                                                                   | Static output, first-class Web Worker support                                                                                                                                  |
+| UI            | React 19 + Zustand + Tailwind CSS                                                                                                      | Decided; Zustand keeps state serialisable                                                                                                                                      |
+| Forms         | JSON Schema (from Zod) for the spec + generated forms                                                                                  | One schema drives validation, the UI, migrations and LLM tool schemas                                                                                                          |
+| Map rendering | **MapLibre GL JS** with an in-browser custom tile protocol                                                                             | Industry-standard vector map engine: LOD, label collision, style JSON, hillshade, `fill-extrusion` 3D, high-DPI export; designed for exactly the "region to street" zoom range |
+| Vector tiles  | `geojson-vt` + `vt-pbf` inside the worker                                                                                              | Standard MVT tiles from our GeoJSON, no server                                                                                                                                 |
+| Geometry      | `d3-delaunay` (Voronoi), `polygon-clipping`, `flatbush` (spatial index), `simplify-js`, `poisson-disk-sampling`, `@turf/*` selectively | Mature, deterministic                                                                                                                                                          |
+| Terrain       | `simplex-noise`, `d3-contour`; hillshade via MapLibre `raster-dem` from generated Terrain-RGB tiles                                    | Standard noise and contour extraction; free hillshade/3D terrain                                                                                                               |
+| Data model    | GeoJSON `FeatureCollection` in local planar metres, typed `properties`                                                                 | Interoperable (QGIS, turf), trivially serialisable                                                                                                                             |
+| Randomness    | Own seeded PRNG (sfc32, seeded from a 128-bit hash of a stream path) with named sub-streams and per-tile derivation                    | Determinism across browsers; `Math.random` is banned in `core`                                                                                                                 |
+| Concurrency   | Worker pool via `comlink`; tile requests cancellable                                                                                   | Keeps the UI at 60 fps; parallel tile builds                                                                                                                                   |
+| Persistence   | `.citygen.json` import/export; IndexedDB autosave and recent documents; optional URL hash for small documents                          | No backend; the document is the source of truth                                                                                                                                |
+| LLM           | `@anthropic-ai/sdk` in the browser, bring-your-own-key                                                                                 | Decided: Anthropic only to start                                                                                                                                               |
+| Testing       | Vitest (unit, golden-seed hashes), Playwright (e2e, visual regression on Chromium/Firefox/WebKit)                                      | Standard                                                                                                                                                                       |
+| CI/CD         | GitHub Actions → GitHub Pages                                                                                                          | Required                                                                                                                                                                       |
+| Repo          | pnpm workspaces monorepo                                                                                                               | Engine reusable outside the app                                                                                                                                                |
+| Licence       | Clean-room, MIT, copyright "CityGenerator contributors"                                                                                | Decided                                                                                                                                                                        |
 
 ### 4.1 Why MapLibre and not a custom Canvas renderer
 
@@ -241,15 +241,16 @@ four parts:
 
 ```ts
 interface MapDocument {
-  format: 'citygen'; version: 2;          // migrations are part of core
+  format: 'citygen';
+  version: 2; // migrations are part of core
   meta: { name: string; created: string; modified: string; app: string; notes?: string };
 
-  spec: RegionSpec;                        // generation parameters (small)
-  authored: FeatureCollection<AuthoredProps>;   // hand-drawn geometry (can be large)
-  overrides: Override[];                   // targeted patches to generated results, e.g. pins, frozen features
-  annotations: Annotation[];               // GM notes, labels, markers, handout regions
+  spec: RegionSpec; // generation parameters (small)
+  authored: FeatureCollection<AuthoredProps>; // hand-drawn geometry (can be large)
+  overrides: Override[]; // targeted patches to generated results, e.g. pins, frozen features
+  annotations: Annotation[]; // GM notes, labels, markers, handout regions
   viewport?: { center: [number, number]; zoom: number; bearing: number; pitch: number };
-  ui?: { theme: string; layers: LayerState; year?: number };   // presentation only
+  ui?: { theme: string; layers: LayerState; year?: number }; // presentation only
 }
 ```
 
@@ -267,37 +268,53 @@ interface MapDocument {
 ```ts
 interface RegionSpec {
   seed: string;
-  extent: { widthM: number; heightM: number };          // up to ~60 km on a side
-  year: number;                                          // 1100..2050; drives era profile
-  biome: BiomeId;                                        // climate/vegetation pack, e.g. 'temperateMaritime', 'tropicalMonsoon'
-  culture: CultureId;                                    // naming/building-style pack, e.g. 'newEngland', 'japan', 'maghreb'
-  cultureMix?: { culture: CultureId; weight: number; districts?: string[] }[];   // colonial/immigrant quarters
+  extent: { widthM: number; heightM: number }; // up to ~60 km on a side
+  year: number; // 1100..2050; drives era profile
+  biome: BiomeId; // climate/vegetation pack, e.g. 'temperateMaritime', 'tropicalMonsoon'
+  culture: CultureId; // naming/building-style pack, e.g. 'newEngland', 'japan', 'maghreb'
+  cultureMix?: { culture: CultureId; weight: number; districts?: string[] }[]; // colonial/immigrant quarters
 
   terrain: {
-    preset: 'plains' | 'coast' | 'bay' | 'riverValley' | 'hills' | 'archipelago' | 'delta' | 'estuary' | 'custom';
-    relief: number; roughness: number; seaLevel: number;
+    preset:
+      'plains' | 'coast' | 'bay' | 'riverValley' | 'hills' | 'archipelago' | 'delta' | 'estuary' | 'custom';
+    relief: number;
+    roughness: number;
+    seaLevel: number;
     rivers: { major: number; minor: number };
     importedHeightmap?: { dataUrl: string; minM: number; maxM: number; cellSizeM: number };
   };
 
-  settlements: SettlementSpec[];     // explicit list; empty = let the generator place them
-  settlementPolicy: { count: [number, number]; kinds: Record<SettlementKind, number> };   // weights
+  settlements: SettlementSpec[]; // explicit list; empty = let the generator place them
+  settlementPolicy: { count: [number, number]; kinds: Record<SettlementKind, number> }; // weights
   society: { wealth: FieldParams; density: FieldParams; inequality: number };
-  networks: RegionNetworkSpec;       // inter-settlement roads, rail, ferries, canals
-  features: FeatureRequest[];        // region-level requests (e.g. "one naval base", "quarry")
+  networks: RegionNetworkSpec; // inter-settlement roads, rail, ferries, canals
+  features: FeatureRequest[]; // region-level requests (e.g. "one naval base", "quarry")
   overridesPolicy: { keepFrozenOnReseed: boolean };
 }
 
 interface SettlementSpec {
-  id: string; name?: string;
-  kind: 'metropolis' | 'city' | 'town' | 'village' | 'hamlet' | 'portTown' | 'fishingVillage'
-      | 'millTown' | 'miningTown' | 'resort' | 'universityTown' | 'suburb' | 'industrialSatellite';
-  site?: { center: [number, number]; lock: boolean };    // pin or let the placement engine choose
+  id: string;
+  name?: string;
+  kind:
+    | 'metropolis'
+    | 'city'
+    | 'town'
+    | 'village'
+    | 'hamlet'
+    | 'portTown'
+    | 'fishingVillage'
+    | 'millTown'
+    | 'miningTown'
+    | 'resort'
+    | 'universityTown'
+    | 'suburb'
+    | 'industrialSatellite';
+  site?: { center: [number, number]; lock: boolean }; // pin or let the placement engine choose
   population: number;
-  founded?: number;                                      // year; older core = organic + walls
-  growth?: { year: number; population: number }[];       // optional timeline
+  founded?: number; // year; older core = organic + walls
+  growth?: { year: number; population: number }[]; // optional timeline
   layout: { streetPattern: 'organic' | 'grid' | 'radial' | 'mixed'; blockSizeM?: number; walls?: boolean };
-  features: FeatureRequest[];                            // settlement-level requests (port, yard, campus…)
+  features: FeatureRequest[]; // settlement-level requests (port, yard, campus…)
   overrides?: Partial<SocietyParams>;
 }
 ```
@@ -437,8 +454,8 @@ wealth(p)  = σ( d·elevationAdvantage(p) + e·waterfrontAmenity(p) + f·distanc
   tenements near work, streetcar suburbs for the middle class, estates for the
   rich).
 - **Discretisation** per district: `wealthClass ∈ {slum, poor, modest,
-  comfortable, affluent, elite}`, `densityClass ∈ {rural, suburban, low,
-  medium, high, core}`. Both numeric and class values are exposed to the UI and
+comfortable, affluent, elite}`, `densityClass ∈ {rural, suburban, low,
+medium, high, core}`. Both numeric and class values are exposed to the UI and
   the assistant.
 - **Effects** via zone profiles: lot size, footprint, floors, setback, street
   width and pattern, tree density, park probability, road surface, amenity
@@ -499,18 +516,18 @@ A single engine places everything from a settlement to a park bench. A
 
 ```ts
 interface FeatureType {
-  id: string;                          // 'port.container', 'rail.yard', 'settlement.millTown'
+  id: string; // 'port.container', 'rail.yard', 'settlement.millTown'
   level: 'region' | 'settlement' | 'block';
-  years: [number, number];             // availability window
+  years: [number, number]; // availability window
   footprint: FixedFootprint | ParametricFootprint;
-  hard: Constraint[];                  // all must pass
-  soft: Scorer[];                      // weighted sum
+  hard: Constraint[]; // all must pass
+  soft: Scorer[]; // weighted sum
   orientation: 'free' | 'alignCoast' | 'alignRail' | 'alignStreet' | 'alignWind';
-  connectors: ConnectorRequest[];      // { network: 'rail', class: 'spur' }, { network: 'street', class: 'arterial' }
+  connectors: ConnectorRequest[]; // { network: 'rail', class: 'spur' }, { network: 'street', class: 'arterial' }
   nuisance?: { radiusM: number; strength: number };
-  layout: (ctx, footprint, rng) => SubFeature[];   // internal detail
+  layout: (ctx, footprint, rng) => SubFeature[]; // internal detail
   fill?: FillRule[];
-  scaleCompression?: number;           // shrink real-world sizes for playability (default per type)
+  scaleCompression?: number; // shrink real-world sizes for playability (default per type)
 }
 ```
 
@@ -534,20 +551,20 @@ Algorithm per request (pinned first, then by footprint size):
 
 Each is a `FeatureType` with a bespoke `layout()` and era variants:
 
-| Feature | Siting | Layout by era |
-|---|---|---|
-| **Port** | Deep sheltered water, straight shoreline, flat, low land value, wants rail + arterial | *≤1900*: finger piers, wharves, bonded warehouses, customs house, ship chandlers, sail lofts. *1900–1960*: break-bulk quays, transit sheds, rail on the quay, cranes, grain elevator, cold store, coal staithes. *≥1965*: container terminal: reclaimed quay, berths every 300 m, gantry cranes, container yard grid, gate complex, Ro-Ro ramp, tank terminal, breakwater, intermodal rail |
-| **Fishing harbour** | Sheltered shallow water | Quay, fish market, ice house, net lofts, cannery/smokehouse, boat yard, slipway |
-| **Shipyard / dry dock** | Adjacent to harbour, deep water | Graving dock cut into the quay with caisson gate and pump house, slipways, building berths, mould loft, plate shops; floating dock variant; modern variant with covered halls |
-| **Rail yard** | Beside a mainline, flat, long, near industry/port; avoids affluent | Ladder tracks from a throat at each end, 6–30 roads, hump (optional), engine shed / roundhouse and turntable (steam era), coaling stage, water tower; diesel depot and intermodal cranes later |
-| **Heavy industry** | Flat, near rail/water, downwind, low wealth | Halls, tank farms, chimneys/stacks, cooling towers, pipe racks, sidings, slag heaps (steel), coke ovens |
-| **Gasworks** (1810–1970) | Edge of town near rail/canal | Retort house, gasholders (circles), coal yard, tar tanks |
-| **Mill** (water 1100–1900, textile 1780–1950) | River with gradient / canal | Mill race, wheel house, multi-storey mill, workers' rows, mill pond |
-| **Light industry / logistics** | Near motorway junction, flat | Big-box warehouses, docks, truck yards |
-| **Power plant** | Cooling water, fuel by rail/water | Turbine hall, boilers, stacks/cooling towers, switchyard, lines leaving |
-| **Refinery / chemical** | Port + rail, far from residential | Dense tank farm, process units, flare stack |
-| **Airport** (≥1925) | Very flat, very large, outer edge | Grass field and hangars early; runways aligned to wind, terminal, apron later |
-| **Institutions** | Per type | University campus (quad, library, laboratories), hospital, asylum/sanatorium (isolated, grounds, wings), prison, military base, cemetery, waterworks, observatory |
+| Feature                                       | Siting                                                                                | Layout by era                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Port**                                      | Deep sheltered water, straight shoreline, flat, low land value, wants rail + arterial | _≤1900_: finger piers, wharves, bonded warehouses, customs house, ship chandlers, sail lofts. _1900–1960_: break-bulk quays, transit sheds, rail on the quay, cranes, grain elevator, cold store, coal staithes. _≥1965_: container terminal: reclaimed quay, berths every 300 m, gantry cranes, container yard grid, gate complex, Ro-Ro ramp, tank terminal, breakwater, intermodal rail |
+| **Fishing harbour**                           | Sheltered shallow water                                                               | Quay, fish market, ice house, net lofts, cannery/smokehouse, boat yard, slipway                                                                                                                                                                                                                                                                                                            |
+| **Shipyard / dry dock**                       | Adjacent to harbour, deep water                                                       | Graving dock cut into the quay with caisson gate and pump house, slipways, building berths, mould loft, plate shops; floating dock variant; modern variant with covered halls                                                                                                                                                                                                              |
+| **Rail yard**                                 | Beside a mainline, flat, long, near industry/port; avoids affluent                    | Ladder tracks from a throat at each end, 6–30 roads, hump (optional), engine shed / roundhouse and turntable (steam era), coaling stage, water tower; diesel depot and intermodal cranes later                                                                                                                                                                                             |
+| **Heavy industry**                            | Flat, near rail/water, downwind, low wealth                                           | Halls, tank farms, chimneys/stacks, cooling towers, pipe racks, sidings, slag heaps (steel), coke ovens                                                                                                                                                                                                                                                                                    |
+| **Gasworks** (1810–1970)                      | Edge of town near rail/canal                                                          | Retort house, gasholders (circles), coal yard, tar tanks                                                                                                                                                                                                                                                                                                                                   |
+| **Mill** (water 1100–1900, textile 1780–1950) | River with gradient / canal                                                           | Mill race, wheel house, multi-storey mill, workers' rows, mill pond                                                                                                                                                                                                                                                                                                                        |
+| **Light industry / logistics**                | Near motorway junction, flat                                                          | Big-box warehouses, docks, truck yards                                                                                                                                                                                                                                                                                                                                                     |
+| **Power plant**                               | Cooling water, fuel by rail/water                                                     | Turbine hall, boilers, stacks/cooling towers, switchyard, lines leaving                                                                                                                                                                                                                                                                                                                    |
+| **Refinery / chemical**                       | Port + rail, far from residential                                                     | Dense tank farm, process units, flare stack                                                                                                                                                                                                                                                                                                                                                |
+| **Airport** (≥1925)                           | Very flat, very large, outer edge                                                     | Grass field and hangars early; runways aligned to wind, terminal, apron later                                                                                                                                                                                                                                                                                                              |
+| **Institutions**                              | Per type                                                                              | University campus (quad, library, laboratories), hospital, asylum/sanatorium (isolated, grounds, wings), prison, military base, cemetery, waterworks, observatory                                                                                                                                                                                                                          |
 
 Sub-features are stored as `facilities[].parts[]` with their own geometry so
 renderers draw cranes, tracks and tanks distinctly and exporters keep them.
@@ -710,16 +727,16 @@ Assistant), bottom bar (coordinates, scale, year slider, undo history strip).
 
 ### 9.2 Tools
 
-| Group | Tools |
-|---|---|
-| Navigate | pan, zoom, rotate, pitch, minimap, bookmarks |
-| Select | click, box, lasso, by-query (all warehouses in this district), multi-select, properties panel |
-| Draw | line (street with class, rail, tram, waterway/canal, wall), polygon (zone with profile, building, water body, park, facility footprint), rectangle building, freehand building, point (POI with type) |
-| Edit | move, rotate, scale, mirror, vertex edit, split/join lines, offset, snap to grid/network/parcel/angle, alignment guides |
-| Brushes | terrain raise/lower/smooth/flatten/water; zone paint; wealth paint; density paint; vegetation paint; year paint (override era locally); erase; **reroll** (regenerate only the brushed area with a new seed) |
-| Generate | regenerate region/settlement/district/selection; place feature (from library, with hint); freeze/unfreeze selection |
-| Annotate | text label, marker, arrow, GM note (hidden in player export), handout frame (a named export rectangle) |
-| Layers | show/hide/lock, opacity, reorder overlays |
+| Group    | Tools                                                                                                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Navigate | pan, zoom, rotate, pitch, minimap, bookmarks                                                                                                                                                                 |
+| Select   | click, box, lasso, by-query (all warehouses in this district), multi-select, properties panel                                                                                                                |
+| Draw     | line (street with class, rail, tram, waterway/canal, wall), polygon (zone with profile, building, water body, park, facility footprint), rectangle building, freehand building, point (POI with type)        |
+| Edit     | move, rotate, scale, mirror, vertex edit, split/join lines, offset, snap to grid/network/parcel/angle, alignment guides                                                                                      |
+| Brushes  | terrain raise/lower/smooth/flatten/water; zone paint; wealth paint; density paint; vegetation paint; year paint (override era locally); erase; **reroll** (regenerate only the brushed area with a new seed) |
+| Generate | regenerate region/settlement/district/selection; place feature (from library, with hint); freeze/unfreeze selection                                                                                          |
+| Annotate | text label, marker, arrow, GM note (hidden in player export), handout frame (a named export rectangle)                                                                                                       |
+| Layers   | show/hide/lock, opacity, reorder overlays                                                                                                                                                                    |
 
 ### 9.3 Authored vs. generated
 
@@ -797,22 +814,22 @@ placed 300 m east of the requested point: requested spot too shallow").
 
 ### 11.3 Tools
 
-| Tool | Purpose |
-|---|---|
-| `get_region_summary` | Settlements, kinds, populations, networks, terrain highlights, year |
-| `get_settlement_summary(id)` | Districts with zone/wealth/density/era, facilities, stations, stats |
-| `describe_area(polygon | featureId)` | Buildings, land use, terrain, neighbours, names |
-| `find_features(query)` | By type, zone, name, bbox, property filter |
-| `render_snapshot(bbox, layers, theme)` | PNG of an area as an image block so the model can look at it |
-| `get_spec` / `patch_spec` | Read and JSON-Patch the spec |
-| `place_feature`, `move_feature`, `remove_feature`, `freeze`, `unfreeze` | Feature edits with hints resolved by the app |
-| `draw(layer, geometry, properties)` | Authored geometry, validated and snapped |
-| `brush(kind, region, value)` | Terrain, zone, wealth, density, vegetation, year |
-| `regenerate(scope, newSeed)` | Re-run the pipeline at region/settlement/district/area scope |
-| `set_year(year)` | Move the region along its timeline |
-| `name_features(ids, culturePack, style)` | Batch naming, structured output |
-| `annotate(kind, geometry, text, gmOnly)` | Notes and labels |
-| `undo` / `redo` | Shared history |
+| Tool                                                                    | Purpose                                                             |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `get_region_summary`                                                    | Settlements, kinds, populations, networks, terrain highlights, year |
+| `get_settlement_summary(id)`                                            | Districts with zone/wealth/density/era, facilities, stations, stats |
+| `describe_area(polygon                                                  | featureId)`                                                         | Buildings, land use, terrain, neighbours, names |
+| `find_features(query)`                                                  | By type, zone, name, bbox, property filter                          |
+| `render_snapshot(bbox, layers, theme)`                                  | PNG of an area as an image block so the model can look at it        |
+| `get_spec` / `patch_spec`                                               | Read and JSON-Patch the spec                                        |
+| `place_feature`, `move_feature`, `remove_feature`, `freeze`, `unfreeze` | Feature edits with hints resolved by the app                        |
+| `draw(layer, geometry, properties)`                                     | Authored geometry, validated and snapped                            |
+| `brush(kind, region, value)`                                            | Terrain, zone, wealth, density, vegetation, year                    |
+| `regenerate(scope, newSeed)`                                            | Re-run the pipeline at region/settlement/district/area scope        |
+| `set_year(year)`                                                        | Move the region along its timeline                                  |
+| `name_features(ids, culturePack, style)`                                | Batch naming, structured output                                     |
+| `annotate(kind, geometry, text, gmOnly)`                                | Notes and labels                                                    |
+| `undo` / `redo`                                                         | Shared history                                                      |
 
 The system prompt describes units, compass, year and the rule that nothing is
 reported as done unless a tool succeeded. Multi-step requests are handled by
@@ -884,32 +901,32 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 14. Risks and mitigations
 
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Ink theme in MapLibre looks too "GIS", not hand-drawn | Loses the reference's charm | Phase 1 spike with sketch jitter, hatch sprites, cased lines; PixiJS fallback behind the tile source |
-| Lazy block generation shows seams or popping at tile edges | Ugly | Block-keyed generation shared across tiles; deterministic per-tile terrain detail with edge-consistent noise; visual tests at tile boundaries |
-| Region-scale eager stages too slow on big documents | Sluggish editing | Scope-limited recomputation (settlement/district/area), worker pool, budgets in CI |
-| Authored/generated conflicts produce broken geometry | Trust | Conflict rules favour the user; inspector explains cuts; geometry validity tests on every command |
-| Document migrations break old files | Data loss | Versioned schema, migration tests with fixture documents from each release |
-| Browser-side API keys misused | Cost | Opt-in storage, warnings, never in document/URL, per-session cost display |
-| Scope creep from the feature library | Never ships | Each facility is a roadmap item with an acceptance test; library is data so contributions scale |
-| GPL contamination | Licence dispute | Clean-room policy; no copied code |
+| Risk                                                       | Impact                      | Mitigation                                                                                                                                    |
+| ---------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ink theme in MapLibre looks too "GIS", not hand-drawn      | Loses the reference's charm | Phase 1 spike with sketch jitter, hatch sprites, cased lines; PixiJS fallback behind the tile source                                          |
+| Lazy block generation shows seams or popping at tile edges | Ugly                        | Block-keyed generation shared across tiles; deterministic per-tile terrain detail with edge-consistent noise; visual tests at tile boundaries |
+| Region-scale eager stages too slow on big documents        | Sluggish editing            | Scope-limited recomputation (settlement/district/area), worker pool, budgets in CI                                                            |
+| Authored/generated conflicts produce broken geometry       | Trust                       | Conflict rules favour the user; inspector explains cuts; geometry validity tests on every command                                             |
+| Document migrations break old files                        | Data loss                   | Versioned schema, migration tests with fixture documents from each release                                                                    |
+| Browser-side API keys misused                              | Cost                        | Opt-in storage, warnings, never in document/URL, per-session cost display                                                                     |
+| Scope creep from the feature library                       | Never ships                 | Each facility is a roadmap item with an acceptance test; library is data so contributions scale                                               |
+| GPL contamination                                          | Licence dispute             | Clean-room policy; no copied code                                                                                                             |
 
 ---
 
 ## 15. Decision log
 
-| # | Decision | Alternatives | Rationale |
-|---|---|---|---|
-| 1 | TypeScript + Vite + React | Svelte, SolidJS | Owner decision; largest contributor pool |
-| 2 | GeoJSON as the model format | Custom binary, ECS | Interoperability and readability; tiles solve the size problem |
-| 3 | MapLibre GL with in-browser tiles | Canvas 2D, PixiJS, deck.gl | Metropolitan scale needs LOD, culling, label collision; MapLibre is the standard; PixiJS kept as fallback for the ink look |
-| 4 | Lazy block-level generation | Generate everything eagerly | Millions of buildings cannot be generated or held eagerly; blocks are the natural unit |
-| 5 | Year, not an era enum | Enum of eras | Continuous timelines, mixed-era rings, growth scrubber |
-| 6 | Document = spec + authored + overrides + annotations, unconstrained size | Tiny URL-only spec | Owner decision; full editor needs authored geometry; JSON import/export is the persistence contract |
-| 7 | Browser-side BYOK, Anthropic only | Proxy, multi-provider | Owner decision; adapter interface left in place |
-| 8 | Clean-room, permissive licence | GPL port | Owner decision |
-| 9 | Own PRNG with named and tile-derived streams | Global `seedrandom` | Local streams keep unrelated stages stable; tile derivation enables laziness |
+| #   | Decision                                                                 | Alternatives                | Rationale                                                                                                                  |
+| --- | ------------------------------------------------------------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 1   | TypeScript + Vite + React                                                | Svelte, SolidJS             | Owner decision; largest contributor pool                                                                                   |
+| 2   | GeoJSON as the model format                                              | Custom binary, ECS          | Interoperability and readability; tiles solve the size problem                                                             |
+| 3   | MapLibre GL with in-browser tiles                                        | Canvas 2D, PixiJS, deck.gl  | Metropolitan scale needs LOD, culling, label collision; MapLibre is the standard; PixiJS kept as fallback for the ink look |
+| 4   | Lazy block-level generation                                              | Generate everything eagerly | Millions of buildings cannot be generated or held eagerly; blocks are the natural unit                                     |
+| 5   | Year, not an era enum                                                    | Enum of eras                | Continuous timelines, mixed-era rings, growth scrubber                                                                     |
+| 6   | Document = spec + authored + overrides + annotations, unconstrained size | Tiny URL-only spec          | Owner decision; full editor needs authored geometry; JSON import/export is the persistence contract                        |
+| 7   | Browser-side BYOK, Anthropic only                                        | Proxy, multi-provider       | Owner decision; adapter interface left in place                                                                            |
+| 8   | Clean-room, permissive licence                                           | GPL port                    | Owner decision                                                                                                             |
+| 9   | Own PRNG with named and tile-derived streams                             | Global `seedrandom`         | Local streams keep unrelated stages stable; tile derivation enables laziness                                               |
 
 ---
 

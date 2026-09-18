@@ -1,0 +1,29 @@
+{
+  "name": "@citygen/tiles",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Builds Mapbox Vector Tiles from the generated model in the synthetic CRS",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@citygen/core": "workspace:*",
+    "@types/geojson": "^7946.0.16",
+    "geojson-vt": "^5.0.2",
+    "vt-pbf": "^3.1.3"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
+  }
+}

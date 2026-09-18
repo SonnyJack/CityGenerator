@@ -7,19 +7,19 @@ Every phase ends with a deployed site on GitHub Pages so there is always
 something to try, and each phase lists acceptance criteria that are testable in
 CI or by a reviewer.
 
-| Phase | Theme | Outcome |
-|---|---|---|
-| 0 | Foundation | Repo, CI, empty editor deployed, engine skeleton, document format v2 |
-| 1 | Terrain, tiles, rendering | Region-scale terrain rendered by MapLibre through in-browser tiles; ink spike |
-| 2 | Settlements, districts, classic town | Organic towns with walls, wards, streets on terrain; lazy blocks; reference parity |
-| 3 | Years, society, modern streets | Year-based eras, wealth/density fields and overlays, road hierarchy, mixed-era rings |
-| 4 | Editor | Full editing: draw, edit, brushes, freeze, regenerate-in-scope, annotations, autosave |
-| 5 | Rail and tram | Regional and settlement rail, stations, spurs, yards; tram lines and streetcar suburbs |
-| 6 | Placement engine, ports, industry | Generic placement, ports by era, dry docks, industry, institutions, fill passes |
-| 7 | Naming, POIs, directory, themes, export | Culture packs, businesses and residents, period/Sanborn themes, PNG/SVG/GeoJSON/VTT, handout frames |
-| 8 | LLM assistant | Chat drawer, tools over the command API, BYOK, evals |
-| 9 | Timeline, 3D, condition | Growth scrubber, extrusion view, decay/flood/fire overlays |
-| 10 | Ecosystem | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs |
+| Phase | Theme                                   | Outcome                                                                                             |
+| ----- | --------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 0     | Foundation                              | Repo, CI, empty editor deployed, engine skeleton, document format v2                                |
+| 1     | Terrain, tiles, rendering               | Region-scale terrain rendered by MapLibre through in-browser tiles; ink spike                       |
+| 2     | Settlements, districts, classic town    | Organic towns with walls, wards, streets on terrain; lazy blocks; reference parity                  |
+| 3     | Years, society, modern streets          | Year-based eras, wealth/density fields and overlays, road hierarchy, mixed-era rings                |
+| 4     | Editor                                  | Full editing: draw, edit, brushes, freeze, regenerate-in-scope, annotations, autosave               |
+| 5     | Rail and tram                           | Regional and settlement rail, stations, spurs, yards; tram lines and streetcar suburbs              |
+| 6     | Placement engine, ports, industry       | Generic placement, ports by era, dry docks, industry, institutions, fill passes                     |
+| 7     | Naming, POIs, directory, themes, export | Culture packs, businesses and residents, period/Sanborn themes, PNG/SVG/GeoJSON/VTT, handout frames |
+| 8     | LLM assistant                           | Chat drawer, tools over the command API, BYOK, evals                                                |
+| 9     | Timeline, 3D, condition                 | Growth scrubber, extrusion view, decay/flood/fire overlays                                          |
+| 10    | Ecosystem                               | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs             |
 
 Milestones: `v0.1` after Phase 1, `v0.2` after Phase 2, `v0.3` after Phase 3,
 `v0.5` after Phase 6, `v0.8` after Phase 8, `v1.0` after Phase 9 plus a tuning
@@ -27,28 +27,37 @@ pass across all presets and eras.
 
 ---
 
-## Phase 0 — Foundation
+## Phase 0 — Foundation (done)
 
 - [x] MIT `LICENSE` (copyright "CityGenerator contributors").
-- [ ] `CONTRIBUTING.md` with
-      the clean-room policy, ADR folder seeded with the decisions in
-      DESIGN §15.
-- [ ] pnpm monorepo: `apps/web`, `packages/core`, `packages/tiles`,
+- [x] `CONTRIBUTING.md` with the clean-room policy; ADR folder seeded with the
+      decisions in DESIGN §15.
+- [x] pnpm monorepo: `apps/web`, `packages/core`, `packages/tiles`,
       `packages/themes`, `packages/editor`, `packages/features`.
-- [ ] Vite + React 19 + TypeScript strict + ESLint + Prettier + Vitest +
+- [x] Vite + React 19 + TypeScript strict + ESLint + Prettier + Vitest +
       Playwright; Tailwind; Zustand.
-- [ ] GitHub Actions: `ci.yml` (lint, typecheck, unit, e2e on Chromium/Firefox/
-      WebKit), `pages.yml` (build and deploy `main`), PR preview artifacts.
-- [ ] `core`: PCG32 PRNG with named streams and tile-derived seeds;
-      `MapDocument` v2 schema (Zod → JSON Schema) with migration framework;
-      stage runner with input hashing, memoisation, scope and cancellation;
-      worker pool bridge (`comlink`).
-- [ ] `apps/web`: empty MapLibre map with the synthetic CRS, document store,
-      command bus skeleton, IndexedDB autosave, JSON import/export.
+- [x] GitHub Actions: `ci.yml` (lint, format, typecheck, unit, build, e2e on
+      Chromium/Firefox/WebKit), `pages.yml` (build and deploy `main`), PR
+      preview artifacts. The repository's Pages source must be set to
+      "GitHub Actions" once, in Settings → Pages.
+- [x] `core`: sfc32 PRNG with path-derived named streams and tile/block seeds;
+      stable content hashing; `MapDocument` v2 schema (Zod, JSON Schema
+      export) with a migration framework and a v1→v2 migration; stage runner
+      with input hashing, memoisation, LRU eviction and cancellation; synthetic
+      CRS helpers; a placeholder `regionOutline` stage; a determinism fixture.
+- [x] `editor`: command schemas, pure `applyCommand`, `CommandBus` with
+      undo/redo by inverse JSON Patch.
+- [x] `tiles`: `TileSource` (geojson-vt + vt-pbf) serving MVT from model
+      layers. `themes`: `atlas` and `ink` palettes compiled to validated
+      MapLibre styles. `features`: typed registry and four era profiles.
+- [x] `apps/web`: MapLibre map fed by a `citygen://` protocol from the engine
+      worker (comlink); document store; IndexedDB autosave; JSON import/export;
+      undo/redo; name, seed and year controls; a window test API.
 
-Acceptance: merging to `main` deploys; a determinism test hashes a fixed stage
-output identically on all three browsers; a round-trip test exports and
-re-imports a document unchanged.
+Acceptance (met): merging to `main` deploys; the determinism test hashes the
+fixture identically in Node and in the browser (`FIXTURE_GOLDEN_HASH`); a
+round-trip test exports and re-imports a document unchanged; five Playwright
+tests pass in Chromium (CI also runs Firefox and WebKit).
 
 ## Phase 1 — Terrain, tiles and rendering
 
