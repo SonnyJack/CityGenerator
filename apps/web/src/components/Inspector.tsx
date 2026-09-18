@@ -4,6 +4,7 @@ import { useApp } from '../store.js';
 export function Inspector() {
   const inspection = useApp((s) => s.inspection);
   const clear = useApp((s) => s.clearInspection);
+  const dispatch = useApp((s) => s.dispatch);
   if (!inspection) return null;
   const i = inspection;
   return (
@@ -46,6 +47,56 @@ export function Inspector() {
             </dd>
           </>
         )}
+        {i.facility && (
+          <>
+            <dt>Facility</dt>
+            <dd data-testid="inspector-facility">
+              {i.facility.name}
+              {i.facility.part ? ` · ${i.facility.part.name ?? i.facility.part.kind}` : ''}
+              {i.facility.pinned ? ' · pinned' : ''}
+              {i.facility.outcome !== 'placed' ? ` · ${i.facility.outcome}` : ''}
+            </dd>
+            <dt>Footprint</dt>
+            <dd className="font-mono">
+              {i.facility.lengthM.toFixed(0)} × {i.facility.widthM.toFixed(0)} m
+              {Math.abs(i.facility.realLengthM - i.facility.lengthM) > 1 &&
+                ` (${i.facility.realLengthM.toFixed(0)} × ${i.facility.realWidthM.toFixed(0)} m at true scale)`}
+            </dd>
+            <dt />
+            <dd className="flex gap-1">
+              {!i.facility.pinned && (
+                <button
+                  className={btn}
+                  title="Keep this facility exactly here across regeneration"
+                  onClick={() =>
+                    dispatch({
+                      type: 'override.add',
+                      override: {
+                        op: 'pin',
+                        target: i.facility!.id,
+                        x: i.facility!.center[0],
+                        y: i.facility!.center[1],
+                        rotation: i.facility!.rotation,
+                      },
+                    })
+                  }
+                >
+                  Pin here
+                </button>
+              )}
+              <button
+                className={btn}
+                title="Remove this facility (undoable)"
+                onClick={() => {
+                  dispatch({ type: 'override.add', override: { op: 'remove', target: i.facility!.id } });
+                  clear();
+                }}
+              >
+                Remove
+              </button>
+            </dd>
+          </>
+        )}
         {i.patch && (
           <>
             <dt>Zone</dt>
@@ -61,3 +112,5 @@ export function Inspector() {
     </aside>
   );
 }
+
+const btn = 'rounded border border-stone-300 bg-white px-2 py-0.5 hover:bg-stone-100';

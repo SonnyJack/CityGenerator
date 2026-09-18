@@ -9,6 +9,10 @@ import {
   societyStage,
   railStage,
   tramStage,
+  facilitiesStage,
+  pointInRing as inRing,
+  distToRing,
+  type FacilitiesOutput,
   terrainStage,
   townStage,
   LANDCOVER,
@@ -35,6 +39,7 @@ import {
   demTilePng,
   renderThumbnail,
   railLayers,
+  facilityLayers,
   settlementLayers,
   societyLayers,
   terrainLayers,
@@ -61,6 +66,7 @@ let latest: {
   siting: SitingOutput;
   towns: TownOutput[];
   tiler: BlockTiler;
+  facilities: FacilitiesOutput;
 } | null = null;
 
 function terrainInput(doc: MapDocument, cellSizeM?: number): TerrainInput {
@@ -141,6 +147,48 @@ const api: EngineApi = {
       { signal },
     );
     let railMs = performance.now() - t5;
+    // Facilities: ports, industry, institutions and airports, placed before society
+    // (they are nuisance sources) and before the towns (which reserve their land).
+    const t7 = performance.now();
+    const facilities = await runner.run(
+      facilitiesStage,
+      {
+        seed,
+        terrain,
+        sites: siting.sites,
+        rail,
+        year: doc.spec.year,
+        extent: doc.spec.extent,
+        requests: [
+          ...doc.spec.features.map((f) => ({
+            id: f.id,
+            type: f.type,
+            size: f.size ?? 'medium',
+            ...(f.pin ? { pin: f.pin } : {}),
+            ...(f.params ? { params: f.params } : {}),
+          })),
+          ...doc.spec.settlements.flatMap((st) =>
+            st.features.map((f) => ({
+              id: f.id.includes(':') ? f.id : `${st.id}:${f.id}`,
+              type: f.type,
+              size: f.size ?? 'medium',
+              settlement: st.id,
+              ...(f.pin ? { pin: f.pin } : {}),
+              ...(f.params ? { params: f.params } : {}),
+            })),
+          ),
+        ],
+        removed: doc.overrides.flatMap((o) => (o.op === 'remove' ? [o.target] : [])),
+        pins: doc.overrides.flatMap((o) =>
+          o.op === 'pin' ? [{ target: o.target, x: o.x, y: o.y, rotation: o.rotation }] : [],
+        ),
+        customTypes: doc.spec.customFeatureTypes,
+        scaleCompression: doc.spec.scaleCompression,
+        defaults: doc.spec.defaultFacilities,
+      },
+      { signal },
+    );
+    const facilitiesMs = performance.now() - t7;
     const edits = fieldEdits(doc);
     const society = await runner.run(
       societyStage,
@@ -153,10 +201,23 @@ const api: EngineApi = {
         density: doc.spec.society.density,
         inequality: doc.spec.society.inequality,
         ...(edits.length ? { edits } : {}),
-        ...(rail.nuisance.length ? { nuisance: rail.nuisance } : {}),
+        ...(rail.nuisance.length || facilities.nuisance.length
+          ? { nuisance: [...rail.nuisance, ...facilities.nuisance] }
+          : {}),
       },
       { signal },
     );
+    // Rail yards and facilities take town land.
+    const reserved = [
+      ...facilities.reserved,
+      ...rail.structures.features
+        .filter((f) => f.properties.kind === 'railYard' || f.properties.kind === 'goodsYard')
+        .map((f) => ({
+          id: f.properties.kind,
+          ring: f.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]),
+          ward: 'yard' as const,
+        })),
+    ];
     const zones = zoneEdits(doc);
     const towns: TownOutput[] = [];
     for (const site of siting.sites) {
@@ -179,6 +240,7 @@ const api: EngineApi = {
             society,
             ...(salt ? { salt } : {}),
             ...(zones.length ? { zoneEdits: zones } : {}),
+            ...(reserved.length ? { reserved } : {}),
           },
           { signal },
         ),
@@ -234,13 +296,15 @@ const api: EngineApi = {
         { name: 'graticule', features: outline.graticule, minZoom: 9 },
         ...terrainLayers(terrain, landcover, options.sketch ? { sketch: { seed: doc.spec.seed } } : {}),
         ...settlementLayers(towns, roads, siting),
-        ...railLayers(rail, trams, roads),
+        ...facilityLayers(facilities),
+        ...railLayers(rail, trams, roads, facilities.spurs),
         ...societyLayers(society),
       ],
       version,
       [tiler],
     );
-    latest = { terrain, landcover, society, siting, towns, tiler };
+    latest = { terrain, landcover, society, siting, towns, tiler, facilities };
+    const wasteland = measureWasteland(terrain, siting, towns, facilities, rail);
     dem = { sampler: createDemSampler(terrain, doc.spec.seed), extent: doc.spec.extent };
     const tilesMs = performance.now() - t2;
 
@@ -248,7 +312,7 @@ const api: EngineApi = {
       terrainMs,
       landcoverMs,
       settlementsMs,
-      roadsMs: roadsMs + railMs,
+      roadsMs: roadsMs + railMs + facilitiesMs,
       tilesMs,
       totalMs: performance.now() - started,
       memoHits: runner.hits,
@@ -283,6 +347,23 @@ const api: EngineApi = {
         crossings: trams.reduce((a, t) => a + t.stats.crossings, 0),
       },
       blocks: blocks.length,
+      facilities: {
+        placed: facilities.stats.placed,
+        failed: facilities.stats.failed,
+        byCategory: facilities.stats.byCategory,
+        list: facilities.features.features.map((f) => ({
+          id: f.properties.id,
+          type: f.properties.type,
+          name: f.properties.name,
+          settlement: f.properties.settlement,
+          pinned: f.properties.pinned,
+          outcome: f.properties.outcome,
+          center: centroidOf(f.geometry.coordinates[0]!),
+          rotation: f.properties.rotation,
+        })),
+        failures: facilities.failures,
+        wasteland,
+      },
     };
     return { version, stats };
   },
@@ -358,9 +439,48 @@ const api: EngineApi = {
       }
       if (patch) break;
     }
+    let facility: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['facility'];
+    for (const f of latest.facilities.features.features) {
+      const ring = f.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+      if (!inRing(x, y, ring)) continue;
+      const part = latest.facilities.parts.features.find(
+        (p) =>
+          p.properties.feature === f.properties.id &&
+          p.geometry.type === 'Polygon' &&
+          inRing(
+            x,
+            y,
+            p.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]),
+          ),
+      );
+      facility = {
+        id: f.properties.id,
+        type: f.properties.type,
+        name: f.properties.name,
+        settlement: f.properties.settlement,
+        lengthM: f.properties.lengthM,
+        widthM: f.properties.widthM,
+        realLengthM: f.properties.realLengthM,
+        realWidthM: f.properties.realWidthM,
+        pinned: f.properties.pinned,
+        outcome: f.properties.outcome,
+        center: centroidOf(f.geometry.coordinates[0]!),
+        rotation: f.properties.rotation,
+        ...(part
+          ? {
+              part: {
+                kind: part.properties.kind,
+                ...(part.properties.name ? { name: part.properties.name } : {}),
+              },
+            }
+          : {}),
+      };
+      break;
+    }
     return {
       x,
       y,
+      facility,
       elevationM: height.data[i]!,
       slope: terrain.slope[i]!,
       water: waterNames[terrain.water[i]!] ?? 'land',
@@ -409,5 +529,61 @@ const api: EngineApi = {
     return null;
   },
 };
+
+function centroidOf(ring: number[][]): [number, number] {
+  const n = ring.length - 1 || 1;
+  let x = 0;
+  let y = 0;
+  for (let i = 0; i < n; i++) {
+    x += ring[i]![0]!;
+    y += ring[i]![1]!;
+  }
+  return [x / n, y / n];
+}
+
+/**
+ * Wasteland: buildable land inside each settlement's built-up radius that no
+ * patch, facility or yard uses, as a fraction of the buildable land there.
+ */
+function measureWasteland(
+  terrain: TerrainOutput,
+  siting: SitingOutput,
+  towns: TownOutput[],
+  facilities: FacilitiesOutput,
+  rail: { structures: { features: { geometry: { coordinates: number[][][] } }[] } },
+): EngineStats['facilities']['wasteland'] {
+  const { height, water, slope } = terrain;
+  const bySettlement: Record<string, number> = {};
+  let usedAll = 0;
+  let buildableAll = 0;
+  const rings = (fc: { features: { geometry: { coordinates: number[][][] } }[] }) =>
+    fc.features.map((f) => f.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]));
+  const facilityRings = rings(facilities.features);
+  const yardRings = rings(rail.structures);
+  towns.forEach((town, i) => {
+    const site = siting.sites[i]!;
+    const R = site.radiusM;
+    const patchRings = rings(town.patches);
+    const step = Math.max(30, R / 25);
+    let buildable = 0;
+    let used = 0;
+    for (let y = site.center[1] - R; y <= site.center[1] + R; y += step)
+      for (let x = site.center[0] - R; x <= site.center[0] + R; x += step) {
+        if (Math.hypot(x - site.center[0], y - site.center[1]) > R) continue;
+        const col = Math.min(Math.max(Math.round(height.col(x)), 0), height.width - 1);
+        const row = Math.min(Math.max(Math.round(height.row(y)), 0), height.height - 1);
+        const k = row * height.width + col;
+        if (water[k] !== 0 || slope[k]! > 0.3) continue;
+        buildable++;
+        // Streets between blocks are used land too: anything within 25 m of a patch counts.
+        const near = (r: [number, number][]) => inRing(x, y, r) || distToRing([x, y], r) <= 25;
+        if (patchRings.some(near) || facilityRings.some(near) || yardRings.some(near)) used++;
+      }
+    bySettlement[site.id] = buildable ? 1 - used / buildable : 0;
+    usedAll += used;
+    buildableAll += buildable;
+  });
+  return { overall: buildableAll ? 1 - usedAll / buildableAll : 0, bySettlement };
+}
 
 Comlink.expose(api);

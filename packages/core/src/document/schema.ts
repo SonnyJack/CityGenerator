@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { customFeatureTypeSchema } from '../placement/custom.js';
 
 /**
  * MapDocument schema, version 2.
@@ -239,6 +240,10 @@ export const regionSpecSchema = z.object({
     }),
   features: z.array(featureRequestSchema).default([]),
   scaleCompression: z.boolean().default(true),
+  /** Feature types defined in this document, usable in feature requests by id. */
+  customFeatureTypes: z.array(customFeatureTypeSchema).default([]),
+  /** Facilities the engine adds by default from settlement kind, size and year. */
+  defaultFacilities: z.boolean().default(true),
 });
 export type RegionSpec = z.infer<typeof regionSpecSchema>;
 
@@ -259,7 +264,11 @@ export const overrideSchema = z.discriminatedUnion('op', [
   /** Re-roll a settlement (target = settlement id) or the whole region (target = 'region'). */
   z.object({ op: z.literal('reseed'), target: z.string(), salt: z.string() }),
   /** Re-roll the blocks whose centroid lies inside the polygon. */
-  z.object({ op: z.literal('reroll'), polygon: z.array(z.array(z.number()).min(2)).min(3), salt: z.string() }),
+  z.object({
+    op: z.literal('reroll'),
+    polygon: z.array(z.array(z.number()).min(2)).min(3),
+    salt: z.string(),
+  }),
   /** Hide a generated feature by id (e.g. a building removed by the user). */
   z.object({ op: z.literal('suppress'), target: z.string() }),
 ]);

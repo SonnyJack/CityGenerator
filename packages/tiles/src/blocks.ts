@@ -1,5 +1,12 @@
 import type { LegacyTile } from 'geojson-vt';
-import { centroid, distToPolyline, generateBlock, pointInRing, type BlockModel, type BlockRecipe } from '@citygen/core';
+import {
+  centroid,
+  distToPolyline,
+  generateBlock,
+  pointInRing,
+  type BlockModel,
+  type BlockRecipe,
+} from '@citygen/core';
 import type { Feature, Geometry } from 'geojson';
 import { encodeTileLayer, tileProjection } from './mvt.js';
 import type { TileLayerProvider } from './builder.js';
@@ -92,7 +99,8 @@ export class BlockTiler implements TileLayerProvider {
       if (f.geometry.type !== 'Polygon') return true;
       const bc = centroid(f.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]));
       for (const poly of this.suppressPolygons) if (pointInRing(bc[0], bc[1], poly)) return false;
-      for (const line of this.suppressLines) if (distToPolyline(bc[0], bc[1], line.points) <= line.radiusM) return false;
+      for (const line of this.suppressLines)
+        if (distToPolyline(bc[0], bc[1], line.points) <= line.radiusM) return false;
       return true;
     };
     const m: BlockModel =

@@ -47,8 +47,15 @@ terrain within a ruling gradient, with cuttings, embankments, viaducts and
 tunnels; stations, goods and marshalling yards with steam-era roundhouses,
 freight spurs to docks and industry, subways under big cities after 1900,
 branch-line closures after the 1960s, street-running tram lines with stops
-and depots, and level crossings where rail meets road. Ports, industry and
-the placement engine are next (Phase 6).
+and depots, and level crossings where rail meets road.
+
+Phase 6 adds the placement engine and a library of ports, harbours,
+shipyards, industry, institutions and airports, each with era variants:
+finger piers become break-bulk quays and then container terminals, gasworks
+come and go, hospitals change from pavilions to blocks. Facilities are placed
+by constraints and scores, connected by rail spurs and access roads, reserve
+their land in the towns, and can be pinned or removed. Naming, points of
+interest and export are next (Phase 7).
 
 ## Development
 

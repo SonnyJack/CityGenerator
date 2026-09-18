@@ -39,7 +39,8 @@ export type LayerGroup =
   | 'edits'
   | 'annotations'
   | 'rail'
-  | 'stations';
+  | 'stations'
+  | 'facilities';
 
 const LANDCOVER_KINDS: LandcoverKind[] = [
   'snow',
@@ -359,6 +360,9 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     },
   });
 
+  // --- Facilities (ports, industry, institutions, airports) ------------------
+  layers.push(...facilityLayers(theme, options, visible));
+
   // --- Railways and trams ---------------------------------------------------
   layers.push(...railLayers(theme, options, visible));
 
@@ -441,6 +445,288 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] } as const;
+
+/**
+ * Facility footprints tinted by category with a hairline edge, then the parts
+ * that make them recognisable: quays and piers, transit sheds, cranes, tanks
+ * and gasholders, chimneys, docks, runways and aprons, campus grounds, graves.
+ */
+function facilityLayers(
+  theme: Theme,
+  options: CompileOptions,
+  visible: (group: LayerGroup) => 'visible' | 'none',
+): LayerSpecification[] {
+  const p = theme.palette;
+  const t = theme.town;
+  const src = options.sourceId;
+  const out: LayerSpecification[] = [];
+  const sketch = theme.sketch;
+  const kind = (...ids: string[]): ExpressionSpecification => ['in', ['get', 'kind'], ['literal', ids]];
+  const isPoly: ExpressionSpecification = ['==', ['geometry-type'], 'Polygon'];
+  const isLine: ExpressionSpecification = ['==', ['geometry-type'], 'LineString'];
+  const isPoint: ExpressionSpecification = ['==', ['geometry-type'], 'Point'];
+  const ink = sketch ? p.ink : '#4a443c';
+  const paper = (colour: string) => (sketch ? p.background : colour);
+
+  out.push({
+    id: 'facilities',
+    type: 'fill',
+    source: src,
+    'source-layer': 'facilities',
+    layout: { visibility: visible('facilities') },
+    paint: {
+      'fill-color': sketch
+        ? p.background
+        : [
+            'match',
+            ['get', 'category'],
+            'port',
+            '#d8dde0',
+            'industry',
+            '#d9d6cf',
+            'institution',
+            '#e3e1d6',
+            'transport',
+            '#e2e6d4',
+            '#e0ddd5',
+          ],
+      'fill-opacity': sketch ? 0.4 : 0.85,
+      'fill-outline-color': ink,
+    },
+  });
+  out.push({
+    id: 'facilities-outline',
+    type: 'line',
+    source: src,
+    'source-layer': 'facilities',
+    minzoom: 11,
+    layout: { visibility: visible('facilities'), 'line-join': 'round' },
+    paint: {
+      'line-color': ink,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 16, 1.4],
+      'line-dasharray': [4, 2],
+      'line-opacity': 0.7,
+    },
+  });
+  out.push({
+    id: 'facility-grounds',
+    type: 'fill',
+    source: src,
+    'source-layer': 'facilityParts',
+    filter: [
+      'all',
+      isPoly,
+      kind(
+        'grounds',
+        'field',
+        'graves',
+        'yard',
+        'apron',
+        'containerYard',
+        'switchyard',
+        'slag',
+        'reservoir',
+        'pond',
+        'basin',
+        'dock',
+      ),
+    ],
+    layout: { visibility: visible('facilities') },
+    paint: {
+      'fill-color': [
+        'match',
+        ['get', 'kind'],
+        'grounds',
+        paper('#d9e2c6'),
+        'field',
+        paper('#cfdcb8'),
+        'graves',
+        paper('#c9d3b9'),
+        'yard',
+        paper('#cfc9bd'),
+        'apron',
+        paper('#c4c4c0'),
+        'containerYard',
+        paper('#bfc3c7'),
+        'switchyard',
+        paper('#cdccc6'),
+        'slag',
+        paper('#a9a39a'),
+        p.water,
+      ],
+      'fill-outline-color': ink,
+      'fill-opacity': sketch ? 0.5 : 1,
+    },
+  });
+  out.push({
+    id: 'facility-graves',
+    type: 'line',
+    source: src,
+    'source-layer': 'facilityParts',
+    minzoom: 14,
+    filter: ['all', isPoly, kind('graves')],
+    layout: { visibility: visible('facilities') },
+    paint: { 'line-color': ink, 'line-width': 0.6, 'line-dasharray': [1, 2] },
+  });
+  out.push({
+    id: 'facility-surfaces',
+    type: 'fill',
+    source: src,
+    'source-layer': 'facilityParts',
+    filter: ['all', isPoly, kind('runway', 'quay', 'pier', 'ramp', 'slipway', 'gate')],
+    layout: { visibility: visible('facilities') },
+    paint: {
+      'fill-color': [
+        'match',
+        ['get', 'kind'],
+        'runway',
+        sketch ? p.ink : '#5c5c5c',
+        'quay',
+        sketch ? p.inkMuted : '#8a8478',
+        'pier',
+        sketch ? p.ink : '#6e6659',
+        'slipway',
+        sketch ? p.inkMuted : '#b3ada2',
+        sketch ? p.inkMuted : '#9a9388',
+      ],
+      'fill-opacity': sketch ? 0.7 : 1,
+    },
+  });
+  out.push({
+    id: 'facility-buildings',
+    type: 'fill',
+    source: src,
+    'source-layer': 'facilityParts',
+    filter: [
+      'all',
+      isPoly,
+      kind('building', 'shed', 'warehouse', 'hall', 'hangar', 'terminal', 'chapel', 'wheelhouse'),
+    ],
+    layout: { visibility: visible('facilities') },
+    paint: {
+      'fill-color': [
+        'match',
+        ['get', 'kind'],
+        'shed',
+        sketch ? t.building : '#7d7469',
+        'hall',
+        sketch ? t.building : '#77706a',
+        'hangar',
+        sketch ? t.building : '#7c7f82',
+        t.building,
+      ],
+      'fill-outline-color': t.buildingOutline,
+      ...(t.buildingPattern ? { 'fill-pattern': t.buildingPattern } : {}),
+    },
+  });
+  out.push({
+    id: 'facility-tanks',
+    type: 'fill',
+    source: src,
+    'source-layer': 'facilityParts',
+    filter: ['all', isPoly, kind('tank', 'gasholder', 'coolingTower', 'dome', 'tower')],
+    layout: { visibility: visible('facilities') },
+    paint: { 'fill-color': paper('#cfd2d6'), 'fill-outline-color': ink },
+  });
+  out.push({
+    id: 'facility-tanks-outline',
+    type: 'line',
+    source: src,
+    'source-layer': 'facilityParts',
+    minzoom: 14,
+    filter: ['all', isPoly, kind('tank', 'gasholder', 'coolingTower', 'dome')],
+    layout: { visibility: visible('facilities') },
+    paint: { 'line-color': ink, 'line-width': ['match', ['get', 'kind'], 'gasholder', 1.6, 1] },
+  });
+  out.push({
+    id: 'facility-walls',
+    type: 'line',
+    source: src,
+    'source-layer': 'facilityParts',
+    minzoom: 13,
+    filter: ['all', isPoly, kind('wall', 'fence')],
+    layout: { visibility: visible('facilities'), 'line-join': 'miter' },
+    paint: { 'line-color': ink, 'line-width': ['match', ['get', 'kind'], 'wall', 1.8, 0.9] },
+  });
+  out.push({
+    id: 'facility-lines',
+    type: 'line',
+    source: src,
+    'source-layer': 'facilityParts',
+    minzoom: 12,
+    filter: ['all', isLine, kind('road', 'race', 'breakwater', 'berth', 'pier')],
+    layout: { visibility: visible('facilities'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': [
+        'match',
+        ['get', 'kind'],
+        'road',
+        sketch ? p.inkMuted : t.road,
+        'race',
+        p.waterLine,
+        ink,
+      ],
+      'line-width': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        12,
+        ['match', ['get', 'kind'], 'breakwater', 2.5, 'pier', 1.2, 1],
+        17,
+        ['match', ['get', 'kind'], 'breakwater', 9, 'berth', 4, 'pier', 3, 5],
+      ],
+    },
+  });
+  out.push({
+    id: 'facility-tracks',
+    type: 'line',
+    source: src,
+    'source-layer': 'facilityParts',
+    minzoom: 12,
+    filter: ['all', isLine, kind('track')],
+    layout: { visibility: visible('facilities'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': sketch ? p.ink : '#2f2a26',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.6, 17, 2],
+    },
+  });
+  out.push({
+    id: 'facility-points',
+    type: 'circle',
+    source: src,
+    'source-layer': 'facilityParts',
+    minzoom: 13,
+    filter: ['all', isPoint, kind('crane', 'chimney')],
+    layout: { visibility: visible('facilities') },
+    paint: {
+      'circle-radius': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        13,
+        1.5,
+        17,
+        ['match', ['get', 'kind'], 'chimney', 5, 3.5],
+      ],
+      'circle-color': ['match', ['get', 'kind'], 'chimney', ink, p.background],
+      'circle-stroke-color': ink,
+      'circle-stroke-width': 1.2,
+    },
+  });
+  out.push({
+    id: 'access-roads',
+    type: 'line',
+    source: src,
+    'source-layer': 'accessRoads',
+    layout: { visibility: visible('facilities'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': t.road,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.8, 16, 4],
+      ...(sketch ? { 'line-dasharray': [4, 2] } : {}),
+    },
+  });
+  return out;
+}
 
 /**
  * Railway styling by class and mode: mainlines heavy with sleepers at high

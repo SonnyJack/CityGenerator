@@ -31,6 +31,7 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'parcels', label: 'Parcels' },
   { id: 'rail', label: 'Railways & trams' },
   { id: 'stations', label: 'Stations' },
+  { id: 'facilities', label: 'Facilities' },
   { id: 'authored', label: 'Your features' },
   { id: 'edits', label: 'Brush strokes' },
   { id: 'annotations', label: 'Annotations' },
@@ -365,6 +366,80 @@ export function GenerateDock() {
               ` · ${stats.rail.tramLines} tram lines, ${stats.rail.tramKm.toFixed(0)} km`}
             {stats.rail.disusedKm > 0 && ` · ${stats.rail.disusedKm.toFixed(0)} km disused`}
           </p>
+        )}
+      </section>
+
+      <section className="space-y-2" data-testid="facilities">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Facilities</h2>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-label="Default facilities"
+            checked={doc.spec.defaultFacilities}
+            onChange={(e) => patch('/defaultFacilities', e.target.checked)}
+          />
+          Ports, industry and institutions from settlement kind, size and year
+        </label>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-label="Scale compression"
+            checked={doc.spec.scaleCompression}
+            onChange={(e) => patch('/scaleCompression', e.target.checked)}
+          />
+          Compress large facilities for playability (inspector shows true scale)
+        </label>
+        {stats && (
+          <div className="text-[11px] text-stone-600" data-testid="facility-stats">
+            <p>
+              {stats.facilities.placed} placed
+              {Object.entries(stats.facilities.byCategory)
+                .map(([k, v]) => ` · ${v} ${k}`)
+                .join('')}
+              {' · wasteland '}
+              {(stats.facilities.wasteland.overall * 100).toFixed(1)} %
+            </p>
+            <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
+              {stats.facilities.list.map((f) => (
+                <li key={f.id} className="flex items-center gap-1">
+                  <span className="min-w-0 flex-1 truncate">
+                    {f.name}
+                    {f.settlement ? ` · ${f.settlement}` : ''}
+                    {f.pinned ? ' · pinned' : ''}
+                    {f.outcome !== 'placed' ? ` · ${f.outcome}` : ''}
+                  </span>
+                  <button
+                    className="px-1 text-stone-400 hover:text-red-700"
+                    aria-label={`Remove ${f.name} at ${f.settlement ?? 'region'}`}
+                    title="Remove this facility"
+                    onClick={() =>
+                      dispatch({ type: 'override.add', override: { op: 'remove', target: f.id } })
+                    }
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {stats.facilities.failures.length > 0 && (
+              <ul className="mt-1 space-y-0.5 text-amber-800" data-testid="facility-failures">
+                {stats.facilities.failures.map((f) => (
+                  <li key={f.id}>{f.reason}</li>
+                ))}
+              </ul>
+            )}
+            {doc.overrides.some((o) => o.op === 'remove' || o.op === 'pin') && (
+              <button
+                className={`${btn} mt-1`}
+                onClick={() => {
+                  dispatch({ type: 'override.clear', op: 'remove' });
+                  dispatch({ type: 'override.clear', op: 'pin' });
+                }}
+              >
+                Restore removed and unpin
+              </button>
+            )}
+          </div>
         )}
       </section>
 

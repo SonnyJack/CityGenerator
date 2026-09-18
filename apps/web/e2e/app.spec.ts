@@ -328,3 +328,105 @@ test('railways, stations and trams render and respond to the network settings', 
   };
   expect(doc.spec.networks.rail.enabled).toBe(false);
 });
+
+test('facilities are placed, rendered, inspectable, removable and pinnable', async ({ page }) => {
+  await ready(page);
+  type Stats = {
+    facilities: {
+      placed: number;
+      list: {
+        id: string;
+        type: string;
+        name: string;
+        settlement: string | null;
+        center: [number, number];
+        pinned: boolean;
+      }[];
+      failures: { reason: string }[];
+      wasteland: { overall: number };
+    };
+  };
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as Stats;
+  expect(stats.facilities.placed).toBeGreaterThan(2);
+  const port = stats.facilities.list.find((f) => f.type === 'port');
+  expect(port).toBeDefined();
+  expect(stats.facilities.wasteland.overall).toBeLessThan(0.5);
+  await expect(page.getByTestId('facility-stats')).toContainText('placed');
+  const info = (await page.evaluate(([x, y]) => window.__citygen.inspect(x, y), port!.center)) as {
+    facility?: { id: string; name: string; realLengthM: number; lengthM: number };
+  };
+  expect(info.facility?.id).toBe(port!.id);
+  expect(info.facility!.realLengthM).toBeGreaterThan(info.facility!.lengthM);
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  if (!webglMissing) {
+    await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 60_000 });
+    await page.evaluate(
+      ([cx, cy]) =>
+        window.__citygenMap!.jumpTo({ center: [cx / 111319.490793, cy / 111319.490793], zoom: 15 }),
+      port!.center,
+    );
+    await page.waitForFunction(
+      () => {
+        const map = window.__citygenMap!;
+        return (
+          map.areTilesLoaded() && map.queryRenderedFeatures({ layers: ['facility-buildings'] }).length > 0
+        );
+      },
+      undefined,
+      { timeout: 60_000 },
+    );
+    const parts = await page.evaluate(
+      () =>
+        window.__citygenMap!.queryRenderedFeatures({ layers: ['facility-surfaces', 'facility-points'] })
+          .length,
+    );
+    expect(parts).toBeGreaterThan(0);
+  }
+  // Remove the port through the dock; it disappears and the override is recorded.
+  const v1 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.getByRole('button', { name: `Remove ${port!.name} at ${port!.settlement}` }).click();
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v1,
+    { timeout: 90_000 },
+  );
+  const after = (await page.evaluate(() => window.__citygen.stats())) as Stats;
+  expect(after.facilities.list.some((f) => f.id === port!.id)).toBe(false);
+  // Restore, then pin another facility where it stands and regenerate: it stays put.
+  const v2 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.getByRole('button', { name: 'Restore removed and unpin' }).click();
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v2,
+    { timeout: 90_000 },
+  );
+  const restored = (await page.evaluate(() => window.__citygen.stats())) as Stats;
+  const target = restored.facilities.list.find((f) => f.type === 'institution.cemetery')!;
+  expect(target).toBeDefined();
+  const v3 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.evaluate(
+    (t) =>
+      window.__citygen.dispatch({
+        type: 'override.add',
+        override: { op: 'pin', target: t.id, x: t.center[0], y: t.center[1], rotation: 0 },
+      }),
+    target,
+  );
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v3,
+    { timeout: 90_000 },
+  );
+  const v4 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.getByTestId('regenerate-region').click();
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v4,
+    { timeout: 90_000 },
+  );
+  const pinned = ((await page.evaluate(() => window.__citygen.stats())) as Stats).facilities.list.find(
+    (f) => f.id === target.id,
+  );
+  expect(pinned?.pinned).toBe(true);
+  expect(Math.abs(pinned!.center[0] - target.center[0])).toBeLessThan(2);
+});

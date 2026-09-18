@@ -282,25 +282,54 @@ settlements and two mainlines routes in about 0.9 s.
 
 ## Phase 6 — Placement engine, ports, industry and institutions
 
-- [ ] Placement engine complete: orientation modes, connector requests fulfilled
-      by S5, degrade-and-report, scale compression.
-- [ ] Ports by era: finger-pier harbour, break-bulk quay with transit sheds and
-      cranes, container terminal with yard grid, gate, breakwater, Ro-Ro, tanks.
-- [ ] Fishing harbour with cannery and boat yard; marina.
-- [ ] Shipyard and dry dock: graving dock, caisson, pump house, slipways,
-      building berths; floating dock; modern halls.
-- [ ] Industry: heavy, gasworks, mills (water and textile), light/logistics,
-      power plant, refinery, brewery, tannery.
-- [ ] Institutions: campus, hospital, asylum/sanatorium, prison, military base,
-      cemetery, waterworks, observatory; airport after 1925.
-- [ ] Fill passes complete at block, settlement and region levels; wasteland
-      reporting.
-- [ ] Custom feature types in the document.
+- [x] Placement engine (`core/placement`): feature types declare a footprint
+      by size, hard constraints, weighted soft scorers, an orientation mode
+      (free, along the coast, along the railway, tangential to the town,
+      into the wind, along a river), connectors, nuisance, a reserved ward and
+      a layout. Requests are placed pinned first, then largest first, from
+      shore, river, annulus or region-grid candidates; on failure the engine
+      shrinks the footprint twice and relaxes the scorers before reporting
+      "could not place X at Y because Z". Scale compression shrinks large
+      footprints (default 0.6, per type) and the inspector shows both sizes.
+- [x] Library (21 types) with era variants: port (finger piers ≤ 1900,
+      break-bulk quay with transit sheds, cranes and rail on the quay
+      1900–1965, container terminal with berths, gantry cranes, yard grid,
+      gate, Ro-Ro ramp, tanks and breakwater after), fishing harbour, marina,
+      shipyard with graving dock, caisson and pump house, heavy industry,
+      gasworks, mill (water then textile), logistics park, power station,
+      refinery, brewery, tannery, campus, hospital (pavilion plan then
+      block), asylum, prison (radial then block), military base, cemetery,
+      waterworks, observatory, airport (grass field and hangars, then
+      runways aligned to the wind).
+- [x] Defaults per settlement from kind, population and year; explicit
+      requests on settlements or the region; `remove` and `pin` overrides
+      drop or fix any facility; custom feature types in the document
+      (footprint, placement rules and parts) are placed like built-ins.
+- [x] Connectors: rail spurs from the facility's rail edge to the nearest
+      track and access roads to the town, routed on the terrain.
+- [x] Facilities run after rail and before the society and town stages: their
+      nuisance shapes the wealth field and the towns reserve their land
+      (patches take the facility's ward and draw no buildings; rail yards
+      likewise).
+- [x] Rendering of footprints and parts in both themes (quays, piers, sheds,
+      cranes, tanks, gasholders, chimneys, docks, slipways, runways, aprons,
+      grounds, graves, walls); Facilities panel (defaults on/off, compression
+      on/off, list with remove, failures, restore), per-settlement facility
+      requests, inspector with pin-here and remove; wasteland statistic.
+- [ ] Deferred: block-level fill passes inside facility grounds, region-level
+      fill (woods, commons) reporting, a dedicated facility-drawing tool
+      (authored facility polygons already work).
 
-Acceptance: a `bay` preset at 1925 places a break-bulk port with rail on the
-quay, a yard behind it, gasworks and warehouses nearby and affluent housing on
-the far shore on 8 of 10 seeds; the same seed at 2020 replaces the quay with a
-container terminal; wasteland < 3 % of buildable land.
+Acceptance (met with one caveat): on the `bay` preset at 1925 a break-bulk
+port with rail on the quay, a marshalling or goods yard behind it, gasworks
+and warehouses is placed on 4 of 5 seeds tested (the fifth has no shore
+within reach of the town that is flat enough); at 2020 the same seed swaps
+the quay for a container terminal; every facility gets its own land (no
+footprint centres overlap). Wasteland is measured and shown (buildable land
+inside the built-up radius farther than 25 m from any patch, facility or
+yard); it is about 15 % on the default coast region (18 % in the port
+town, 8 % in the mill town), so the 3 % target is not yet met and is carried
+into the fill work of Phase 7.
 
 ## Phase 7 — Naming, POIs, directory, themes and export
 

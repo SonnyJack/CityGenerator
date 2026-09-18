@@ -16,3 +16,4 @@ export { renderThumbnail } from './thumbnail.js';
 export { createSketch, type SketchOptions } from './sketch.js';
 export { terrainLayers, type TerrainLayerOptions } from './terrainLayers.js';
 export { railLayers } from './railLayers.js';
+export { facilityLayers } from './facilityLayers.js';

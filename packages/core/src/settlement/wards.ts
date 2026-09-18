@@ -29,7 +29,26 @@ export type WardId =
   | 'culDeSac'
   | 'apartment'
   | 'towerEstate'
-  | 'warehouse';
+  | 'warehouse'
+  // Reserved land (Phase 6): facilities placed by the engine and rail yards; no ordinary blocks.
+  | 'port'
+  | 'industrial'
+  | 'institution'
+  | 'campus'
+  | 'cemetery'
+  | 'airfield'
+  | 'yard';
+
+/** Wards whose land is taken by a facility; the town draws no buildings there. */
+export const RESERVED_WARDS: ReadonlySet<WardId> = new Set<WardId>([
+  'port',
+  'industrial',
+  'institution',
+  'campus',
+  'cemetery',
+  'airfield',
+  'yard',
+]);
 
 export interface WardContext {
   /** Distance from the cell centroid to the plaza/centre, normalised by the town radius. */
@@ -72,7 +91,10 @@ export interface WardProfile {
   courtyards?: boolean;
 }
 
-const MEDIEVAL_WARDS: Record<Exclude<WardId, keyof typeof MODERN_WARDS>, WardProfile> = {
+const MEDIEVAL_WARDS: Record<
+  Exclude<WardId, keyof typeof MODERN_WARDS | keyof typeof RESERVED_WARD_PROFILES>,
+  WardProfile
+> = {
   plaza: {
     id: 'plaza',
     lotAreaM2: 0,
@@ -225,6 +247,28 @@ const modern = (
   courtyards,
 });
 
+const reserved = (id: WardId): WardProfile => ({
+  id,
+  lotAreaM2: 0,
+  emptyChance: 1,
+  setbackM: 0,
+  floors: [1, 1],
+  fillWeight: 0,
+  score: () => 0,
+});
+export const RESERVED_WARD_PROFILES: Record<
+  'port' | 'industrial' | 'institution' | 'campus' | 'cemetery' | 'airfield' | 'yard',
+  WardProfile
+> = {
+  port: reserved('port'),
+  industrial: reserved('industrial'),
+  institution: reserved('institution'),
+  campus: reserved('campus'),
+  cemetery: reserved('cemetery'),
+  airfield: reserved('airfield'),
+  yard: reserved('yard'),
+};
+
 export const MODERN_WARDS: Record<
   | 'cbd'
   | 'retailStrip'
@@ -251,7 +295,11 @@ export const MODERN_WARDS: Record<
   towerEstate: modern('towerEstate', 4000, 0.35, 14, [10, 18], 'tower'),
   warehouse: modern('warehouse', 1200, 0.1, 1.5, [1, 2], 'warehouse'),
 };
-export const WARDS: Record<WardId, WardProfile> = { ...MEDIEVAL_WARDS, ...MODERN_WARDS };
+export const WARDS: Record<WardId, WardProfile> = {
+  ...MEDIEVAL_WARDS,
+  ...MODERN_WARDS,
+  ...RESERVED_WARD_PROFILES,
+};
 
 /** Wards that appear as buildable blocks inside the organic town. */
 export const FILL_WARDS: WardId[] = ['craftsmen', 'merchant', 'patriciate', 'slum'];

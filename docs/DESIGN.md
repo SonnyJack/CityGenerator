@@ -556,6 +556,17 @@ Algorithm per request (pinned first, then by footprint size):
 5. On failure: shrink, relax soft constraints, and finally report
    "could not place X because Y" to the UI and the assistant.
 
+Implementation (Phase 6): `placeFeatures` in `core/placement` with the
+built-in library in `library.ts`, defaults in `defaults.ts` and document
+custom types in `custom.ts`; the `facilitiesStage` wraps it and routes the
+connectors. Candidate centres come from the shore (rays from the town centre
+to the sea, pulled inland by half the width), from river banks, from a
+sunflower annulus around the town, or from a grid over the region; the
+`alignCoast` and `alignRiver` orientations try both normals so the front edge
+faces the water. Hard constraints and scorers are small functions over a
+raster-backed context (`isLand`, `slopeAt`, `distToSea`, `seaFraction`,
+`distToRail`, tangents), so a custom type composes the same primitives.
+
 ### 6.6 Modern and period facilities (Goal 3)
 
 Each is a `FeatureType` with a bespoke `layout()` and era variants:

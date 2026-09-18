@@ -90,6 +90,25 @@ describe('compileStyle', () => {
     expect(hidden.layout?.visibility).toBe('none');
   });
 
+  it('styles facilities and their parts in both themes', () => {
+    for (const theme of Object.values(themes)) {
+      const style = compileStyle(theme, options);
+      expect(validateStyleMin(style)).toEqual([]);
+      const ids = style.layers.map((l) => l.id);
+      for (const id of [
+        'facilities',
+        'facility-grounds',
+        'facility-buildings',
+        'facility-tanks',
+        'facility-points',
+        'facility-tracks',
+        'access-roads',
+      ])
+        expect(ids).toContain(id);
+      expect(ids.indexOf('facility-buildings')).toBeLessThan(ids.indexOf('rail-track'));
+    }
+  });
+
   it('keeps society overlays hidden unless enabled', () => {
     const off = compileStyle(atlas, options).layers.find((l) => l.id === 'overlay-wealth')!;
     expect(off.layout?.visibility).toBe('none');

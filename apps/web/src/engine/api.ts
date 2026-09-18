@@ -45,6 +45,21 @@ export interface Inspection {
   densityClass: string;
   settlement?: { id: string; kind: string; name?: string; population: number };
   patch?: { ward: string; inner: boolean; ring: number; why: string };
+  facility?: {
+    id: string;
+    type: string;
+    name: string;
+    settlement: string | null;
+    lengthM: number;
+    widthM: number;
+    realLengthM: number;
+    realWidthM: number;
+    pinned: boolean;
+    outcome: string;
+    center: [number, number];
+    rotation: number;
+    part?: { kind: string; name?: string };
+  };
 }
 
 export interface Thumbnail {
@@ -102,4 +117,22 @@ export interface EngineStats {
     crossings: number;
   };
   blocks: number;
+  facilities: {
+    placed: number;
+    failed: number;
+    byCategory: Record<string, number>;
+    list: {
+      id: string;
+      type: string;
+      name: string;
+      settlement: string | null;
+      pinned: boolean;
+      outcome: string;
+      center: [number, number];
+      rotation: number;
+    }[];
+    failures: { id: string; type: string; settlement: string | null; reason: string }[];
+    /** Buildable land inside the built-up radius with no use, as a fraction, per settlement and overall. */
+    wasteland: { overall: number; bySettlement: Record<string, number> };
+  };
 }

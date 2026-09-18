@@ -1,5 +1,5 @@
 import type { FeatureCollection, Geometry, LineString, Point } from 'geojson';
-import type { CrossingProps, RailOutput, RoadsOutput, TramOutput } from '@citygen/core';
+import type { CrossingProps, RailOutput, RoadsOutput, TrackProps, TramOutput } from '@citygen/core';
 import { railCrossings } from '@citygen/core';
 import type { TileLayerInput } from './builder.js';
 
@@ -14,9 +14,11 @@ export function railLayers(
   rail: RailOutput | null,
   trams: TramOutput[],
   roads: RoadsOutput | null,
+  extraTracks: FeatureCollection<LineString, TrackProps> | null = null,
 ): TileLayerInput[] {
   const tracks: AnyFc['features'] = [
     ...((rail?.tracks.features ?? []) as unknown as AnyFc['features']),
+    ...((extraTracks?.features ?? []) as unknown as AnyFc['features']),
     ...trams.flatMap((t) => t.lines.features as unknown as AnyFc['features']),
   ];
   const stations: AnyFc['features'] = [

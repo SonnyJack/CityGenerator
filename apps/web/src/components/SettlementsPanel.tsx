@@ -1,5 +1,5 @@
 import { settlementKindSchema, type SettlementKind } from '@citygen/core';
-import { DEFAULT_POPULATION } from '@citygen/core';
+import { DEFAULT_POPULATION, FEATURE_TYPES } from '@citygen/core';
 import { useApp } from '../store.js';
 
 const KIND_LABELS: Record<SettlementKind, string> = {
@@ -21,6 +21,7 @@ const KIND_LABELS: Record<SettlementKind, string> = {
 /** Explicit settlement list; when empty, the settlement policy draws one. */
 export function SettlementsPanel() {
   const settlements = useApp((s) => s.document.spec.settlements);
+  const doc = useApp((s) => s.document);
   const policy = useApp((s) => s.document.spec.settlementPolicy);
   const stats = useApp((s) => s.stats);
   const dispatch = useApp((s) => s.dispatch);
@@ -148,6 +149,59 @@ export function SettlementsPanel() {
                       dispatch({ type: 'settlement.update', id: s.id, patch: { population } });
                   }}
                 />
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px]">
+                {s.features.map((f) => (
+                  <span
+                    key={f.id}
+                    className="flex items-center gap-0.5 rounded border border-stone-200 bg-stone-50 px-1"
+                  >
+                    {FEATURE_TYPES.find((t) => t.id === f.type)?.name ?? f.type}
+                    {f.size && f.size !== 'medium' ? ` (${f.size})` : ''}
+                    <button
+                      className="text-stone-400 hover:text-red-700"
+                      aria-label={`Remove ${f.type} from ${s.id}`}
+                      onClick={() =>
+                        dispatch({
+                          type: 'settlement.update',
+                          id: s.id,
+                          patch: { features: s.features.filter((x) => x.id !== f.id) },
+                        })
+                      }
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <select
+                  aria-label={`Add facility to ${s.id}`}
+                  className="rounded border border-stone-300 bg-white px-1 py-0.5"
+                  value=""
+                  onChange={(e) => {
+                    const type = e.target.value;
+                    if (!type) return;
+                    const custom = doc.spec.customFeatureTypes.find((c) => c.id === type);
+                    void custom;
+                    let id = `${s.id}:${type}`;
+                    let n = 2;
+                    while (s.features.some((x) => x.id === id)) id = `${s.id}:${type}#${n++}`;
+                    dispatch({
+                      type: 'settlement.update',
+                      id: s.id,
+                      patch: { features: [...s.features, { id, type, size: 'medium', lock: false }] },
+                    });
+                  }}
+                >
+                  <option value="">+ facility…</option>
+                  {[
+                    ...FEATURE_TYPES.map((t) => ({ id: t.id, name: t.name })),
+                    ...doc.spec.customFeatureTypes.map((t) => ({ id: t.id, name: `${t.name} (custom)` })),
+                  ].map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               {live && (
                 <div className="mt-1 text-[11px] text-stone-500">

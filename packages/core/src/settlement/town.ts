@@ -45,6 +45,8 @@ export interface TownInput {
   salt?: string;
   /** Hand-authored zone polygons and strokes that override generated wards. */
   zoneEdits?: ZoneEdit[];
+  /** Land taken by facilities and rail yards: patches inside take the ward and get no buildings. */
+  reserved?: { id: string; ring: Ring; ward: WardId }[];
 }
 
 export interface BlockRecipe {
@@ -108,7 +110,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
   version: 1,
   seedOf: (i) => `${i.seed}/${i.site.id}${i.salt ? `/${i.salt}` : ''}`,
   keyOf: (i) =>
-    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}|${i.salt ?? ''}|${JSON.stringify(i.zoneEdits ?? [])}`,
+    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}|${i.salt ?? ''}|${JSON.stringify(i.zoneEdits ?? [])}|${JSON.stringify(i.reserved?.map((r) => [r.id, r.ward, r.ring]) ?? [])}`,
   run(input, ctx) {
     const { site, terrain, year } = input;
     const rng = ctx.rng;
@@ -529,6 +531,22 @@ export const townStage = defineStage<TownInput, TownOutput>({
         });
       });
       rings.streets.forEach((st, k) => pushLine(st.points, st.cls, 1000 + k));
+    }
+    // Reserved land: facilities and yards take their patches; those blocks draw nothing.
+    if (input.reserved?.length) {
+      const reservedFor = (ring: Ring) => {
+        const c = centroid(ring);
+        return input.reserved!.find((r) => pointInRing(c[0], c[1], r.ring));
+      };
+      for (const f of patchFeatures) {
+        const ring = f.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]);
+        const r = reservedFor(ring);
+        if (r) {
+          f.properties.ward = r.ward;
+          f.properties.why = `${r.ward}: land taken by ${r.id}`;
+        }
+      }
+      for (let i = blocks.length - 1; i >= 0; i--) if (reservedFor(blocks[i]!.ring)) blocks.splice(i, 1);
     }
     // Authored zones override generated wards for the patches they cover (DESIGN §9.3).
     if (input.zoneEdits?.length) {
