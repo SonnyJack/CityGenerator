@@ -13,3 +13,15 @@ export {
 } from './rail.js';
 export { tramStage, type TramInput, type TramOutput } from './tram.js';
 export { railCrossings, type CrossingKind, type CrossingProps } from './crossings.js';
+export {
+  utilitiesStage,
+  UTILITY_YEARS,
+  type UtilitiesInput,
+  type UtilitiesOutput,
+  type UtilityClass,
+  type UtilityLineProps,
+  type UtilityPointProps,
+  type UtilityPointKind,
+  type UtilityAreaProps,
+  type UtilityFacility,
+} from './utilities.js';

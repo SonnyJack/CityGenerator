@@ -144,6 +144,66 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
     'rail-structures',
     `stroke="${p.inkMuted}" stroke-width="0.5"`,
   );
+  // Utilities: works as footprints, canals as water, mains dashed per network, sewers only for the GM.
+  const util = <G extends Geometry>(
+    fc: { features: Feature<G, Props>[] } | undefined,
+    pred: (f: Feature<G, Props>) => boolean,
+  ) => ({
+    features: (fc?.features ?? []).filter((f) => pred(f) && (!options.player || !f.properties.gmOnly)),
+  });
+  const utilColour: Record<string, string> = theme.sketch
+    ? { waterMain: p.ink, gasMain: p.ink, powerLine: p.ink, sewer: p.inkMuted, pipeline: p.ink }
+    : {
+        waterMain: '#2f7bbf',
+        gasMain: '#b8860b',
+        powerLine: '#3a3a3a',
+        sewer: '#7a4b2a',
+        pipeline: '#8b2e2e',
+      };
+  fills(
+    util(model.utilityAreas, () => true),
+    (f) =>
+      ['reservoir', 'canalBasin'].includes(String(f.properties.kind))
+        ? p.water
+        : f.properties.kind === 'substation'
+          ? '#b9b9b9'
+          : '#cdc5a9',
+    'utility-areas',
+    `stroke="${p.inkMuted}" stroke-width="0.5"`,
+  );
+  lines(
+    util(model.utilities, (f) => f.properties.class === 'canal'),
+    () => p.waterLine,
+    () => Math.max(2, 14 * k),
+    'canal-casing',
+  );
+  lines(
+    util(model.utilities, (f) => f.properties.class === 'canal'),
+    () => p.water,
+    () => Math.max(1.2, 11 * k),
+    'canal',
+    undefined,
+  );
+  for (const [klass, dash] of [
+    ['waterMain', '4 2'],
+    ['gasMain', '2 2'],
+    ['pipeline', '6 3'],
+    ['sewer', '1 2'],
+    ['powerLine', ''],
+  ] as const)
+    lines(
+      util(model.utilities, (f) => f.properties.class === klass),
+      () => utilColour[klass]!,
+      (f) => (f.properties.kind === 'distribution' || f.properties.kind === 'branch' ? 0.6 : 1.2),
+      `utility-${klass}`,
+      dash ? `stroke-dasharray="${dash}"` : '',
+    );
+  for (const s of util(model.utilityPoints, (f) => f.properties.kind !== 'pylon').features) {
+    const [x, y] = tx(s.geometry.coordinates[0]!, s.geometry.coordinates[1]!);
+    parts.push(
+      `<circle cx="${num(x)}" cy="${num(y)}" r="${s.properties.kind === 'waterTower' ? 3.5 : 2.5}" fill="${utilColour[String(s.properties.class)] ?? p.waterLine}" stroke="${p.background}" stroke-width="0.8"/>`,
+    );
+  }
   fills(
     { features: model.facilityParts.features.filter((f) => f.geometry.type === 'Polygon') },
     (f) =>

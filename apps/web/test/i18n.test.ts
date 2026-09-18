@@ -20,9 +20,9 @@ function usedKeys(): Set<string> {
     if (/(EditorBar|GenerateDock|SettlementsPanel|EventsPanel)\.tsx$/.test(file)) {
       for (const m of s.matchAll(/\b(label|hint): '((?:[^'\\]|\\.)*)'/g)) keys.add(m[2]!);
     }
-    if (/(GenerateDock|SettlementsPanel|EventsPanel)\.tsx$/.test(file)) {
+    if (/(GenerateDock|SettlementsPanel|EventsPanel|Inspector)\.tsx$/.test(file)) {
       for (const m of s.matchAll(/^\s+\w+: '([A-Z][^']*)',$/gm)) keys.add(m[1]!);
-      for (const m of s.matchAll(/KIND_LABELS[^=]*= \{([^}]*)\}/g))
+      for (const m of s.matchAll(/[A-Z_]*KIND_LABELS[^=]*= \{([^}]*)\}/g))
         for (const k of m[1]!.matchAll(/'([^']*)'/g)) keys.add(k[1]!);
     }
     // Built-in registry names are translated when rendered.

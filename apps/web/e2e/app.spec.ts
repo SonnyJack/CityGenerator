@@ -1318,3 +1318,83 @@ test('the interface switches language and remembers the choice', async ({ page }
   await expect(page.getByRole('button', { name: 'Export…' })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('citygen.locale'))).toBe('en');
 });
+
+test('utility networks follow the towns and works, hide sewers from players and switch off', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await ready(page);
+  type Stats = {
+    settlements: { id: string; center: [number, number]; population: number }[];
+    utilities: {
+      waterKm: number;
+      gasKm: number;
+      powerKm: number;
+      sewerKm: number;
+      substations: number;
+      pylons: number;
+      outfalls: number;
+      canalKm: number;
+    };
+  };
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as Stats;
+  const u = stats.utilities;
+  expect(u.powerKm).toBeGreaterThan(0);
+  expect(u.substations).toBeGreaterThanOrEqual(1);
+  expect(u.pylons).toBeGreaterThan(0);
+  expect(u.waterKm).toBeGreaterThan(0);
+  expect(u.sewerKm).toBeGreaterThan(0);
+  expect(u.outfalls).toBeGreaterThanOrEqual(1);
+  await expect(page.getByTestId('utility-stats')).toContainText('substations');
+  // The GM export carries the sewers; the player export does not.
+  const city = stats.settlements.reduce(
+    (m, s) => (s.population > m.population ? s : m),
+    stats.settlements[0]!,
+  );
+  const frame = {
+    minX: city.center[0] - 800,
+    minY: city.center[1] - 800,
+    maxX: city.center[0] + 800,
+    maxY: city.center[1] + 800,
+  };
+  const classes = async (player: boolean) => {
+    const text = (await page.evaluate((req) => window.__citygen.exportGeoJson(req), {
+      frame,
+      player,
+      layers: [],
+    })) as string;
+    const geo = JSON.parse(text) as { features: { properties: { layer: string; class?: string } }[] };
+    return new Set(
+      geo.features.filter((f) => f.properties.layer === 'utilities').map((f) => f.properties.class),
+    );
+  };
+  const gm = await classes(false);
+  expect(gm.has('sewer')).toBe(true);
+  expect(gm.has('waterMain')).toBe(true);
+  expect((await classes(true)).has('sewer')).toBe(false);
+  // Rendered: distribution mains under the arteries at high zoom.
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  if (!webglMissing) {
+    await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 60_000 });
+    await page.evaluate(
+      ([cx, cy]) =>
+        window.__citygenMap!.jumpTo({ center: [cx / 111319.490793, cy / 111319.490793], zoom: 14.5 }),
+      city.center,
+    );
+    await page.waitForFunction(
+      () => {
+        const map = window.__citygenMap!;
+        return map.areTilesLoaded() && map.queryRenderedFeatures({ layers: ['utility-water'] }).length > 0;
+      },
+      undefined,
+      { timeout: 60_000 },
+    );
+  }
+  // Off: nothing left.
+  const v = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.getByTestId('networks').getByLabel('Utilities', { exact: true }).uncheck();
+  await waitForRegen(page, v);
+  const off = ((await page.evaluate(() => window.__citygen.stats())) as Stats).utilities;
+  expect(off.waterKm + off.powerKm + off.sewerKm + off.gasKm).toBe(0);
+  await expect(page.getByTestId('utility-stats')).toHaveCount(0);
+});

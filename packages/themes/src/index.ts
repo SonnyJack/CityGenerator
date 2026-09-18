@@ -22,3 +22,4 @@ export {
   DENSITY_CLASS_NAMES,
 } from './theme.js';
 export { compileStyle, EDITOR_ACCENT, AGE_STOPS, type CompileOptions, type LayerGroup } from './compile.js';
+export { utilityColours } from './utilityStyle.js';

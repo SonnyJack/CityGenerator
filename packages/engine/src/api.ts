@@ -43,7 +43,15 @@ export interface EngineApi {
 
 export interface FindQuery {
   kind?:
-    'settlement' | 'facility' | 'building' | 'street' | 'district' | 'station' | 'annotation' | 'authored';
+    | 'settlement'
+    | 'facility'
+    | 'building'
+    | 'street'
+    | 'district'
+    | 'station'
+    | 'annotation'
+    | 'authored'
+    | 'utility';
   name?: string;
   settlement?: string;
   bbox?: [number, number, number, number];
@@ -143,6 +151,8 @@ export interface Inspection {
     rotation: number;
     part?: { id: string; kind: string; name?: string; floors?: number; interior: boolean };
   };
+  /** Utility lines, points and works at or under the point (sewers are GM-only). */
+  utilities?: { class: string; kind: string; settlement: string | null; status?: string; gmOnly: boolean }[];
 }
 
 export interface Thumbnail {
@@ -211,6 +221,19 @@ export interface EngineStats {
     crossings: number;
   };
   blocks: number;
+  utilities: {
+    waterKm: number;
+    gasKm: number;
+    powerKm: number;
+    sewerKm: number;
+    pipelineKm: number;
+    canalKm: number;
+    reservoirs: number;
+    substations: number;
+    pylons: number;
+    outfalls: number;
+    locks: number;
+  };
   facilities: {
     placed: number;
     failed: number;

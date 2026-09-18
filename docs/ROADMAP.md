@@ -20,6 +20,7 @@ CI or by a reviewer.
 | 8     | LLM assistant                           | Chat drawer, tools over the command API, BYOK, evals                                                |
 | 9     | Timeline, 3D, condition                 | Growth scrubber, extrusion view, decay/flood/fire overlays                                          |
 | 10    | Ecosystem                               | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs             |
+| 11    | Utilities                               | Water and gas mains, power lines, sewers, pipelines and canals from the works, by era               |
 
 Milestones: `v0.1` after Phase 1, `v0.2` after Phase 2, `v0.3` after Phase 3,
 `v0.5` after Phase 6, `v0.8` after Phase 8, `v1.0` after Phase 9 plus a tuning
@@ -555,3 +556,40 @@ terrain mesh and buildings.
 - [ ] Still open: more languages (contributions are one dictionary file
       each); interiors for the generic `building` parts of custom feature
       types beyond the office default.
+
+---
+
+## Phase 11 — Utilities (done)
+
+The networks under and over the streets that a period map or a scenario
+needs but a town plan does not draw, as a region stage after the towns and
+facilities (`utilitiesStage`), rendered in every theme, exported and
+inspectable.
+
+- [x] Water: a trunk main from the waterworks, or from a reservoir the stage
+      sites on high ground beyond the built-up area when there is none, to
+      the centre; distribution mains under the arteries (and collectors in
+      big towns); a water tower on the highest outer street corner of cities
+      from the 1880s.
+- [x] Town gas from the 1820s: a trunk main from the gasworks and mains under
+      the arteries, only where a gasworks stands.
+- [x] Electricity from the 1890s: transmission lines on pylons from the power
+      station, or from a grid supply at the region edge when there is none,
+      chained town to town along a minimum-length tree, with a substation at
+      the edge of each served town facing the source; the service threshold
+      falls with the years (3 000 people, then 1 000, then 300).
+- [x] Sewers from the 1860s, GM-only: a trunk sewer routed downhill from the
+      centre to an outfall on the nearest water, branches under the arteries,
+      a sewage works before the outfall from the 1920s. Hidden on player
+      exports and in the player style.
+- [x] Pipelines from the 1900s: refinery to the nearest port (or the sea).
+- [x] Canals (opt-in, `networks.water.canals`): a canal-age town away from
+      navigable water gets a cut to the nearest river or sea with a basin in
+      town and locks where the ground changes; disused from 1900.
+- [x] Tiles (trunks from zoom 9, distribution from 13), a `utilities` layer
+      group and styling in every theme (dashed mains per network, solid power
+      lines with pylon dots, dotted sewers, canals as water), SVG and GeoJSON
+      export, inspector "Services" row, `find_features` kind `utility`,
+      region summary and statistics, a Networks panel toggle and stats line.
+- [ ] Deferred: aqueducts on arches for pre-industrial cities, district
+      heating, telephone and telegraph lines, and utility failures as events.

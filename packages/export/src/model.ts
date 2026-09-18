@@ -43,6 +43,10 @@ export interface ExportModel {
   districts: FeatureCollection<Point, Props>;
   authored: AnyFc;
   annotations: AnyFc;
+  /** Utility networks (mains, power lines, sewers, pipelines, canals); sewers are GM-only. */
+  utilities?: FeatureCollection<LineString, Props>;
+  utilityPoints?: FeatureCollection<Point, Props>;
+  utilityAreas?: FeatureCollection<Polygon, Props>;
   /** Terrain heights over the frame (for 3D export); absent when the engine has none. */
   heights?: { cols: number; rows: number; cellM: number; data: number[]; seaLevelM: number };
 }

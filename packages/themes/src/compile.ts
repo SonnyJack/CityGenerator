@@ -4,6 +4,7 @@ import type {
   StyleSpecification,
 } from '@maplibre/maplibre-gl-style-spec';
 import type { LandcoverKind, Theme } from './theme.js';
+import { utilityLayers } from './utilityStyle.js';
 
 export interface CompileOptions {
   /** MapLibre source id for the generated vector tiles. */
@@ -49,7 +50,8 @@ export type LayerGroup =
   | 'pois'
   | 'events'
   | 'age'
-  | 'buildings3d';
+  | 'buildings3d'
+  | 'utilities';
 
 /** Colour stops for the age overlay: [built year, colour]. Shared with the legend. */
 export const AGE_STOPS: [number, string][] = [
@@ -523,6 +525,9 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
 
   // --- Railways and trams ---------------------------------------------------
   layers.push(...railLayers(theme, options, visible));
+
+  // --- Utilities (mains, power lines, sewers, pipelines, canals) ------------
+  layers.push(...utilityLayers(theme, options, visible));
 
   // --- Labels ----------------------------------------------------------------
   if (options.glyphs) layers.push(...labelLayers(theme, options, visible));

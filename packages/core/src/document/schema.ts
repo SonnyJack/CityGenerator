@@ -264,11 +264,14 @@ export const regionSpecSchema = z.object({
         ferries: true,
         canals: false,
       }),
+      /** Water and gas mains, power lines, sewers and pipelines (canals are `water.canals`). */
+      utilities: z.object({ enabled: z.boolean().default(true) }).default({ enabled: true }),
     })
     .default({
       roads: { motorways: true, ringRoad: false },
       rail: { enabled: true, mainlines: 1 },
       water: { ferries: true, canals: false },
+      utilities: { enabled: true },
     }),
   features: z.array(featureRequestSchema).default([]),
   scaleCompression: z.boolean().default(true),

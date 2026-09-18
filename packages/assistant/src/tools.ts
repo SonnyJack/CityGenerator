@@ -38,7 +38,17 @@ export const TOOL_SCHEMAS = {
   }),
   find_features: z.object({
     kind: z
-      .enum(['settlement', 'facility', 'building', 'street', 'district', 'station', 'annotation', 'authored'])
+      .enum([
+        'settlement',
+        'facility',
+        'building',
+        'street',
+        'district',
+        'station',
+        'annotation',
+        'authored',
+        'utility',
+      ])
       .nullable()
       .optional(),
     name: nullableString.describe('Case-insensitive substring of the name.'),

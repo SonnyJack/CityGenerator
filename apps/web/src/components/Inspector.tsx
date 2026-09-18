@@ -4,6 +4,30 @@ import { InteriorPanel } from './InteriorPanel.js';
 import { useT } from '../i18n/index.js';
 
 /** "Why is this here?": what the engine knows about the clicked point. */
+const UTILITY_KIND_LABELS: Record<string, string> = {
+  waterMain: 'water main',
+  gasMain: 'gas main',
+  powerLine: 'power line',
+  sewer: 'sewer',
+  pipeline: 'pipeline',
+  canal: 'canal',
+  trunk: 'trunk main',
+  distribution: 'distribution main',
+  transmission: 'transmission line',
+  branch: 'branch sewer',
+  oil: 'oil pipeline',
+  cut: 'canal cut',
+  reservoir: 'reservoir',
+  waterTower: 'water tower',
+  substation: 'substation',
+  pylon: 'pylon',
+  outfall: 'sewer outfall',
+  sewageWorks: 'sewage works',
+  lock: 'canal lock',
+  canalBasin: 'canal basin',
+  gridSupply: 'grid supply',
+};
+
 export function Inspector() {
   const t = useT();
   const inspection = useApp((s) => s.inspection);
@@ -139,6 +163,21 @@ export function Inspector() {
               >
                 {t('Floor plans')}
               </button>
+            </dd>
+          </>
+        )}
+        {i.utilities && i.utilities.length > 0 && (
+          <>
+            <dt>{t('Services')}</dt>
+            <dd className="text-stone-600" data-testid="inspector-utilities">
+              {i.utilities
+                .map(
+                  (u) =>
+                    `${t(UTILITY_KIND_LABELS[u.kind] ?? UTILITY_KIND_LABELS[u.class] ?? u.kind)}${
+                      u.status === 'disused' ? ` (${t('disused')})` : ''
+                    }${u.gmOnly ? ` · ${t('GM only')}` : ''}`,
+                )
+                .join(' · ')}
             </dd>
           </>
         )}

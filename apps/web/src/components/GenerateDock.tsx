@@ -47,6 +47,7 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'edits', label: 'Brush strokes' },
   { id: 'annotations', label: 'Annotations' },
   { id: 'events', label: 'Disasters' },
+  { id: 'utilities', label: 'Utilities' },
 ];
 
 /** A slider that dispatches on release (and on keyboard steps) rather than every pixel. */
@@ -475,6 +476,49 @@ export function GenerateDock() {
           step={1}
           onCommit={(v) => patch('/networks/rail/mainlines', v)}
         />
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-label={t('Utilities')}
+            checked={doc.spec.networks.utilities.enabled}
+            onChange={(e) => patch('/networks/utilities/enabled', e.target.checked)}
+          />
+          {t('Water and gas mains, power lines, sewers and pipelines from the works and the year')}
+        </label>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-label={t('Canals')}
+            checked={doc.spec.networks.water.canals}
+            onChange={(e) => patch('/networks/water/canals', e.target.checked)}
+          />
+          {t('Canals cut from inland towns to navigable water in the canal age (disused after 1900)')}
+        </label>
+        {stats &&
+          stats.utilities &&
+          stats.utilities.waterKm +
+            stats.utilities.powerKm +
+            stats.utilities.sewerKm +
+            stats.utilities.canalKm >
+            0 && (
+            <p className="text-[11px] text-stone-500" data-testid="utility-stats">
+              {t(
+                'Utilities: water {water} km · gas {gas} km · power {power} km ({substations} substations, {pylons} pylons) · sewers {sewer} km ({outfalls} outfalls) · pipelines {pipeline} km · canals {canal} km ({locks} locks)',
+                {
+                  water: stats.utilities.waterKm.toFixed(0),
+                  gas: stats.utilities.gasKm.toFixed(0),
+                  power: stats.utilities.powerKm.toFixed(0),
+                  substations: stats.utilities.substations,
+                  pylons: stats.utilities.pylons,
+                  sewer: stats.utilities.sewerKm.toFixed(0),
+                  outfalls: stats.utilities.outfalls,
+                  pipeline: stats.utilities.pipelineKm.toFixed(0),
+                  canal: stats.utilities.canalKm.toFixed(0),
+                  locks: stats.utilities.locks,
+                },
+              )}
+            </p>
+          )}
         {stats && stats.rail.trackKm > 0 && (
           <p className="text-[11px] text-stone-500" data-testid="rail-stats">
             {stats.rail.trackKm.toFixed(0)} km of track · {stats.rail.stations} stations · {stats.rail.yards}{' '}

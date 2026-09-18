@@ -17,4 +17,5 @@ export { createSketch, type SketchOptions } from './sketch.js';
 export { terrainLayers, type TerrainLayerOptions } from './terrainLayers.js';
 export { railLayers } from './railLayers.js';
 export { facilityLayers } from './facilityLayers.js';
+export { utilityLayers } from './utilityLayers.js';
 export { eventLayers, type EventLike } from './eventLayers.js';

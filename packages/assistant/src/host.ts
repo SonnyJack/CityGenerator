@@ -46,6 +46,15 @@ export interface RegionSummary {
   facilities: FacilityBrief[];
   rail: { stations: number; trackKm: number; tramLines?: number };
   roads?: { roadKm?: number };
+  /** Utility networks in km (sewers are GM-only). */
+  utilities?: {
+    waterKm: number;
+    gasKm: number;
+    powerKm: number;
+    sewerKm: number;
+    pipelineKm: number;
+    canalKm: number;
+  };
   authored: { count: number; byLayer: Record<string, number> };
   annotations: { id: string; kind: string; text: string; gmOnly: boolean }[];
   overrides: number;
@@ -87,7 +96,15 @@ export interface AreaDescription {
 
 export interface FindQuery {
   kind?:
-    'settlement' | 'facility' | 'building' | 'street' | 'district' | 'station' | 'annotation' | 'authored';
+    | 'settlement'
+    | 'facility'
+    | 'building'
+    | 'street'
+    | 'district'
+    | 'station'
+    | 'annotation'
+    | 'authored'
+    | 'utility';
   name?: string;
   settlement?: string;
   bbox?: [number, number, number, number];

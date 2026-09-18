@@ -8,6 +8,7 @@ import {
   societyStage,
   railStage,
   tramStage,
+  utilitiesStage,
   facilitiesStage,
   regionNamesStage,
   townNamesStage,
@@ -43,6 +44,7 @@ import {
   type TerrainOutput,
   type TownOutput,
   type TramOutput,
+  type UtilitiesOutput,
 } from '@citygen/core';
 import { biomeTerrain, eraForYear, eraParams } from '@citygen/features';
 import { eraAt } from '@citygen/core';
@@ -54,6 +56,7 @@ import {
   demTilePng,
   renderThumbnail,
   railLayers,
+  utilityLayers,
   facilityLayers,
   settlementLayers,
   societyLayers,
@@ -103,6 +106,7 @@ export function createEngine(): EngineApi {
     rail: RailOutput | null;
     roads: RoadsOutput | null;
     trams: TramOutput[];
+    utilities: UtilitiesOutput;
   } | null = null;
 
   function terrainInput(doc: MapDocument, cellSizeM?: number): TerrainInput {
@@ -391,6 +395,29 @@ export function createEngine(): EngineApi {
         );
       }
       railMs += performance.now() - t6;
+      // Utilities: mains, power lines, sewers, pipelines and canals over the towns and facilities.
+      const t9 = performance.now();
+      const utilities = await runner.run(
+        utilitiesStage,
+        {
+          seed,
+          terrain,
+          sites,
+          towns,
+          facilities: facilities.features.features.map((f) => ({
+            id: f.properties.id,
+            type: f.properties.type,
+            name: f.properties.name,
+            settlement: f.properties.settlement,
+            center: centroidOf(f.geometry.coordinates[0]!),
+          })),
+          year: doc.spec.year,
+          enabled: doc.spec.networks.utilities.enabled,
+          canals: doc.spec.networks.water.canals,
+        },
+        { signal },
+      );
+      railMs += performance.now() - t9;
       // Street and district names per town, then a street index for addresses.
       const t8 = performance.now();
       const townNames: TownNamesOutput[] = [];
@@ -472,6 +499,7 @@ export function createEngine(): EngineApi {
           }),
           ...facilityLayers(facilities),
           ...railLayers(rail, trams, roads, facilities.spurs),
+          ...utilityLayers(utilities),
           ...societyLayers(society),
           ...eventLayers(doc.spec.events, doc.spec.year),
         ],
@@ -490,6 +518,7 @@ export function createEngine(): EngineApi {
         rail,
         roads,
         trams,
+        utilities,
       };
       const wasteland = measureWasteland(terrain, namedSiting, towns, facilities, rail);
       dem = { sampler: createDemSampler(terrain, doc.spec.seed), extent: doc.spec.extent };
@@ -545,6 +574,7 @@ export function createEngine(): EngineApi {
           crossings: trams.reduce((a, t) => a + t.stats.crossings, 0),
         },
         blocks: blocks.length,
+        utilities: utilities.stats,
         facilities: {
           placed: facilities.stats.placed,
           failed: facilities.stats.failed,
@@ -696,11 +726,48 @@ export function createEngine(): EngineApi {
         };
         break;
       }
+      const near: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['utilities'] = [];
+      const uProps = (q: {
+        class: string;
+        kind: string;
+        settlement: string | null;
+        status?: string;
+        gmOnly: boolean;
+      }) =>
+        near.push({
+          class: q.class,
+          kind: q.kind,
+          settlement: q.settlement,
+          ...(q.status ? { status: q.status } : {}),
+          gmOnly: q.gmOnly,
+        });
+      for (const a of latest.utilities.areas.features)
+        if (
+          inRing(
+            x,
+            y,
+            a.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]),
+          )
+        )
+          uProps(a.properties);
+      for (const l of latest.utilities.lines.features)
+        if (
+          distToPolyline(x, y, l.geometry.coordinates as [number, number][]) <=
+          (l.properties.class === 'canal' ? 12 : 8)
+        )
+          uProps(l.properties);
+      for (const pt of latest.utilities.points.features)
+        if (
+          pt.properties.kind !== 'pylon' &&
+          Math.hypot(pt.geometry.coordinates[0]! - x, pt.geometry.coordinates[1]! - y) <= 25
+        )
+          uProps(pt.properties);
       return {
         x,
         y,
         facility,
         building,
+        ...(near.length ? { utilities: near.slice(0, 6) } : {}),
         elevationM: height.data[i]!,
         slope: terrain.slope[i]!,
         water: waterNames[terrain.water[i]!] ?? 'land',
@@ -800,6 +867,9 @@ export function createEngine(): EngineApi {
           districts: e,
           authored: e,
           annotations: e,
+          utilities: e,
+          utilityPoints: e,
+          utilityAreas: e,
         } as unknown as ExportModel;
       }
       const { terrain, landcover, towns, tiler, facilities, townNames, siting } = latest;
@@ -920,6 +990,9 @@ export function createEngine(): EngineApi {
           })),
         ),
         settlements: siting.sites.map((s) => ({ id: s.id, name: s.name })),
+        utilities: fc(any(latest.utilities.lines.features)),
+        utilityPoints: fc(any(latest.utilities.points.features)),
+        utilityAreas: fc(any(latest.utilities.areas.features)),
         heights: heightGrid(terrain, frame),
       } as unknown as ExportModel;
     },
@@ -990,6 +1063,32 @@ export function createEngine(): EngineApi {
                 })),
             },
           });
+      if (want('utility')) {
+        const label: Record<string, string> = {
+          reservoir: 'reservoir',
+          waterTower: 'water tower',
+          substation: 'substation',
+          outfall: 'sewer outfall',
+          sewageWorks: 'sewage works',
+          lock: 'canal lock',
+          canalBasin: 'canal basin',
+          gridSupply: 'grid supply',
+        };
+        for (const pt of latest.utilities.points.features)
+          if (pt.properties.kind !== 'pylon')
+            out.push({
+              id: String(pt.id),
+              kind: 'utility',
+              name: label[pt.properties.kind] ?? pt.properties.kind,
+              center: [pt.geometry.coordinates[0]!, pt.geometry.coordinates[1]!],
+              settlement: pt.properties.settlement,
+              properties: {
+                class: pt.properties.class,
+                utilityKind: pt.properties.kind,
+                gmOnly: pt.properties.gmOnly,
+              },
+            });
+      }
       if (want('station') && rail)
         for (const st of rail.stations.features)
           out.push({

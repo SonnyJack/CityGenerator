@@ -92,7 +92,10 @@ generated building, and every building inside a facility, has floor plans
 (rooms, doors, windows, stairs, by use and era) for handouts and virtual
 tabletops; a gallery of example regions, community pack registries and
 share links rounds it off, and the interface speaks English, French, German
-and Spanish.
+and Spanish. Phase 11 adds the utilities under and over the streets: water
+and gas mains from the works, power lines on pylons to substations, GM-only
+sewers running downhill to an outfall, pipelines and canal-age canals with
+locks, all by era and all exportable.
 
 ## Development
 

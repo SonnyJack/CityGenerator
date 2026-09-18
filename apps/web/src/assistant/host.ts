@@ -131,6 +131,18 @@ export class WebHost implements ToolHost {
         tramLines: stats?.rail.tramLines ?? 0,
       },
       roads: { roadKm: stats?.roads?.roadKm },
+      ...(stats?.utilities
+        ? {
+            utilities: {
+              waterKm: stats.utilities.waterKm,
+              gasKm: stats.utilities.gasKm,
+              powerKm: stats.utilities.powerKm,
+              sewerKm: stats.utilities.sewerKm,
+              pipelineKm: stats.utilities.pipelineKm,
+              canalKm: stats.utilities.canalKm,
+            },
+          }
+        : {}),
       authored: { count: doc.authored.features.length, byLayer },
       annotations: doc.annotations.map((a) => ({ id: a.id, kind: a.kind, text: a.text, gmOnly: a.gmOnly })),
       overrides: doc.overrides.length,

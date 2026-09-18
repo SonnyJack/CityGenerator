@@ -31,6 +31,24 @@ export function exportGeoJson(
     ['districts', model.districts],
     ['authored', model.authored],
     [
+      'utilities',
+      { features: (model.utilities?.features ?? []).filter((f) => !options.player || !f.properties.gmOnly) },
+    ],
+    [
+      'utilityPoints',
+      {
+        features: (model.utilityPoints?.features ?? []).filter(
+          (f) => !options.player || !f.properties.gmOnly,
+        ),
+      },
+    ],
+    [
+      'utilityAreas',
+      {
+        features: (model.utilityAreas?.features ?? []).filter((f) => !options.player || !f.properties.gmOnly),
+      },
+    ],
+    [
       'annotations',
       { features: model.annotations.features.filter((a) => !options.player || !a.properties.gmOnly) },
     ],

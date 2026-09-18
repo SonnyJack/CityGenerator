@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.12** (Phases 3–10 delivered; see §16)
+Status: **Draft v0.13** (Phases 3–11 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -911,8 +911,8 @@ roadmap items rather than a wish list; see ROADMAP.md for where they land.
 - **Growth timeline**: the region at any year, with a scrubber; buildings carry
   built/demolished years so the same seed shows 1890, 1925 and 1985 coherently.
 - **Points of interest and institutions** as first-class feature types.
-- **Utility networks**: power lines, pipelines, aqueducts, canals with locks,
-  sewers as GM-only layer.
+- **Utility networks** (delivered in Phase 11): power lines, pipelines,
+  canals with locks, sewers as a GM-only layer; aqueducts remain open.
 - **3D view** via extrusion (cheap given MapLibre) and later a glTF export.
 - **Culture/style packs** beyond the initial five; naming grammars.
 - **OSM import** as a starting document; **DEM import**.
@@ -963,6 +963,11 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.13** — Phase 11: utility networks (water, gas, power, sewers,
+  pipelines, canals) as a region stage over the towns and facilities, with
+  the shared raster router and per-network cost models (mains follow the
+  ground, pylons ignore slope, canals avoid it), GM-only sewers, tiles in
+  two zoom bands, styling per theme and export.
 - **v0.12** — Phase 10 third slice: facility-part interiors (programmes by
   part name and kind, the front edge facing the facility's centre), hosted
   pack registries (one index format for the Gallery and `citygen packs`),
