@@ -6,6 +6,8 @@ import { createSketch } from './sketch.js';
 export interface TerrainLayerOptions {
   /** Apply the hand-drawn sketch displacement (ink theme). */
   sketch?: { seed: string };
+  /** River feature id → name for labels. */
+  riverNames?: Record<string, string>;
 }
 
 type AnyFc = FeatureCollection<Geometry, Record<string, unknown>>;
@@ -26,7 +28,15 @@ export function terrainLayers(
   };
   const base: Record<string, AnyFc> = {
     water,
-    rivers: terrain.riverLines as unknown as AnyFc,
+    rivers: options.riverNames
+      ? {
+          type: 'FeatureCollection',
+          features: terrain.riverLines.features.map((f) => ({
+            ...f,
+            properties: { ...f.properties, name: options.riverNames![String(f.id)] },
+          })),
+        }
+      : (terrain.riverLines as unknown as AnyFc),
     contours: terrain.contours as unknown as AnyFc,
     landcover: (landcover?.polygons ?? { type: 'FeatureCollection', features: [] }) as unknown as AnyFc,
   };

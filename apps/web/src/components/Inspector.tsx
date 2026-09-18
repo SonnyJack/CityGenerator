@@ -97,11 +97,26 @@ export function Inspector() {
             </dd>
           </>
         )}
+        {i.building && (
+          <>
+            <dt>Building</dt>
+            <dd data-testid="inspector-building">
+              {i.building.name}
+              {i.building.address ? ` · ${i.building.address}` : ''}
+            </dd>
+            <dt />
+            <dd className="text-stone-600">
+              {i.building.useLabel} · {i.building.kindLabel} · {i.building.material} · {i.building.floors}{' '}
+              {i.building.floors === 1 ? 'floor' : 'floors'}
+            </dd>
+          </>
+        )}
         {i.patch && (
           <>
             <dt>Zone</dt>
             <dd data-testid="inspector-zone">
               {i.patch.ward}
+              {i.patch.district ? ` · ${i.patch.district}` : ''}
               {i.patch.ring > 0 ? ` · ring ${i.patch.ring}` : i.patch.inner ? ' · old town' : ' · outskirts'}
             </dd>
             <dt>Why</dt>

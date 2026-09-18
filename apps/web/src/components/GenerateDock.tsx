@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { biomeIdSchema, terrainPresetSchema } from '@citygen/core';
+import { CULTURE_PACKS, biomeIdSchema, terrainPresetSchema } from '@citygen/core';
 import { biomes } from '@citygen/features';
 import { DENSITY_CLASS_NAMES, WEALTH_CLASS_NAMES, themeById, themes, type LayerGroup } from '@citygen/themes';
 import { eraForYear } from '@citygen/features';
@@ -32,6 +32,8 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'rail', label: 'Railways & trams' },
   { id: 'stations', label: 'Stations' },
   { id: 'facilities', label: 'Facilities' },
+  { id: 'labels', label: 'Names' },
+  { id: 'pois', label: 'Premises' },
   { id: 'authored', label: 'Your features' },
   { id: 'edits', label: 'Brush strokes' },
   { id: 'annotations', label: 'Annotations' },
@@ -162,6 +164,26 @@ export function GenerateDock() {
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-2 text-xs">
+          <span className="w-16 text-stone-600">Culture</span>
+          <select
+            aria-label="Culture"
+            className={sel}
+            value={doc.spec.culture}
+            onChange={(e) => patch('/culture', e.target.value)}
+          >
+            {CULTURE_PACKS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {stats && (
+          <p className="text-[11px] text-stone-500" data-testid="region-name">
+            {stats.regionName} · {CULTURE_PACKS.find((c) => c.id === stats.culture)?.name ?? stats.culture}
+          </p>
+        )}
         <label className="flex items-center gap-2 text-xs">
           <span className="w-16 text-stone-600">Biome</span>
           <select

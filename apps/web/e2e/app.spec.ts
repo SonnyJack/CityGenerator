@@ -430,3 +430,227 @@ test('facilities are placed, rendered, inspectable, removable and pinnable', asy
   expect(pinned?.pinned).toBe(true);
   expect(Math.abs(pinned!.center[0] - target.center[0])).toBeLessThan(2);
 });
+
+// ---------------------------------------------------------------------------
+// Phase 7: naming, POIs, directory, themes and export.
+
+type NamedStats = {
+  regionName: string;
+  culture: string;
+  settlements: { id: string; name?: string; center: [number, number]; radiusM: number }[];
+};
+
+async function waitForRegen(page: Page, from: number) {
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    from,
+    { timeout: 120_000 },
+  );
+}
+
+test('the region, settlements, streets and rivers are named and labels render with the vendored glyphs', async ({
+  page,
+}) => {
+  await ready(page);
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  expect(stats.regionName.length).toBeGreaterThan(2);
+  expect(stats.culture).toBe('newEngland');
+  expect(stats.settlements.length).toBeGreaterThan(0);
+  for (const s of stats.settlements) expect((s.name ?? '').length).toBeGreaterThan(2);
+  await expect(page.getByTestId('region-name')).toContainText(stats.regionName);
+
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  test.skip(webglMissing, 'WebGL is not available in this browser build');
+  const glyphRequests: number[] = [];
+  page.on('response', (r) => {
+    if (r.url().includes('/fonts/')) glyphRequests.push(r.status());
+  });
+  await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 60_000 });
+  const [x, y] = stats.settlements[0]!.center;
+  const namesAt = async (zoom: number, layer: string) => {
+    await page.evaluate(
+      ([cx, cy, z]) =>
+        window.__citygenMap!.jumpTo({ center: [cx! / 111319.490793, cy! / 111319.490793], zoom: z }),
+      [x, y, zoom],
+    );
+    await page.waitForFunction(
+      (l) => {
+        const map = window.__citygenMap!;
+        return map.areTilesLoaded() && map.queryRenderedFeatures({ layers: [l] }).length > 0;
+      },
+      layer,
+      { timeout: 60_000 },
+    );
+    return page.evaluate(
+      (l) =>
+        window
+          .__citygenMap!.queryRenderedFeatures({ layers: [l] })
+          .map((f) => String(f.properties?.name ?? '')),
+      layer,
+    );
+  };
+  const settlements = await namesAt(11.5, 'label-settlements');
+  expect(settlements.some((n) => n.length > 2)).toBe(true);
+  const streets = await namesAt(15.5, 'label-streets');
+  expect(streets.some((n) => n.length > 2)).toBe(true);
+  // Rendered symbols mean the glyph PBFs were fetched from the app's own /fonts path.
+  expect(glyphRequests.length).toBeGreaterThan(0);
+  expect(glyphRequests.every((s) => s === 200)).toBe(true);
+});
+
+test('the directory lists named premises with addresses and searches them', async ({ page }) => {
+  await ready(page);
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  const first = stats.settlements[0]!;
+  type Dir = { total: number; entries: { name: string; use: string; address?: string; kind: string }[] };
+  const all = (await page.evaluate((id) => window.__citygen.directory(id, '', 200), first.id)) as Dir;
+  expect(all.total).toBeGreaterThan(20);
+  const named = all.entries.filter((e) => e.name && e.use !== 'residential');
+  expect(named.length).toBeGreaterThan(3);
+  expect(all.entries.filter((e) => e.address).length).toBeGreaterThan(all.entries.length / 2);
+  // Searching for a word from a named entry returns that entry.
+  const word = named[0]!.name.split(/\s+/).find((w) => w.length > 3)!;
+  const found = (await page.evaluate(
+    ([id, q]) => window.__citygen.directory(id, q!, 50),
+    [first.id, word],
+  )) as Dir;
+  expect(found.entries.some((e) => e.name.toLowerCase().includes(word.toLowerCase()))).toBe(true);
+  // The panel shows the same data.
+  await page.getByRole('button', { name: 'Directory', exact: true }).click();
+  await expect(page.getByTestId('directory')).toBeVisible();
+  await page.getByLabel('Directory search').fill(word);
+  await expect(page.getByTestId('directory-list')).toContainText(word, { ignoreCase: true });
+  // The inspector reports building details at a listed premises.
+  const entry = all.entries.find((e) => e.name) as { center: [number, number]; name: string } | undefined;
+  if (entry) {
+    const info = (await page.evaluate(([bx, by]) => window.__citygen.inspect(bx, by), entry.center)) as {
+      building?: { name: string; material: string; kindLabel: string };
+    };
+    expect(info.building?.name).toBe(entry.name);
+    expect(info.building?.material.length).toBeGreaterThan(0);
+  }
+});
+
+test('switching the culture pack renames the region and its settlements', async ({ page }) => {
+  await ready(page);
+  const before = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  const v = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.evaluate(() =>
+    window.__citygen.dispatch({
+      type: 'spec.patch',
+      ops: [{ op: 'replace', path: '/culture', value: 'japan' }],
+    }),
+  );
+  await waitForRegen(page, v);
+  const after = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  expect(after.culture).toBe('japan');
+  expect(after.regionName).not.toBe(before.regionName);
+  expect(after.settlements.map((s) => s.name)).not.toEqual(before.settlements.map((s) => s.name));
+  await expect(page.getByTestId('region-name')).toContainText('Japan');
+});
+
+test('SVG and GeoJSON export a frame, and the player version hides GM notes', async ({ page }) => {
+  await ready(page);
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  const [cx, cy] = stats.settlements[0]!.center;
+  const frame = { minX: cx - 300, minY: cy - 300, maxX: cx + 300, maxY: cy + 300 };
+  await page.evaluate(
+    ({ x, y }) =>
+      window.__citygen.dispatch({
+        type: 'annotation.add',
+        annotation: {
+          id: 'e2e-secret',
+          kind: 'note',
+          geometry: { type: 'Point', coordinates: [x, y] },
+          text: 'CULTIST HIDEOUT',
+          gmOnly: true,
+        },
+      }),
+    { x: cx + 50, y: cy + 50 },
+  );
+  const req = { frame, pxPerM: 1, player: false, gridM: 1.5, pixelsPerGrid: 100, name: 'e2e' };
+  const gm = await page.evaluate((r) => window.__citygen.exportSvg(r), req);
+  expect(gm.startsWith('<svg')).toBe(true);
+  expect(gm).toContain('class="buildings"');
+  expect(gm).toContain('class="streets"');
+  expect(gm).toContain('class="labels"');
+  expect(gm).toContain('CULTIST HIDEOUT');
+  const player = await page.evaluate((r) => window.__citygen.exportSvg({ ...r, player: true }), req);
+  expect(player).not.toContain('CULTIST HIDEOUT');
+  expect(player).toContain('class="buildings"');
+
+  const geo = JSON.parse(await page.evaluate((r) => window.__citygen.exportGeoJson(r), req)) as {
+    type: string;
+    features: { properties: { layer: string; text?: string } }[];
+  };
+  expect(geo.type).toBe('FeatureCollection');
+  const layers = new Set(geo.features.map((f) => f.properties.layer));
+  expect(layers.has('buildings')).toBe(true);
+  expect(layers.has('streets')).toBe(true);
+  expect(geo.features.some((f) => f.properties.text === 'CULTIST HIDEOUT')).toBe(true);
+  const geoPlayer = JSON.parse(
+    await page.evaluate((r) => window.__citygen.exportGeoJson({ ...r, player: true }), req),
+  ) as { features: { properties: { text?: string } }[] };
+  expect(geoPlayer.features.some((f) => f.properties.text === 'CULTIST HIDEOUT')).toBe(false);
+});
+
+test('PNG and Universal VTT export a downtown frame with capped walls', async ({ page }) => {
+  test.setTimeout(180_000);
+  await ready(page);
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  test.skip(webglMissing, 'WebGL is not available in this browser build');
+  await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 60_000 });
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  const [cx, cy] = stats.settlements[0]!.center;
+  const frame = { minX: cx - 250, minY: cy - 250, maxX: cx + 250, maxY: cy + 250 };
+  const req = { frame, pxPerM: 0.5, player: true, gridM: 1.5, pixelsPerGrid: 30, name: 'e2e' };
+
+  const png = await page.evaluate((r) => window.__citygen.exportPng(r), req);
+  expect(png.width).toBe(250);
+  expect(png.height).toBe(250);
+  expect(png.dataUrl.startsWith('data:image/png;base64,')).toBe(true);
+  // Decode the image in the page and make sure it is not blank.
+  const distinct = await page.evaluate(async (url) => {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const colours = new Set<number>();
+    for (let i = 0; i < d.length; i += 4 * 7) colours.add((d[i]! << 16) | (d[i + 1]! << 8) | d[i + 2]!);
+    return colours.size;
+  }, png.dataUrl);
+  expect(distinct).toBeGreaterThan(8);
+
+  const walls = (await page.evaluate((r) => window.__citygen.exportWalls(r), req)) as {
+    segments: number[][];
+    rawCount: number;
+    mode: string;
+  };
+  expect(walls.segments.length).toBeGreaterThan(20);
+  expect(walls.segments.length).toBeLessThanOrEqual(4000);
+
+  const uvtt = await page.evaluate((r) => window.__citygen.exportUvtt(r), req);
+  const scene = JSON.parse(uvtt.json) as {
+    format: number;
+    resolution: { map_size: { x: number; y: number }; pixels_per_grid: number };
+    line_of_sight: { x: number; y: number }[][];
+    image: string;
+  };
+  expect(scene.format).toBe(0.3);
+  expect(scene.resolution.pixels_per_grid).toBe(30);
+  expect(scene.line_of_sight.length).toBe(walls.segments.length);
+  expect(scene.line_of_sight.length).toBeLessThanOrEqual(4000);
+  expect(scene.image.length).toBeGreaterThan(1000);
+});
+
+test('the export panel opens, previews the frame size and produces a report', async ({ page }) => {
+  await ready(page);
+  await page.getByRole('button', { name: 'Export…' }).click();
+  await expect(page.getByTestId('export-panel')).toBeVisible();
+  await expect(page.getByTestId('export-panel')).toContainText('px');
+});

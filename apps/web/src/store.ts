@@ -45,6 +45,8 @@ export interface AppState {
   selectedAnnotation?: string;
   /** Bumps whenever the controller's transient state (draft, handles, preview) changes. */
   editorTick: number;
+  directoryOpen: boolean;
+  setDirectoryOpen(open: boolean): void;
 
   dispatch(command: Command): void;
   undo(): void;
@@ -180,6 +182,8 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
     toolOptions: { ...tools.options },
     selection: [],
     editorTick: 0,
+    directoryOpen: false,
+    setDirectoryOpen: (open) => set({ directoryOpen: open }),
 
     dispatchEditorChanged() {
       set((s) => ({

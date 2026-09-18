@@ -1,5 +1,5 @@
 import { settlementKindSchema, type SettlementKind } from '@citygen/core';
-import { DEFAULT_POPULATION, FEATURE_TYPES } from '@citygen/core';
+import { CULTURE_PACKS, DEFAULT_POPULATION, FEATURE_TYPES } from '@citygen/core';
 import { useApp } from '../store.js';
 
 const KIND_LABELS: Record<SettlementKind, string> = {
@@ -133,6 +133,25 @@ export function SettlementsPanel() {
                   {settlementKindSchema.options.map((k) => (
                     <option key={k} value={k}>
                       {KIND_LABELS[k]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label={`Culture of ${s.id}`}
+                  className="w-24 rounded border border-stone-300 bg-white px-1 py-0.5"
+                  value={s.culture ?? ''}
+                  onChange={(e) =>
+                    dispatch({
+                      type: 'settlement.update',
+                      id: s.id,
+                      patch: { culture: e.target.value || undefined },
+                    })
+                  }
+                >
+                  <option value="">region culture</option>
+                  {CULTURE_PACKS.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>

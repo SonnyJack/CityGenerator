@@ -1,7 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useApp } from '../store.js';
 import { HistoryMenu } from './HistoryMenu.js';
 import { RecentMenu } from './RecentMenu.js';
+import { ExportPanel } from './ExportPanel.js';
 
 export function Toolbar() {
   const doc = useApp((s) => s.document);
@@ -19,16 +20,10 @@ export function Toolbar() {
     error,
   } = useApp();
   const fileInput = useRef<HTMLInputElement>(null);
-
-  function download() {
-    const blob = new Blob([exportJson()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${doc.meta.name.replace(/[^\w.-]+/g, '_') || 'region'}.citygen.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  const [exportOpen, setExportOpen] = useState(false);
+  const directoryOpen = useApp((s) => s.directoryOpen);
+  const setDirectoryOpen = useApp((s) => s.setDirectoryOpen);
+  void exportJson;
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -39,7 +34,7 @@ export function Toolbar() {
   return (
     <header className="flex flex-wrap items-center gap-2 border-b border-stone-300 bg-stone-50 px-3 py-2 text-sm">
       <span className="font-semibold tracking-tight">CityGenerator</span>
-      <span className="text-xs text-stone-500">Phase 4</span>
+      <span className="text-xs text-stone-500">Phase 7</span>
 
       <label className="ml-4 flex items-center gap-1">
         <span className="text-stone-600">Name</span>
@@ -72,10 +67,14 @@ export function Toolbar() {
           className="hidden"
           onChange={onFile}
         />
-        <button className={btn} onClick={download}>
-          Export
+        <button className={btn} onClick={() => setDirectoryOpen(!directoryOpen)} aria-pressed={directoryOpen}>
+          Directory
+        </button>
+        <button className={btn} onClick={() => setExportOpen(true)}>
+          Export…
         </button>
       </div>
+      {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
 
       <div className="basis-full text-xs text-stone-500" data-testid="status">
         {status === 'generating' && 'Generating…'}

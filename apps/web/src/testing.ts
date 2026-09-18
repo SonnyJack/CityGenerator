@@ -1,5 +1,13 @@
 import { useApp } from './store.js';
 import { engine } from './engine/client.js';
+import {
+  currentViewFrame,
+  exportGeoJsonText,
+  exportPng,
+  exportSvg,
+  exportUniversalVtt,
+  exportWalls,
+} from './export/exports.js';
 
 /**
  * A small window-level API for end-to-end tests. It exposes the same store
@@ -18,6 +26,13 @@ export function installTestApi() {
     stats: () => useApp.getState().stats,
     thumbnails: () => useApp.getState().thumbnails.length,
     inspect: (x, y) => engine().inspect(x, y),
+    directory: (settlement, query, limit) => engine().directory(settlement, query, limit),
+    exportSvg: (req) => exportSvg(req as never),
+    exportPng: (req) => exportPng(req as never),
+    exportGeoJson: (req) => exportGeoJsonText(req as never),
+    exportWalls: (req, max) => exportWalls(req as never, max),
+    exportUvtt: (req) => exportUniversalVtt(req as never),
+    currentViewFrame: () => currentViewFrame(),
     generatedAt: (x, y, tol) => engine().generatedAt(x, y, tol),
     tool: () => useApp.getState().tool,
     setTool: (tool) => useApp.getState().setTool(tool as never),
@@ -43,6 +58,13 @@ declare global {
       stats(): unknown;
       thumbnails(): number;
       inspect(x: number, y: number): Promise<unknown>;
+      directory(settlement: string | null, query: string, limit: number): Promise<unknown>;
+      exportSvg(req: unknown): Promise<string>;
+      exportPng(req: unknown): Promise<{ dataUrl: string; width: number; height: number }>;
+      exportGeoJson(req: unknown): Promise<string>;
+      exportWalls(req: unknown, max?: number): Promise<unknown>;
+      exportUvtt(req: unknown): Promise<{ json: string; warnings: string[]; segments: number; mode: string }>;
+      currentViewFrame(): unknown;
       generatedAt(x: number, y: number, toleranceM: number): Promise<unknown>;
       tool(): string;
       setTool(tool: string): void;

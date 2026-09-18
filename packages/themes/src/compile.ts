@@ -14,6 +14,10 @@ export interface CompileOptions {
   demTileUrl: string;
   /** Per-layer visibility overrides (layer group id → visible). */
   layers?: Partial<Record<LayerGroup, boolean>>;
+  /** Glyph URL template (`{fontstack}`, `{range}`); labels are omitted without it. */
+  glyphs?: string;
+  /** Hide GM-only content (notes, secret overlays) for player exports. */
+  player?: boolean;
   /**
    * GeoJSON sources owned by the editor on the UI thread: hand-authored features,
    * the in-progress draft/selection overlay and annotation frames. When set, the
@@ -40,7 +44,9 @@ export type LayerGroup =
   | 'annotations'
   | 'rail'
   | 'stations'
-  | 'facilities';
+  | 'facilities'
+  | 'labels'
+  | 'pois';
 
 const LANDCOVER_KINDS: LandcoverKind[] = [
   'snow',
@@ -255,9 +261,41 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     minzoom: 13,
     layout: { visibility: visible('buildings') },
     paint: {
-      'fill-color': t.building,
+      'fill-color': buildingColour(theme),
       'fill-outline-color': t.buildingOutline,
+      'fill-opacity': theme.buildings?.outlineOnly ? 0 : 1,
       ...(t.buildingPattern ? { 'fill-pattern': t.buildingPattern } : {}),
+    },
+  });
+  if (theme.buildings?.outlineOnly || theme.buildings?.by === 'material') {
+    layers.push({
+      id: 'buildings-outline',
+      type: 'line',
+      source: options.sourceId,
+      'source-layer': 'buildings',
+      minzoom: 14,
+      layout: { visibility: visible('buildings'), 'line-join': 'round' },
+      paint: {
+        'line-color': t.buildingOutline,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.5, 17, 1.4],
+      },
+    });
+  }
+  // Points of interest: named non-residential buildings get a dot at high zoom.
+  layers.push({
+    id: 'pois',
+    type: 'circle',
+    source: options.sourceId,
+    'source-layer': 'buildings',
+    minzoom: 15,
+    filter: ['all', ['has', 'use'], ['!=', ['get', 'use'], 'residential']],
+    layout: { visibility: visible('pois') },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 15, 1.5, 18, 4],
+      'circle-color': p.accent,
+      'circle-stroke-color': p.labelHalo,
+      'circle-stroke-width': 1,
+      'circle-translate': [0, 0],
     },
   });
   if (t.streetCasing) {
@@ -366,6 +404,9 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
   // --- Railways and trams ---------------------------------------------------
   layers.push(...railLayers(theme, options, visible));
 
+  // --- Labels ----------------------------------------------------------------
+  if (options.glyphs) layers.push(...labelLayers(theme, options, visible));
+
   // --- Society overlays (opt-in) --------------------------------------------
   for (const field of ['wealth', 'density'] as const) {
     const colours = theme.overlays[field];
@@ -422,6 +463,7 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
   return {
     version: 8,
     name: theme.name,
+    ...(options.glyphs ? { glyphs: options.glyphs } : {}),
     sources: {
       [options.sourceId]: { type: 'vector', tiles: [options.tileUrl], minzoom: 0, maxzoom: 20 },
       [options.demSourceId]: {
@@ -445,6 +487,203 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] } as const;
+
+/** Building fill: flat, by material (Sanborn) or by use. */
+function buildingColour(theme: Theme): ExpressionSpecification | string {
+  const b = theme.buildings;
+  if (!b || b.by === 'flat') return theme.town.building;
+  const table = b.by === 'material' ? b.materials : b.uses;
+  if (!table || !Object.keys(table).length) return theme.town.building;
+  return [
+    'match',
+    ['get', b.by],
+    ...Object.entries(table).flat(),
+    theme.town.building,
+  ] as unknown as ExpressionSpecification;
+}
+
+/**
+ * Labels: settlement names at low zoom, districts, street names along the
+ * ways, river names along the water, facility and station names, and named
+ * premises at the highest zooms. Every label uses the theme's glyph stack.
+ */
+function labelLayers(
+  theme: Theme,
+  options: CompileOptions,
+  visible: (group: LayerGroup) => 'visible' | 'none',
+): LayerSpecification[] {
+  const l = theme.labels;
+  const src = options.sourceId;
+  const out: LayerSpecification[] = [];
+  const halo = { 'text-halo-color': l.halo, 'text-halo-width': l.haloWidth, 'text-halo-blur': 0.5 };
+  const upper = l.transform === 'uppercase' ? { 'text-transform': 'uppercase' as const } : {};
+  out.push({
+    id: 'label-settlements',
+    type: 'symbol',
+    source: src,
+    'source-layer': 'settlements',
+    maxzoom: 13,
+    filter: ['has', 'name'],
+    layout: {
+      visibility: visible('labels'),
+      'text-field': ['get', 'name'],
+      'text-font': [l.fontBold],
+      'text-size': [
+        'interpolate',
+        ['linear'],
+        ['get', 'population'],
+        100,
+        10,
+        5000,
+        12,
+        50000,
+        15,
+        250000,
+        18,
+      ],
+      'text-offset': [0, 0.9],
+      'text-anchor': 'top',
+      'text-letter-spacing': 0.05,
+      ...upper,
+    },
+    paint: { 'text-color': l.settlement, ...halo },
+  });
+  out.push({
+    id: 'label-districts',
+    type: 'symbol',
+    source: src,
+    'source-layer': 'districts',
+    minzoom: 12.5,
+    maxzoom: 17,
+    layout: {
+      visibility: visible('labels'),
+      'text-field': ['get', 'name'],
+      'text-font': [l.font],
+      'text-size': ['interpolate', ['linear'], ['zoom'], 12.5, 10, 16, 14],
+      'text-letter-spacing': 0.12,
+      'text-transform': 'uppercase',
+      'text-max-width': 6,
+    },
+    paint: { 'text-color': l.district, 'text-opacity': 0.85, ...halo },
+  });
+  out.push({
+    id: 'label-streets',
+    type: 'symbol',
+    source: src,
+    'source-layer': 'ways',
+    minzoom: 14,
+    layout: {
+      visibility: visible('labels'),
+      'symbol-placement': 'line',
+      'symbol-spacing': 350,
+      'text-field': ['get', 'name'],
+      'text-font': [l.font],
+      'text-size': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        14,
+        ['match', ['get', 'class'], 'artery', 11, 'road', 10.5, 9],
+        18,
+        ['match', ['get', 'class'], 'artery', 15, 'road', 14, 12],
+      ],
+      'text-letter-spacing': 0.04,
+      'text-rotation-alignment': 'map',
+      'text-pitch-alignment': 'viewport',
+    },
+    paint: { 'text-color': l.street, ...halo },
+  });
+  out.push({
+    id: 'label-rivers',
+    type: 'symbol',
+    source: src,
+    'source-layer': 'rivers',
+    minzoom: 11,
+    filter: ['has', 'name'],
+    layout: {
+      visibility: visible('labels'),
+      'symbol-placement': 'line',
+      'symbol-spacing': 600,
+      'text-field': ['get', 'name'],
+      'text-font': [l.fontItalic],
+      'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 15, 13],
+      'text-letter-spacing': 0.08,
+    },
+    paint: { 'text-color': l.water, ...halo },
+  });
+  out.push({
+    id: 'label-facilities',
+    type: 'symbol',
+    source: src,
+    'source-layer': 'facilityLabels',
+    minzoom: 13,
+    layout: {
+      visibility: visible('labels'),
+      'text-field': ['get', 'name'],
+      'text-font': [l.font],
+      'text-size': ['interpolate', ['linear'], ['zoom'], 13, 9.5, 16, 12],
+      'text-max-width': 8,
+      'text-transform': 'uppercase',
+      'text-letter-spacing': 0.08,
+    },
+    paint: { 'text-color': l.facility, 'text-opacity': 0.9, ...halo },
+  });
+  out.push({
+    id: 'label-stations',
+    type: 'symbol',
+    source: src,
+    'source-layer': 'stations',
+    minzoom: 12,
+    filter: ['all', ['has', 'name'], ['in', ['get', 'kind'], ['literal', ['central', 'town', 'halt']]]],
+    layout: {
+      visibility: visible('labels'),
+      'text-field': ['get', 'name'],
+      'text-font': [l.fontBold],
+      'text-size': 10.5,
+      'text-offset': [0, 1.1],
+      'text-anchor': 'top',
+    },
+    paint: { 'text-color': l.street, ...halo },
+  });
+  out.push({
+    id: 'label-premises',
+    type: 'symbol',
+    source: src,
+    'source-layer': 'buildings',
+    minzoom: 17,
+    filter: ['all', ['has', 'name'], ['!=', ['get', 'use'], 'residential']],
+    layout: {
+      visibility: visible('pois'),
+      'text-field': ['get', 'name'],
+      'text-font': [l.font],
+      'text-size': ['interpolate', ['linear'], ['zoom'], 17, 9, 19, 12],
+      'text-max-width': 7,
+      'text-offset': [0, 0.6],
+      'text-anchor': 'top',
+    },
+    paint: { 'text-color': l.facility, ...halo },
+  });
+  // Authored annotations: labels from the editor source when present (player mode drops GM notes).
+  if (options.editor) {
+    out.push({
+      id: 'label-annotations',
+      type: 'symbol',
+      source: options.editor.annotationSourceId,
+      filter: options.player
+        ? ['all', ['==', ['get', 'kind'], 'label'], ['!=', ['get', 'gmOnly'], true]]
+        : ['==', ['get', 'kind'], 'label'],
+      layout: {
+        visibility: visible('annotations'),
+        'text-field': ['get', 'text'],
+        'text-font': [l.fontBold],
+        'text-size': 14,
+        'text-letter-spacing': 0.06,
+      },
+      paint: { 'text-color': l.settlement, ...halo },
+    });
+  }
+  return out;
+}
 
 /**
  * Facility footprints tinted by category with a hairline edge, then the parts

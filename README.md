@@ -54,8 +54,18 @@ shipyards, industry, institutions and airports, each with era variants:
 finger piers become break-bulk quays and then container terminals, gasworks
 come and go, hospitals change from pavilions to blocks. Facilities are placed
 by constraints and scores, connected by rail spurs and access roads, reserve
-their land in the towns, and can be pinned or removed. Naming, points of
-interest and export are next (Phase 7).
+their land in the towns, and can be pinned or removed.
+
+Phase 7 names everything and gets it out of the browser: eight culture
+packs (New England, England, France, Central Europe, Iberia, Egypt and the
+Levant, China, Japan) give each region its settlement, river, street,
+district and business names, its building kinds and materials, and its
+pre-modern street pattern; every building has a use, an occupant and an
+address, searchable in a directory; labels render in all themes, including
+the new 1920s survey, Sanborn, blueprint, dark and print themes; and any
+frame exports as PNG, SVG, GeoJSON, Universal VTT or a Foundry scene with
+walls, with a player version that hides the Keeper's notes. The LLM
+assistant is next (Phase 8).
 
 ## Development
 

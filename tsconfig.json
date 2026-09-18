@@ -5,6 +5,7 @@
     { "path": "packages/features" },
     { "path": "packages/themes" },
     { "path": "packages/tiles" },
+    { "path": "packages/export" },
     { "path": "packages/editor" },
     { "path": "apps/web" }
   ]

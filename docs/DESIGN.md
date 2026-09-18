@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.6** (Phase 3 delivered; see §16)
+Status: **Draft v0.7** (Phases 3–7 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -962,6 +962,14 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.7** — Phases 4–7 delivered: the editor, rail and trams, the placement
+  engine and facility library, culture packs with naming, addresses and the
+  directory, five more themes, and export (PNG, SVG, GeoJSON, Universal VTT
+  and Foundry with capped walls). Implementation notes: MapLibre labels need
+  glyph PBFs, so Open Sans is vendored under `apps/web/public/fonts`; the
+  export model is assembled in the worker for a frame and the live
+  document's annotations are overlaid on the main thread, so GM notes added
+  since the last generation still export.
 - **v0.6** — Phase 3 delivered: era profiles, society fields with overlays,
   growth rings with modern zones, the inspector.
 - **v0.5** — Phase 2 delivered: settlement siting, the organic town, lazy

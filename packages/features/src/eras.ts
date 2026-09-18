@@ -1,5 +1,5 @@
 import type { EraParams } from '@citygen/core';
-import { eraAt, eraInterpolated } from '@citygen/core';
+import { culturePackById, eraAt, eraInterpolated } from '@citygen/core';
 import { z } from 'zod';
 import { Registry } from './registry.js';
 
@@ -171,9 +171,37 @@ const profiles: EraProfile[] = [
 export const eras = new Registry<EraProfile>('era profile', eraProfileSchema);
 for (const p of profiles) eras.register(p);
 
-/** All profiles as core-typed era parameters, oldest first. */
-export function eraParams(): EraParams[] {
-  return eras.all().sort((a, b) => a.year - b.year);
+/**
+ * All profiles as core-typed era parameters, oldest first. With a culture the
+ * profiles are culture-aware (DESIGN §7): the early street pattern and block
+ * scale come from the pack, and transport modes arrive in the pack's years.
+ */
+export function eraParams(cultureId?: string): EraParams[] {
+  const base = eras.all().sort((a, b) => a.year - b.year);
+  const pack = cultureId ? culturePackById(cultureId) : undefined;
+  if (!pack) return base;
+  const c = pack.conventions;
+  const firstYear = (mode: 'rail' | 'tram' | 'motorway' | 'container') =>
+    c.transport[mode] ?? base.find((e) => e.transport[mode])?.year ?? Infinity;
+  const tramEnd = base.filter((e) => e.transport.tram).map((e) => e.year);
+  return base.map((e) => ({
+    ...e,
+    ringPattern:
+      e.year < c.modernFrom && (e.ringPattern === 'organic' || e.ringPattern === 'grid')
+        ? c.earlyPattern
+        : e.ringPattern,
+    blockSizeM: { core: e.blockSizeM.core * c.blockSizeScale, ring: e.blockSizeM.ring * c.blockSizeScale },
+    transport: {
+      ...e.transport,
+      rail: e.year >= firstYear('rail'),
+      tram:
+        e.year >= firstYear('tram') &&
+        (tramEnd.length === 0 || e.year <= Math.max(...tramEnd) || e.transport.tram),
+      motorway: e.year >= firstYear('motorway'),
+      container: e.year >= firstYear('container'),
+    },
+    walls: e.walls && c.walls,
+  }));
 }
 
 /** The profile whose reference year is nearest to (and not after, if possible) the given year. */

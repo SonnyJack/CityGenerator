@@ -1,6 +1,11 @@
 export {
   atlas,
   ink,
+  period1920s,
+  sanborn,
+  blueprint,
+  dark,
+  print,
   themes,
   themeById,
   type Theme,
@@ -11,6 +16,8 @@ export {
   type TownPaint,
   type WardKind,
   type OverlayPalettes,
+  type LabelStyle,
+  type BuildingColouring,
   WEALTH_CLASS_NAMES,
   DENSITY_CLASS_NAMES,
 } from './theme.js';

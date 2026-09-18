@@ -1,5 +1,6 @@
 import type { Geometry } from 'geojson';
 import type { MapDocument } from '@citygen/core';
+import type { ExportModel, Frame } from '@citygen/export';
 
 /** Contract between the UI thread and the engine worker. */
 export interface EngineApi {
@@ -23,6 +24,29 @@ export interface EngineApi {
   inspect(x: number, y: number): Promise<Inspection | null>;
   /** The generated building, street or patch under a point (for freeze/remove), or null. */
   generatedAt(x: number, y: number, toleranceM: number): Promise<GeneratedHit | null>;
+  /** Everything an exporter needs for a frame (buildings generated for the blocks it touches). */
+  exportFrame(frame: Frame): Promise<ExportModel>;
+  /** Business and resident directory: every building of a settlement (or all), filtered by text. */
+  directory(
+    settlement: string | null,
+    query: string,
+    limit: number,
+  ): Promise<{ total: number; entries: DirectoryEntry[] }>;
+}
+
+export interface DirectoryEntry {
+  id: string;
+  settlement: string;
+  name: string;
+  use: string;
+  useLabel: string;
+  kind: string;
+  kindLabel: string;
+  material: string;
+  floors: number;
+  ward: string;
+  address?: string;
+  center: [number, number];
 }
 
 export interface GeneratedHit {
@@ -44,7 +68,8 @@ export interface Inspection {
   wealthClass: string;
   densityClass: string;
   settlement?: { id: string; kind: string; name?: string; population: number };
-  patch?: { ward: string; inner: boolean; ring: number; why: string };
+  patch?: { ward: string; inner: boolean; ring: number; why: string; district?: string };
+  building?: Omit<DirectoryEntry, 'settlement' | 'center'>;
   facility?: {
     id: string;
     type: string;
@@ -100,8 +125,12 @@ export interface EngineStats {
     blocks: number;
     rings: number;
     coreRadiusM: number;
+    ways: number;
+    districts: number;
   }[];
   era: { id: string; name: string; year: number };
+  regionName: string;
+  culture: string;
   roads: { links: number; roadKm: number; bridges: number };
   rail: {
     trackKm: number;

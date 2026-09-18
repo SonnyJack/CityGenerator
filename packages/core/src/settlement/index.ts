@@ -8,7 +8,13 @@ export {
   type SitingOutput,
 } from './siting.js';
 export { townStage, type TownInput, type TownOutput, type BlockRecipe } from './town.js';
-export { generateBlock, subdivide, type BlockModel } from './blocks.js';
+export {
+  generateBlock,
+  subdivide,
+  type BlockModel,
+  type BlockOptions,
+  type BuildingProps,
+} from './blocks.js';
 export { roadsStage, type RoadsInput, type RoadsOutput } from './roads.js';
 export {
   WARDS,

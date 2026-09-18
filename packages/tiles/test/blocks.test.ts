@@ -137,28 +137,96 @@ describe('BlockTiler with authored geometry', () => {
   it('drops generated buildings under authored buildings and streets, and re-rolls areas', async () => {
     const runner = new StageRunner();
     const terrain = await runner.run(terrainStage, {
-      seed: 'tiles-town', extent: { widthM: 10_000, heightM: 8_000 }, preset: 'plains', relief: 0.3, roughness: 0.4,
-      seaLevel: 0, rivers: { major: 0, minor: 2 }, cellSizeM: 50,
+      seed: 'tiles-town',
+      extent: { widthM: 10_000, heightM: 8_000 },
+      preset: 'plains',
+      relief: 0.3,
+      roughness: 0.4,
+      seaLevel: 0,
+      rivers: { major: 0, minor: 2 },
+      cellSizeM: 50,
     });
-    const specs: SettlementSpec[] = [{ id: 'town', kind: 'town', population: 4000, site: { center: [0, 0], lock: true }, layout: { streetPattern: 'organic' }, features: [] }];
-    const siting = await runner.run(sitingStage, { seed: 's', terrain, year: 1650, settlements: specs, policy: { count: [1, 1], kinds: {} } });
-    const town = await runner.run(townStage, { seed: 's', site: siting.sites[0]!, terrain, year: 1650, blockSizeM: 80 });
+    const specs: SettlementSpec[] = [
+      {
+        id: 'town',
+        kind: 'town',
+        population: 4000,
+        site: { center: [0, 0], lock: true },
+        layout: { streetPattern: 'organic' },
+        features: [],
+      },
+    ];
+    const siting = await runner.run(sitingStage, {
+      seed: 's',
+      terrain,
+      year: 1650,
+      settlements: specs,
+      policy: { count: [1, 1], kinds: {} },
+    });
+    const town = await runner.run(townStage, {
+      seed: 's',
+      site: siting.sites[0]!,
+      terrain,
+      year: 1650,
+      blockSizeM: 80,
+    });
     const block = town.blocks[0]!;
     const plain = new BlockTiler(town.blocks, 1650).model(block);
     const first = plain.buildings[0]!;
     const ring = first.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]);
     const cx = ring.reduce((a, p) => a + p[0], 0) / ring.length;
     const cy = ring.reduce((a, p) => a + p[1], 0) / ring.length;
-    const authoredBuilding = { type: 'Feature' as const, id: 'ab', properties: { layer: 'building' }, geometry: { type: 'Polygon' as const, coordinates: [[[cx - 6, cy - 6], [cx + 6, cy - 6], [cx + 6, cy + 6], [cx - 6, cy + 6], [cx - 6, cy - 6]]] } };
+    const authoredBuilding = {
+      type: 'Feature' as const,
+      id: 'ab',
+      properties: { layer: 'building' },
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [
+          [
+            [cx - 6, cy - 6],
+            [cx + 6, cy - 6],
+            [cx + 6, cy + 6],
+            [cx - 6, cy + 6],
+            [cx - 6, cy - 6],
+          ],
+        ],
+      },
+    };
     const suppressed = new BlockTiler(town.blocks, 1650, { authored: [authoredBuilding] }).model(block);
     expect(suppressed.buildings.length).toBe(plain.buildings.length - 1);
     expect(suppressed.buildings.some((b) => b.id === first.id)).toBe(false);
     const byId = new BlockTiler(town.blocks, 1650, { suppressIds: [String(first.id)] }).model(block);
     expect(byId.buildings.some((b) => b.id === first.id)).toBe(false);
-    const street = { type: 'Feature' as const, id: 'st', properties: { layer: 'street', widthM: 10 }, geometry: { type: 'LineString' as const, coordinates: [[cx - 200, cy], [cx + 200, cy]] } };
+    const street = {
+      type: 'Feature' as const,
+      id: 'st',
+      properties: { layer: 'street', widthM: 10 },
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: [
+          [cx - 200, cy],
+          [cx + 200, cy],
+        ],
+      },
+    };
     const cut = new BlockTiler(town.blocks, 1650, { authored: [street] }).model(block);
     expect(cut.buildings.length).toBeLessThan(plain.buildings.length);
-    const rerolled = new BlockTiler(town.blocks, 1650, { rerolls: [{ polygon: [[-5000, -5000], [5000, -5000], [5000, 5000], [-5000, 5000]], salt: 'x' }] }).model(block);
-    expect(rerolled.buildings.map((b) => b.geometry.coordinates[0]![0])).not.toEqual(plain.buildings.map((b) => b.geometry.coordinates[0]![0]));
+    const rerolled = new BlockTiler(town.blocks, 1650, {
+      rerolls: [
+        {
+          polygon: [
+            [-5000, -5000],
+            [5000, -5000],
+            [5000, 5000],
+            [-5000, 5000],
+          ],
+          salt: 'x',
+        },
+      ],
+    }).model(block);
+    expect(rerolled.buildings.map((b) => b.geometry.coordinates[0]![0])).not.toEqual(
+      plain.buildings.map((b) => b.geometry.coordinates[0]![0]),
+    );
   });
 });

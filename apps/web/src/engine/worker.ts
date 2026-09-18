@@ -10,7 +10,15 @@ import {
   railStage,
   tramStage,
   facilitiesStage,
+  regionNamesStage,
+  townNamesStage,
+  StreetIndex,
+  culturePack,
   pointInRing as inRing,
+  type TownNamesOutput,
+  type BuildingProps,
+  type RailOutput,
+  type RoadsOutput,
   distToRing,
   type FacilitiesOutput,
   terrainStage,
@@ -45,7 +53,9 @@ import {
   terrainLayers,
   type DemSampler,
 } from '@citygen/tiles';
-import type { EngineApi, EngineStats, GeneratedHit, Thumbnail } from './api.js';
+import type { DirectoryEntry, EngineApi, EngineStats, GeneratedHit, Thumbnail } from './api.js';
+import type { ExportModel } from '@citygen/export';
+import type { Feature, Geometry, LineString, Point, Polygon } from 'geojson';
 
 /**
  * Engine worker: runs pipeline stages off the UI thread and serves vector and
@@ -54,6 +64,7 @@ import type { EngineApi, EngineStats, GeneratedHit, Thumbnail } from './api.js';
  */
 
 const runner = new StageRunner({ maxEntries: 64 });
+let currentDoc: MapDocument | null = null;
 let version = 0;
 let source: TileSource | null = null;
 let dem: { sampler: DemSampler; extent: { widthM: number; heightM: number } } | null = null;
@@ -67,6 +78,10 @@ let latest: {
   towns: TownOutput[];
   tiler: BlockTiler;
   facilities: FacilitiesOutput;
+  townNames: TownNamesOutput[];
+  rail: RailOutput | null;
+  roads: RoadsOutput | null;
+  trams: TramOutput[];
 } | null = null;
 
 function terrainInput(doc: MapDocument, cellSizeM?: number): TerrainInput {
@@ -89,6 +104,7 @@ function terrainInput(doc: MapDocument, cellSizeM?: number): TerrainInput {
 
 const api: EngineApi = {
   async setDocument(doc, options) {
+    currentDoc = doc;
     controller?.abort();
     controller = new AbortController();
     const signal = controller.signal;
@@ -130,7 +146,24 @@ const api: EngineApi = {
       { signal },
     );
     const era = eraForYear(doc.spec.year);
-    const eras = eraParams();
+    const eras = eraParams(doc.spec.culture);
+    // Names for settlements and rivers come first so every later stage sees named sites.
+    const regionNames = await runner.run(
+      regionNamesStage,
+      {
+        seed: doc.spec.seed,
+        culture: doc.spec.culture,
+        ...(doc.spec.cultureMix
+          ? { cultureMix: doc.spec.cultureMix.map((m) => ({ culture: m.culture, weight: m.weight })) }
+          : {}),
+        year: doc.spec.year,
+        sites: siting.sites,
+        rivers: terrain.riverLines.features.filter((r) => r.properties.order >= 2).map((r) => String(r.id)),
+      },
+      { signal },
+    );
+    const sites = siting.sites.map((s) => (s.name ? s : { ...s, name: regionNames.siteNames[s.id] }));
+    const namedSiting = { ...siting, sites };
     // Rail before society: the lines and yards are noise sources for the wealth field.
     const t5 = performance.now();
     const rail = await runner.run(
@@ -138,7 +171,7 @@ const api: EngineApi = {
       {
         seed,
         terrain,
-        sites: siting.sites,
+        sites,
         year: doc.spec.year,
         eras,
         mainlines: doc.spec.networks.rail.mainlines,
@@ -155,7 +188,7 @@ const api: EngineApi = {
       {
         seed,
         terrain,
-        sites: siting.sites,
+        sites,
         rail,
         year: doc.spec.year,
         extent: doc.spec.extent,
@@ -195,7 +228,7 @@ const api: EngineApi = {
       {
         seed,
         terrain,
-        sites: siting.sites,
+        sites,
         year: doc.spec.year,
         wealth: doc.spec.society.wealth,
         density: doc.spec.society.density,
@@ -220,7 +253,7 @@ const api: EngineApi = {
     ];
     const zones = zoneEdits(doc);
     const towns: TownOutput[] = [];
-    for (const site of siting.sites) {
+    for (const site of sites) {
       const blockSizeM = site.spec.layout.blockSizeM ?? era.blockSizeM.core;
       // Settlement salts exclude the region salt, which is already in `seed`.
       const salt = reseedSalt(
@@ -248,7 +281,7 @@ const api: EngineApi = {
     }
     const settlementsMs = performance.now() - t3;
     const t4 = performance.now();
-    const roads = await runner.run(roadsStage, { seed, terrain, sites: siting.sites }, { signal });
+    const roads = await runner.run(roadsStage, { seed, terrain, sites }, { signal });
     const roadsMs = performance.now() - t4;
     // Trams and crossings per town, after the streets exist.
     const t6 = performance.now();
@@ -259,7 +292,7 @@ const api: EngineApi = {
           tramStage,
           {
             seed,
-            site: siting.sites[i]!,
+            site: sites[i]!,
             town: towns[i]!,
             year: doc.spec.year,
             eras,
@@ -271,6 +304,36 @@ const api: EngineApi = {
       );
     }
     railMs += performance.now() - t6;
+    // Street and district names per town, then a street index for addresses.
+    const t8 = performance.now();
+    const townNames: TownNamesOutput[] = [];
+    for (let i = 0; i < towns.length; i++) {
+      townNames.push(
+        await runner.run(
+          townNamesStage,
+          {
+            seed: doc.spec.seed,
+            culture: doc.spec.culture,
+            ...(doc.spec.cultureMix
+              ? { cultureMix: doc.spec.cultureMix.map((m) => ({ culture: m.culture, weight: m.weight })) }
+              : {}),
+            year: doc.spec.year,
+            site: sites[i]!,
+            town: towns[i]!,
+            facilities: facilities.features.features
+              .filter((f) => f.properties.settlement === sites[i]!.id)
+              .map((f) => ({
+                id: f.properties.id,
+                type: f.properties.type,
+                center: centroidOf(f.geometry.coordinates[0]!),
+              })),
+          },
+          { signal },
+        ),
+      );
+    }
+    const streetIndex = new StreetIndex(townNames.map((t) => t.ways));
+    const namesMs = performance.now() - t8;
 
     const t2 = performance.now();
     version += 1;
@@ -289,13 +352,26 @@ const api: EngineApi = {
           ? [{ polygon: o.polygon.map((p) => [p[0]!, p[1]!] as [number, number]), salt: o.salt }]
           : [],
       ),
+      block: {
+        pack: culturePack(doc.spec.culture),
+        address: (x, y) => streetIndex.address(x, y),
+        ...(doc.spec.cultureMix
+          ? { cultureMix: doc.spec.cultureMix.map((m) => ({ culture: m.culture, weight: m.weight })) }
+          : {}),
+      },
     });
     source = new TileSource(
       [
         { name: 'region', features: { type: 'FeatureCollection', features: [outline.boundary] } },
         { name: 'graticule', features: outline.graticule, minZoom: 9 },
-        ...terrainLayers(terrain, landcover, options.sketch ? { sketch: { seed: doc.spec.seed } } : {}),
-        ...settlementLayers(towns, roads, siting),
+        ...terrainLayers(terrain, landcover, {
+          ...(options.sketch ? { sketch: { seed: doc.spec.seed } } : {}),
+          riverNames: regionNames.riverNames,
+        }),
+        ...settlementLayers(towns, roads, namedSiting, {
+          towns: townNames,
+          siteNames: regionNames.siteNames,
+        }),
         ...facilityLayers(facilities),
         ...railLayers(rail, trams, roads, facilities.spurs),
         ...societyLayers(society),
@@ -303,8 +379,20 @@ const api: EngineApi = {
       version,
       [tiler],
     );
-    latest = { terrain, landcover, society, siting, towns, tiler, facilities };
-    const wasteland = measureWasteland(terrain, siting, towns, facilities, rail);
+    latest = {
+      terrain,
+      landcover,
+      society,
+      siting: namedSiting,
+      towns,
+      tiler,
+      facilities,
+      townNames,
+      rail,
+      roads,
+      trams,
+    };
+    const wasteland = measureWasteland(terrain, namedSiting, towns, facilities, rail);
     dem = { sampler: createDemSampler(terrain, doc.spec.seed), extent: doc.spec.extent };
     const tilesMs = performance.now() - t2;
 
@@ -312,24 +400,28 @@ const api: EngineApi = {
       terrainMs,
       landcoverMs,
       settlementsMs,
-      roadsMs: roadsMs + railMs + facilitiesMs,
+      roadsMs: roadsMs + railMs + facilitiesMs + namesMs,
       tilesMs,
       totalMs: performance.now() - started,
       memoHits: runner.hits,
       memoMisses: runner.misses,
       terrain: { ...terrain.stats, contourIntervalM: terrain.contourIntervalM },
+      regionName: regionNames.regionName,
+      culture: doc.spec.culture,
       settlements: towns.map((t, i) => ({
         id: t.id,
-        kind: siting.sites[i]!.kind,
-        name: siting.sites[i]!.name,
-        population: siting.sites[i]!.population,
-        center: siting.sites[i]!.center,
+        kind: sites[i]!.kind,
+        name: sites[i]!.name,
+        population: sites[i]!.population,
+        center: sites[i]!.center,
         radiusM: t.radiusM,
         patches: t.stats.patches,
         walled: t.stats.walled,
         blocks: t.blocks.length,
         rings: t.stats.rings,
         coreRadiusM: t.stats.coreRadiusM,
+        ways: townNames[i]?.stats.ways ?? 0,
+        districts: townNames[i]?.stats.districts ?? 0,
       })),
       era: { id: era.id, name: era.name, year: era.year },
       roads: roads.stats,
@@ -433,11 +525,28 @@ const api: EngineApi = {
             inner: p.properties.inner,
             ring: p.properties.ring,
             why: p.properties.why,
+            district: latest.townNames[t]?.patchDistricts[String(p.id)],
           };
           break;
         }
       }
       if (patch) break;
+    }
+    let building: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['building'];
+    for (const town of towns) {
+      if (Math.hypot(x - town.center[0], y - town.center[1]) > town.radiusM * 2) continue;
+      for (const block of town.blocks) {
+        if (!pointInRing(x, y, block.ring)) continue;
+        for (const b of latest.tiler.model(block).buildings) {
+          const ring = b.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+          if (pointInRing(x, y, ring)) {
+            building = buildingSummary(b.properties, String(b.id));
+            break;
+          }
+        }
+        if (building) break;
+      }
+      if (building) break;
     }
     let facility: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['facility'];
     for (const f of latest.facilities.features.features) {
@@ -481,6 +590,7 @@ const api: EngineApi = {
       x,
       y,
       facility,
+      building,
       elevationM: height.data[i]!,
       slope: terrain.slope[i]!,
       water: waterNames[terrain.water[i]!] ?? 'land',
@@ -492,6 +602,181 @@ const api: EngineApi = {
       settlement,
       patch,
     };
+  },
+
+  async exportFrame(frame) {
+    const empty = <G extends Geometry>() => ({
+      type: 'FeatureCollection' as const,
+      features: [] as Feature<G, Record<string, unknown>>[],
+    });
+    if (!latest || !currentDoc) {
+      const e = empty();
+      return {
+        frame,
+        year: 0,
+        name: '',
+        water: e,
+        rivers: e,
+        landcover: e,
+        contours: e,
+        patches: e,
+        streets: e,
+        ways: e,
+        walls: e,
+        roads: e,
+        rail: e,
+        stations: e,
+        railStructures: e,
+        facilities: e,
+        facilityParts: e,
+        buildings: e,
+        blocks: e,
+        districts: e,
+        authored: e,
+        annotations: e,
+      } as unknown as ExportModel;
+    }
+    const { terrain, landcover, towns, tiler, facilities, townNames, siting } = latest;
+    const doc = currentDoc;
+    const touches = (ring: [number, number][]) =>
+      ring.some(([x, y]) => x >= frame.minX && x <= frame.maxX && y >= frame.minY && y <= frame.maxY) ||
+      ring.length === 0;
+    const buildings: Feature<Polygon, Record<string, unknown>>[] = [];
+    const blocks: Feature<Polygon, Record<string, unknown>>[] = [];
+    for (const town of towns) {
+      for (const block of town.blocks) {
+        const bb = block.ring.reduce(
+          (a, [x, y]) => ({
+            minX: Math.min(a.minX, x),
+            minY: Math.min(a.minY, y),
+            maxX: Math.max(a.maxX, x),
+            maxY: Math.max(a.maxY, y),
+          }),
+          { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+        );
+        if (bb.minX > frame.maxX || bb.maxX < frame.minX || bb.minY > frame.maxY || bb.maxY < frame.minY)
+          continue;
+        blocks.push({
+          type: 'Feature',
+          id: block.id,
+          geometry: { type: 'Polygon', coordinates: [[...block.ring, block.ring[0]!]] },
+          properties: { ward: block.ward, settlement: block.settlementId },
+        });
+        for (const b of tiler.model(block).buildings)
+          buildings.push(b as unknown as Feature<Polygon, Record<string, unknown>>);
+      }
+    }
+    void touches;
+    const fc = <G extends Geometry>(features: Feature<G, Record<string, unknown>>[]) => ({
+      type: 'FeatureCollection' as const,
+      features,
+    });
+    const any = (x: unknown) => x as Feature<Geometry, Record<string, unknown>>[];
+    return {
+      frame,
+      year: doc.spec.year,
+      name: doc.meta.name,
+      water: fc([...terrain.seaPolygons.features, ...terrain.lakePolygons.features] as unknown as Feature<
+        Polygon,
+        Record<string, unknown>
+      >[]),
+      rivers: fc(
+        terrain.riverLines.features.map((r) => ({
+          ...r,
+          properties: { ...r.properties, name: (latest?.townNames && undefined) ?? undefined },
+        })) as unknown as Feature<LineString, Record<string, unknown>>[],
+      ),
+      landcover: fc(
+        (landcover.polygons?.features ?? []) as unknown as Feature<Polygon, Record<string, unknown>>[],
+      ),
+      contours: fc(terrain.contours.features as unknown as Feature<LineString, Record<string, unknown>>[]),
+      patches: fc(
+        towns.flatMap((t, i) =>
+          t.patches.features.map((p) => ({
+            ...p,
+            properties: { ...p.properties, district: townNames[i]?.patchDistricts[String(p.id)] },
+          })),
+        ) as unknown as Feature<Polygon, Record<string, unknown>>[],
+      ),
+      streets: fc(
+        towns.flatMap((t, i) =>
+          t.streets.features.map((st) => ({
+            ...st,
+            properties: { ...st.properties, name: townNames[i]?.streetNames[String(st.id)] },
+          })),
+        ) as unknown as Feature<LineString, Record<string, unknown>>[],
+      ),
+      ways: fc(
+        townNames.flatMap((t) => t.ways.features) as unknown as Feature<
+          LineString,
+          Record<string, unknown>
+        >[],
+      ),
+      walls: fc(
+        towns.flatMap((t) => t.walls.features) as unknown as Feature<LineString, Record<string, unknown>>[],
+      ),
+      roads: fc([...(latest.roads?.roads.features ?? []), ...facilities.roads.features] as unknown as Feature<
+        LineString,
+        Record<string, unknown>
+      >[]),
+      rail: fc([
+        ...(latest.rail?.tracks.features ?? []),
+        ...facilities.spurs.features,
+        ...(latest.trams ?? []).flatMap((t) => t.lines.features),
+      ] as unknown as Feature<LineString, Record<string, unknown>>[]),
+      stations: fc([
+        ...(latest.rail?.stations.features ?? []),
+        ...(latest.trams ?? []).flatMap((t) => t.stops.features),
+      ] as unknown as Feature<Point, Record<string, unknown>>[]),
+      railStructures: fc([
+        ...(latest.rail?.structures.features ?? []),
+        ...(latest.trams ?? []).flatMap((t) => t.structures.features),
+      ] as unknown as Feature<Polygon, Record<string, unknown>>[]),
+      facilities: fc(facilities.features.features as unknown as Feature<Polygon, Record<string, unknown>>[]),
+      facilityParts: fc(any(facilities.parts.features)),
+      buildings: fc(buildings),
+      blocks: fc(blocks),
+      districts: fc(
+        townNames.flatMap((t) => t.districts.features) as unknown as Feature<
+          Point,
+          Record<string, unknown>
+        >[],
+      ),
+      authored: fc(any(doc.authored.features)),
+      annotations: fc(
+        doc.annotations.map((a) => ({
+          type: 'Feature' as const,
+          id: a.id,
+          geometry: a.geometry as Geometry,
+          properties: { kind: a.kind, text: a.text, gmOnly: a.gmOnly },
+        })),
+      ),
+      settlements: siting.sites.map((s) => ({ id: s.id, name: s.name })),
+    } as unknown as ExportModel;
+  },
+
+  async directory(settlement, query, limit) {
+    if (!latest) return { total: 0, entries: [] };
+    const { towns, tiler } = latest;
+    const q = query.trim().toLowerCase();
+    const entries: DirectoryEntry[] = [];
+    let total = 0;
+    for (const town of towns) {
+      if (settlement && town.id !== settlement) continue;
+      for (const block of town.blocks) {
+        for (const b of tiler.model(block).buildings) {
+          const e = buildingSummary(b.properties, String(b.id));
+          if (q && !`${e.name} ${e.useLabel} ${e.address ?? ''} ${e.kindLabel}`.toLowerCase().includes(q))
+            continue;
+          total++;
+          if (entries.length < limit) {
+            const ring = b.geometry.coordinates[0]!;
+            entries.push({ ...e, settlement: town.id, center: centroidOf(ring) });
+          }
+        }
+      }
+    }
+    return { total, entries };
   },
 
   async generatedAt(x, y, toleranceM) {
@@ -529,6 +814,21 @@ const api: EngineApi = {
     return null;
   },
 };
+
+function buildingSummary(p: BuildingProps, id: string): Omit<DirectoryEntry, 'settlement' | 'center'> {
+  return {
+    id,
+    name: p.name ?? '',
+    use: p.use ?? 'residential',
+    useLabel: p.useLabel ?? 'residence',
+    kind: p.kind,
+    kindLabel: p.kindLabel ?? p.kind,
+    material: p.material ?? '',
+    floors: p.floors,
+    ward: p.ward,
+    ...(p.address ? { address: p.address } : {}),
+  };
+}
 
 function centroidOf(ring: number[][]): [number, number] {
   const n = ring.length - 1 || 1;

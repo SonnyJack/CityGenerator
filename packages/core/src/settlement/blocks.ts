@@ -4,6 +4,40 @@ import { area, distToRing, inset, open, orientedBox, splitByLine, type Pt } from
 import type { Ring } from '../raster/contours.js';
 import { WARDS, type WardId } from './wards.js';
 import type { BlockRecipe } from './town.js';
+import type { CulturePack } from '../naming/schema.js';
+import { NameGenerator } from '../naming/generator.js';
+import { amenityFor, materialFor } from '../naming/amenities.js';
+import { culturePack } from '../naming/packs.js';
+
+/** Optional context that turns generated buildings into named, addressed premises. */
+export interface BlockOptions {
+  /** Culture pack for kinds, materials and business names. */
+  pack?: CulturePack;
+  /** Nearest named way for addresses. */
+  address?: (x: number, y: number) => { street: string; number: number } | null;
+  /** Second-culture share for names (colonial overlays, culture mix). */
+  cultureMix?: { culture: string; weight: number }[];
+}
+
+export interface BuildingProps {
+  [key: string]: unknown;
+  block: string;
+  ward: WardId;
+  floors: number;
+  areaM2: number;
+  kind: string;
+  /** Culture-specific label for the kind (machiya, siheyuan, clapboard house…). */
+  kindLabel?: string;
+  material?: string;
+  /** Amenity id, or 'residential'. */
+  use?: string;
+  useLabel?: string;
+  /** Business or household name. */
+  name?: string;
+  address?: string;
+  street?: string;
+  number?: number;
+}
 
 /**
  * Block level (lazy): lots by recursive splitting perpendicular to the block's
@@ -13,19 +47,21 @@ import type { BlockRecipe } from './town.js';
 export interface BlockModel {
   id: string;
   parcels: Feature<Polygon, { block: string; ward: WardId; areaM2: number }>[];
-  buildings: Feature<
-    Polygon,
-    { block: string; ward: WardId; floors: number; areaM2: number; kind: string }
-  >[];
+  buildings: Feature<Polygon, BuildingProps>[];
 }
 
-export function generateBlock(block: BlockRecipe, year: number): BlockModel {
+export function generateBlock(block: BlockRecipe, year: number, options: BlockOptions = {}): BlockModel {
   const rng = new Rng(block.seed);
   const profile = WARDS[block.ward];
   const parcels: BlockModel['parcels'] = [];
   const buildings: BlockModel['buildings'] = [];
   const ring = open(block.ring);
-  if (ring.length < 3) return { id: block.id, parcels, buildings };
+  const model = { id: block.id, parcels, buildings };
+  if (ring.length < 3) return model;
+  const finish = (): BlockModel => {
+    if (options.pack) describeBuildings(model, year, options);
+    return model;
+  };
 
   // Single-structure wards.
   if (block.ward === 'cathedral' || block.ward === 'castle') {
@@ -41,11 +77,11 @@ export function generateBlock(block: BlockRecipe, year: number): BlockModel {
       );
     }
     parcels.push(parcelFeature(block, ring));
-    return { id: block.id, parcels, buildings };
+    return finish();
   }
   if (profile.lotAreaM2 <= 0) {
     parcels.push(parcelFeature(block, ring));
-    return { id: block.id, parcels, buildings };
+    return finish();
   }
 
   const lots = subdivide(ring, profile.lotAreaM2, rng.fork('lots'));
@@ -64,7 +100,64 @@ export function generateBlock(block: BlockRecipe, year: number): BlockModel {
     );
     buildings.push(buildingFeature(block, footprint, kindFor(block.ward, area(footprint)), floors, i));
   });
-  return { id: block.id, parcels, buildings };
+  return finish();
+}
+
+/** Give every building a material, a use, a name and an address (deterministic per building). */
+function describeBuildings(model: BlockModel, year: number, options: BlockOptions): void {
+  const pack = options.pack ?? culturePack(undefined);
+  const gen = new NameGenerator(pack, model.id, year, (id) => culturePack(id), options.cultureMix);
+  for (const b of model.buildings) {
+    const rng = new Rng(`${b.id}/describe`);
+    const p = b.properties;
+    p.kindLabel = pack.conventions.buildingKinds[p.kind] ?? p.kind;
+    p.material = materialFor(rng.fork('material'), year, pack, p.kind);
+    const amenity =
+      p.kind === 'keep' || p.kind === 'cathedral' ? null : amenityFor(rng.fork('use'), year, p.ward, p.kind);
+    if (p.kind === 'cathedral') {
+      p.use = 'cathedral';
+      p.useLabel = pack.conventions.religious[0]!;
+      p.name = `The ${pack.conventions.buildingKinds.cathedral ?? 'cathedral'}`;
+    } else if (p.kind === 'keep') {
+      p.use = 'castle';
+      p.useLabel = pack.conventions.buildingKinds.keep ?? 'keep';
+      p.name = `The ${p.useLabel}`;
+    } else if (amenity) {
+      p.use = amenity.id;
+      p.useLabel = amenity.label;
+      p.name =
+        amenity.category === 'religious'
+          ? pack.conventions.religious[rng.fork('rel').int(0, pack.conventions.religious.length - 1)]!
+          : amenity.category === 'civic'
+            ? capitalise(pack.conventions.civic[rng.fork('civ').int(0, pack.conventions.civic.length - 1)]!)
+            : gen.business(b.id as string, amenity.trade);
+    } else {
+      p.use = 'residential';
+      p.useLabel = 'residence';
+      const who = gen.person(b.id as string);
+      p.name = `${who.family} household`;
+    }
+    if (options.address) {
+      const ring = b.geometry.coordinates[0]!;
+      const n = ring.length - 1 || 1;
+      let cx = 0;
+      let cy = 0;
+      for (let i = 0; i < n; i++) {
+        cx += ring[i]![0]!;
+        cy += ring[i]![1]!;
+      }
+      const a = options.address(cx / n, cy / n);
+      if (a) {
+        p.street = a.street;
+        p.number = a.number;
+        p.address = `${a.number} ${a.street}`;
+      }
+    }
+  }
+}
+
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function kindFor(ward: WardId, areaM2: number): string {

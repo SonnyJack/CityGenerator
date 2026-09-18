@@ -331,34 +331,67 @@ yard); it is about 15 % on the default coast region (18 % in the port
 town, 8 % in the mill town), so the 3 % target is not yet met and is carried
 into the fill work of Phase 7.
 
-## Phase 7 — Naming, POIs, directory, themes and export
+## Phase 7 — Naming, POIs, directory, themes and export (done, items deferred)
 
-- [ ] Culture pack framework (naming grammars with transliteration, street
-      and block conventions, building kinds, religious/civic kinds, colonial
-      overlays) and the first eight packs: `newEngland`, `england`, `france`,
-      `germanyCentralEurope`, `iberia`, `egyptLevant`, `china`, `japan`; label
-      placement via MapLibre. Remaining packs from DESIGN §7 follow as data
-      contributions with a reference gallery each.
-- [ ] Remaining biome packs from DESIGN §7.
-- [ ] Addresses; business and resident directory for every building; search.
-- [ ] Amenities and POIs by era (church, chapel, school, pub, corner shop,
-      police, fire, post office, bank, cinema, boarding house, telephone
-      exchange, funeral parlour…).
-- [ ] Themes: `period-1920s`, `sanborn` (material and use colouring), `blueprint`,
-      `dark`, `print`.
-- [ ] Export: PNG (offscreen MapLibre, DPI, presets for Foundry/Roll20 scenes and
-      handouts), SVG (`svg-export`), GeoJSON, Universal VTT with walls from
-      simplified, merged building outlines (frame-limited, segment cap with
-      warning and solid-block fallback), Foundry scene JSON with the same
-      walls, player export, handout frames re-export.
+- [x] Culture pack framework: a schema for naming grammars (given and family
+      names; settlement, street, district, water and business patterns with
+      `{token}` expansion; street suffixes by class; quarter names by kind),
+      conventions (early street pattern and the year the modern pattern
+      takes over, block-size scale, building kinds with display labels,
+      religious and civic kinds, materials, transport and wall habits) and an
+      optional colonial overlay (a second pack mixed in after a given year).
+      Eight packs ship: `newEngland`, `england`, `france`,
+      `germanyCentralEurope`, `iberia`, `egyptLevant`, `china`, `japan`. The
+      region has a culture and every settlement can override it.
+- [x] Era profiles are culture-aware: the pre-modern ring pattern, block
+      sizes and walls come from the pack (a 1780 Cairo grows an organic
+      medina where Boston grows a Georgian grid), the modern eras converge.
+- [x] Naming stages: settlements and rivers per region; streets chained into
+      named ways (shared nodes, direction continuity, class rank), districts
+      (the old-town core, special-ward quarters, ring sectors) and quarter
+      names per town. Names are unique per scope and deterministic.
+- [x] Addresses (odd and even sides along each way), building kinds with
+      culture labels, materials by era band, uses and amenities by era and
+      ward (church, chapel, school, pub, corner shop, police, fire, post
+      office, bank, cinema, boarding house, telephone exchange, funeral
+      parlour…), business names from the pack's grammar, household names for
+      residences. The inspector shows the building's name, kind, material,
+      floors and address; the directory panel lists every premises of a
+      settlement (or the region) with search and a businesses-only filter,
+      and exports CSV.
+- [x] Labels in every theme with vendored Open Sans glyph PBFs (settlement,
+      district, street, river, facility, station, premises and annotation
+      labels), shown by zoom; a `labels` and a `pois` layer group.
+- [x] Themes: `period1920s` (sepia survey), `sanborn` (buildings coloured by
+      material, use tints), `blueprint` (outline-only on blue), `dark`,
+      `print` (grey, halftone-free, for photocopies), alongside `atlas` and
+      `ink`.
+- [x] Export package: frame model from the worker (buildings generated for
+      the blocks that touch the frame), SVG renderer, GeoJSON (metres, planar
+      CRS declared), directory CSV, walls merged along shared edges and
+      capped at 4,000 segments with a warning and a solid-block fallback,
+      Universal VTT 0.3 (`.dd2vtt` with the PNG embedded) and Foundry scene
+      JSON with the same walls. The web app renders PNG with a hidden
+      MapLibre map (`preserveDrawingBuffer`), with Foundry, Roll20 and
+      300 dpi handout presets, and a player option that hides GM notes and
+      overlays. Frames: the current view or any handout-frame annotation.
+- [ ] Deferred: the remaining culture packs from DESIGN §7 (data
+      contributions with a gallery each), transliteration tables, a
+      pixel-level SVG-versus-PNG comparison (the e2e test checks both exports
+      of the same frame for content), streetcar-suburb bias by culture, and
+      the wasteland target carried from Phase 6 (block-level fill inside
+      facility grounds).
 
-Acceptance: exported SVG and PNG of the same frame match in a visual test;
-directory export lists every non-residential building with a name; a Keeper
-can produce a player handout of a harbour district with GM notes hidden; a
-Universal VTT export of a dense 1925 downtown frame of 500 × 500 m loads in
-Foundry with line of sight working and under 4,000 wall segments; a 1925
-Cairo and a 1925 Boston from the same seed differ in street pattern, building
-kinds and names.
+Acceptance: the directory of the default region lists about 11,500 premises,
+every non-residential one with a name and most with an address; a player SVG
+and GeoJSON of a district hide a GM note that the Keeper's export shows; a
+Universal VTT export of a 500 × 500 m 1925 downtown frame carries under 4,000
+line-of-sight segments and its PNG is not blank; switching the region to the
+Japan pack renames the region and its settlements; a 1925 Cairo and a 1925
+Boston from the same seed differ in street pattern, block count, building
+kinds, materials and names (unit test). Labels render from the bundled glyphs
+(the e2e test watches the font requests). The full suite is 125 unit tests
+and 28 end-to-end tests.
 
 ## Phase 8 — LLM assistant
 

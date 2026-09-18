@@ -20,11 +20,14 @@ import { renderPattern } from './patterns.js';
 import { Inspector } from './Inspector.js';
 import { EditorBar } from './EditorBar.js';
 import { PropertiesPanel } from './PropertiesPanel.js';
+import { DirectoryPanel } from './DirectoryPanel.js';
 import { ANNOTATION_SOURCE, AUTHORED_SOURCE, OVERLAY_SOURCE, attachEditor } from './editorMap.js';
 
 const SOURCE_ID = 'citygen';
 const DEM_SOURCE_ID = 'citygen-dem';
 const PROTOCOL = 'citygen';
+/** Vendored Open Sans glyph ranges (apps/web/public/fonts); absolute so setStyle keeps working after navigation. */
+export const GLYPHS_URL = `${new URL(import.meta.env.BASE_URL, window.location.origin).href}fonts/{fontstack}/{range}.pbf`;
 const TILE_URL = `${PROTOCOL}://tiles/{z}/{x}/{y}`;
 const DEM_URL = `${PROTOCOL}://dem/{z}/{x}/{y}`;
 
@@ -60,6 +63,7 @@ function styleFor(themeId: string | undefined, layers: Partial<Record<LayerGroup
     demSourceId: DEM_SOURCE_ID,
     demTileUrl: DEM_URL,
     layers,
+    glyphs: GLYPHS_URL,
     editor: {
       authoredSourceId: AUTHORED_SOURCE,
       overlaySourceId: OVERLAY_SOURCE,
@@ -116,6 +120,8 @@ export function MapView() {
   const themeId = useApp((s) => s.document.ui?.theme);
   const layerState = useApp((s) => s.document.ui?.layers);
   const terrain3d = useApp((s) => s.document.ui?.terrain3d ?? false);
+  const directoryOpen = useApp((s) => s.directoryOpen);
+  const setDirectoryOpen = useApp((s) => s.setDirectoryOpen);
 
   useEffect(() => {
     if (!container.current || mapRef.current) return;
@@ -203,6 +209,7 @@ export function MapView() {
       <div className="absolute right-3 top-3 z-10 flex max-h-[calc(100%-1.5rem)] w-72 flex-col gap-2 overflow-y-auto">
         <PropertiesPanel />
         <Inspector />
+        {directoryOpen && <DirectoryPanel onClose={() => setDirectoryOpen(false)} />}
       </div>
       {webglError && (
         <div className="absolute inset-0 flex items-center justify-center bg-stone-100 p-6 text-center text-sm text-stone-700">

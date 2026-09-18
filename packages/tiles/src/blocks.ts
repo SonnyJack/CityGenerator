@@ -5,6 +5,7 @@ import {
   generateBlock,
   pointInRing,
   type BlockModel,
+  type BlockOptions,
   type BlockRecipe,
 } from '@citygen/core';
 import type { Feature, Geometry } from 'geojson';
@@ -20,6 +21,8 @@ export interface BlockTilerOptions {
   suppressIds?: string[];
   /** `reroll` overrides: blocks inside the polygon draw from a salted seed. */
   rerolls?: { polygon: [number, number][]; salt: string }[];
+  /** Culture, addresses and names for the buildings. */
+  block?: BlockOptions;
 }
 
 /**
@@ -44,6 +47,7 @@ export class BlockTiler implements TileLayerProvider {
   ) {
     this.minZoom = options.minZoom ?? 13;
     this.maxCached = options.maxCached ?? 4000;
+    this.blockOptions = options.block ?? {};
     this.suppressIds = new Set(options.suppressIds ?? []);
     this.rerolls = options.rerolls ?? [];
     for (const f of options.authored ?? []) {
@@ -70,6 +74,7 @@ export class BlockTiler implements TileLayerProvider {
   }
 
   private readonly maxCached: number;
+  private readonly blockOptions: BlockOptions;
 
   get blockCount(): number {
     return this.blocks.length;
@@ -91,7 +96,7 @@ export class BlockTiler implements TileLayerProvider {
     const c = centroid(block.ring);
     const salts = this.rerolls.filter((r) => pointInRing(c[0], c[1], r.polygon)).map((r) => r.salt);
     const recipe = salts.length ? { ...block, seed: `${block.seed}/${salts.join('+')}` } : block;
-    const raw = generateBlock(recipe, this.year);
+    const raw = generateBlock(recipe, this.year, this.blockOptions);
     // Conflicts are resolved in favour of the user: drop generated buildings under authored geometry.
     const keep = (f: Feature<Geometry, { block: string }>) => {
       const id = String(f.id);

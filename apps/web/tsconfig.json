@@ -15,6 +15,7 @@
     { "path": "../../packages/editor" },
     { "path": "../../packages/features" },
     { "path": "../../packages/themes" },
-    { "path": "../../packages/tiles" }
+    { "path": "../../packages/tiles" },
+    { "path": "../../packages/export" }
   ]
 }
