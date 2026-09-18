@@ -29,6 +29,8 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'settlements', label: 'Settlements' },
   { id: 'buildings', label: 'Buildings' },
   { id: 'parcels', label: 'Parcels' },
+  { id: 'rail', label: 'Railways & trams' },
+  { id: 'stations', label: 'Stations' },
   { id: 'authored', label: 'Your features' },
   { id: 'edits', label: 'Brush strokes' },
   { id: 'annotations', label: 'Annotations' },
@@ -335,6 +337,37 @@ export function GenerateDock() {
         </div>
       </section>
 
+      <section className="space-y-2" data-testid="networks">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Networks</h2>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-label="Railways"
+            checked={doc.spec.networks.rail.enabled}
+            onChange={(e) => patch('/networks/rail/enabled', e.target.checked)}
+          />
+          Railways and trams (from the 1840s; branch lines close after the 1960s)
+        </label>
+        <Slider
+          label="Mainlines leaving the region"
+          value={doc.spec.networks.rail.mainlines}
+          min={0}
+          max={4}
+          step={1}
+          onCommit={(v) => patch('/networks/rail/mainlines', v)}
+        />
+        {stats && stats.rail.trackKm > 0 && (
+          <p className="text-[11px] text-stone-500" data-testid="rail-stats">
+            {stats.rail.trackKm.toFixed(0)} km of track · {stats.rail.stations} stations · {stats.rail.yards}{' '}
+            yards · {stats.rail.tunnels} tunnels · {stats.rail.viaducts} viaducts · max gradient{' '}
+            {(stats.rail.maxGradient * 100).toFixed(1)} %
+            {stats.rail.tramLines > 0 &&
+              ` · ${stats.rail.tramLines} tram lines, ${stats.rail.tramKm.toFixed(0)} km`}
+            {stats.rail.disusedKm > 0 && ` · ${stats.rail.disusedKm.toFixed(0)} km disused`}
+          </p>
+        )}
+      </section>
+
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">View</h2>
         <label className="flex items-center gap-2 text-xs">
@@ -404,6 +437,10 @@ export function GenerateDock() {
             <span className="font-mono">{stats.blocks.toLocaleString()}</span>
             <span>Roads</span>
             <span className="font-mono">{stats.roads.roadKm.toFixed(0)} km</span>
+            <span>Rail</span>
+            <span className="font-mono">
+              {stats.rail.trackKm.toFixed(0)} km · {stats.rail.stations} stn
+            </span>
             <span>Generated in</span>
             <span className="font-mono">{stats.totalMs.toFixed(0)} ms</span>
           </div>

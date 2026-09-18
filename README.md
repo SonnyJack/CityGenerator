@@ -40,8 +40,15 @@ zones and points; select, move, rotate, scale, mirror and edit vertices with
 snapping; brush the terrain, wealth, density and zones; freeze generated
 buildings or remove them; regenerate a settlement or the whole layout while
 your features stay put; annotate with labels, markers, GM notes and handout
-frames; browse the history and reopen recent documents. Rail and tram
-networks are next (Phase 5).
+frames; browse the history and reopen recent documents.
+
+Phase 5 adds railways and trams: mainlines and branch lines routed on the
+terrain within a ruling gradient, with cuttings, embankments, viaducts and
+tunnels; stations, goods and marshalling yards with steam-era roundhouses,
+freight spurs to docks and industry, subways under big cities after 1900,
+branch-line closures after the 1960s, street-running tram lines with stops
+and depots, and level crossings where rail meets road. Ports, industry and
+the placement engine are next (Phase 6).
 
 ## Development
 

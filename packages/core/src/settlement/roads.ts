@@ -3,6 +3,7 @@ import { defineStage } from '../pipeline/stage.js';
 import { smoothLine, simplifyLine, type Ring } from '../raster/contours.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { SettlementSite } from './siting.js';
+import { roadCost, routeCells } from '../networks/routing.js';
 
 /**
  * Region stage R5 (roads): connect settlements with terrain-routed roads.
@@ -31,8 +32,9 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
   seedOf: (i) => i.seed,
   keyOf: (i) => `${i.terrain.key}|${JSON.stringify(i.sites.map((s) => [s.id, s.center, s.population]))}`,
   run({ terrain, sites }, ctx) {
-    const { height, water, slope } = terrain;
+    const { height, water } = terrain;
     const { width, height: rows, cellSizeM } = height;
+    const costOf = roadCost(terrain);
     const cellOf = (x: number, y: number): [number, number] => [
       Math.min(Math.max(Math.round(height.col(x)), 0), width - 1),
       Math.min(Math.max(Math.round(height.row(y)), 0), rows - 1),
@@ -83,15 +85,7 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
       idTo: string,
       k: number,
     ) => {
-      const allCells = astar(
-        cellOf(from[0], from[1]),
-        cellOf(to[0], to[1]),
-        width,
-        rows,
-        cellSizeM,
-        water,
-        slope,
-      );
+      const allCells = routeCells(terrain, cellOf(from[0], from[1]), cellOf(to[0], to[1]), { costOf });
       if (allCells.length < 2) return;
       // Stop at the built-up edge of each settlement; the town's own streets take over inside.
       const rFrom = trimRadius.get(idFrom) ?? 0;
@@ -160,99 +154,3 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
     };
   },
 });
-
-/** A* over the raster with 8-connectivity. Returns cell coordinates from start to goal. */
-function astar(
-  start: [number, number],
-  goal: [number, number],
-  width: number,
-  rows: number,
-  cellSizeM: number,
-  water: Uint8Array,
-  slope: Float32Array,
-): [number, number][] {
-  const n = width * rows;
-  const si = start[1] * width + start[0];
-  const gi = goal[1] * width + goal[0];
-  const g = new Float64Array(n).fill(Infinity);
-  const prev = new Int32Array(n).fill(-1);
-  const closed = new Uint8Array(n);
-  g[si] = 0;
-  // Binary heap of [f, index].
-  const heapF: number[] = [];
-  const heapI: number[] = [];
-  const push = (f: number, i: number) => {
-    heapF.push(f);
-    heapI.push(i);
-    let k = heapF.length - 1;
-    while (k > 0) {
-      const p = (k - 1) >> 1;
-      if (heapF[p]! <= heapF[k]!) break;
-      [heapF[p], heapF[k]] = [heapF[k]!, heapF[p]!];
-      [heapI[p], heapI[k]] = [heapI[k]!, heapI[p]!];
-      k = p;
-    }
-  };
-  const pop = (): number => {
-    const top = heapI[0]!;
-    const lf = heapF.pop()!;
-    const li = heapI.pop()!;
-    if (heapF.length) {
-      heapF[0] = lf;
-      heapI[0] = li;
-      let k = 0;
-      for (;;) {
-        const l = k * 2 + 1;
-        const r = l + 1;
-        let m = k;
-        if (l < heapF.length && heapF[l]! < heapF[m]!) m = l;
-        if (r < heapF.length && heapF[r]! < heapF[m]!) m = r;
-        if (m === k) break;
-        [heapF[m], heapF[k]] = [heapF[k]!, heapF[m]!];
-        [heapI[m], heapI[k]] = [heapI[k]!, heapI[m]!];
-        k = m;
-      }
-    }
-    return top;
-  };
-  const h = (i: number) => Math.hypot((i % width) - goal[0], ((i / width) | 0) - goal[1]) * cellSizeM;
-  push(h(si), si);
-  const diag = Math.SQRT2 * cellSizeM;
-  let expanded = 0;
-  while (heapF.length) {
-    const u = pop();
-    if (closed[u]) continue;
-    closed[u] = 1;
-    if (u === gi) break;
-    if (++expanded > 400_000) break;
-    const col = u % width;
-    const row = (u / width) | 0;
-    for (let dy = -1; dy <= 1; dy++)
-      for (let dx = -1; dx <= 1; dx++) {
-        if (!dx && !dy) continue;
-        const nc = col + dx;
-        const nr = row + dy;
-        if (nc < 0 || nr < 0 || nc >= width || nr >= rows) continue;
-        const v = nr * width + nc;
-        if (closed[v]) continue;
-        const w = water[v]!;
-        if (w === WATER.sea || w === WATER.lake) continue;
-        const step = dx && dy ? diag : cellSizeM;
-        let cost = step * (1 + 6 * slope[v]!);
-        if (w === WATER.river) cost += 400; // a bridge
-        const ng = g[u]! + cost;
-        if (ng < g[v]!) {
-          g[v] = ng;
-          prev[v] = u;
-          push(ng + h(v), v);
-        }
-      }
-  }
-  if (prev[gi] === -1 && gi !== si) return [];
-  const path: [number, number][] = [];
-  for (let i = gi; i !== -1; i = prev[i]!) {
-    path.push([i % width, (i / width) | 0]);
-    if (i === si) break;
-  }
-  return path.reverse();
-}

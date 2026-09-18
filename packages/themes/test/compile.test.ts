@@ -33,19 +33,61 @@ describe('compileStyle', () => {
     for (const theme of Object.values(themes)) {
       const style = compileStyle(theme, {
         ...options,
-        editor: { authoredSourceId: 'authored', overlaySourceId: 'editor', annotationSourceId: 'annotations' },
+        editor: {
+          authoredSourceId: 'authored',
+          overlaySourceId: 'editor',
+          annotationSourceId: 'annotations',
+        },
       });
       const errors = validateStyleMin(style);
       expect(errors, errors.map((e) => e.message).join('\n')).toEqual([]);
-      expect(Object.keys(style.sources)).toEqual(expect.arrayContaining(['authored', 'editor', 'annotations']));
+      expect(Object.keys(style.sources)).toEqual(
+        expect.arrayContaining(['authored', 'editor', 'annotations']),
+      );
       const ids = style.layers.map((l) => l.id);
-      for (const id of ['authored-lines', 'authored-buildings', 'authored-zones', 'authored-strokes', 'editor-handles', 'editor-selection-line', 'annotation-frames'])
+      for (const id of [
+        'authored-lines',
+        'authored-buildings',
+        'authored-zones',
+        'authored-strokes',
+        'editor-handles',
+        'editor-selection-line',
+        'annotation-frames',
+      ])
         expect(ids).toContain(id);
       // Editor overlay renders above everything else.
       expect(ids[ids.length - 1]).toBe('editor-hover');
     }
     // Without editor sources the tile style carries no authored layers.
     expect(compileStyle(atlas, options).layers.some((l) => l.id.startsWith('authored'))).toBe(false);
+  });
+
+  it('styles railways, stations and trams in both themes', () => {
+    for (const theme of Object.values(themes)) {
+      const style = compileStyle(theme, options);
+      expect(validateStyleMin(style)).toEqual([]);
+      const ids = style.layers.map((l) => l.id);
+      for (const id of [
+        'rail-track',
+        'rail-tunnel',
+        'rail-viaduct-casing',
+        'rail-subway',
+        'rail-disused',
+        'tram-line',
+        'stations',
+        'tram-stops',
+        'rail-structures',
+        'rail-crossings',
+      ])
+        expect(ids).toContain(id);
+      // Rail draws above streets and buildings, below society overlays.
+      expect(ids.indexOf('rail-track')).toBeGreaterThan(ids.indexOf('streets'));
+      expect(ids.indexOf('rail-track')).toBeLessThan(ids.indexOf('overlay-wealth'));
+    }
+    const hidden = compileStyle(atlas, { ...options, layers: { rail: false } }).layers.find(
+      (l) => l.id === 'rail-track',
+    )!;
+    expect(hidden.layout?.visibility).toBe('none');
   });
 
   it('keeps society overlays hidden unless enabled', () => {

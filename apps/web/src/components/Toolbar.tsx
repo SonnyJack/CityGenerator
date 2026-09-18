@@ -81,7 +81,7 @@ export function Toolbar() {
         {status === 'generating' && 'Generating…'}
         {status === 'idle' &&
           stats &&
-          `Ready · terrain ${stats.terrainMs.toFixed(0)} ms · land cover ${stats.landcoverMs.toFixed(0)} ms · settlements ${stats.settlementsMs.toFixed(0)} ms · roads ${stats.roadsMs.toFixed(0)} ms · tiles ${stats.tilesMs.toFixed(0)} ms · memo ${stats.memoHits}/${stats.memoHits + stats.memoMisses}`}
+          `Ready · terrain ${stats.terrainMs.toFixed(0)} ms · land cover ${stats.landcoverMs.toFixed(0)} ms · settlements ${stats.settlementsMs.toFixed(0)} ms · roads & rail ${stats.roadsMs.toFixed(0)} ms · tiles ${stats.tilesMs.toFixed(0)} ms · memo ${stats.memoHits}/${stats.memoHits + stats.memoMisses}`}
         {status === 'idle' && !stats && 'Starting engine…'}
         {error && <span className="ml-2 text-red-700">{error}</span>}
       </div>

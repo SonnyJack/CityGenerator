@@ -317,7 +317,10 @@ export const townStage = defineStage<TownInput, TownOutput>({
 
     // --- 5. Wards ----------------------------------------------------------
     const plaza = centrePatch;
-    if (plaza && site.population >= 1000) plaza.ward = 'plaza';
+    if (plaza && site.population >= 1000) {
+      plaza.ward = 'plaza';
+      plaza.why = 'plaza: the market square at the heart of the old town';
+    }
     let castle: Patch | null = null;
     const gateSet = gates;
     const arteryPatchSet = new Set<Patch>();
@@ -530,7 +533,11 @@ export const townStage = defineStage<TownInput, TownOutput>({
     // Authored zones override generated wards for the patches they cover (DESIGN §9.3).
     if (input.zoneEdits?.length) {
       const covers = (x: number, y: number, e: ZoneEdit) =>
-        e.ring ? pointInRing(x, y, e.ring) : e.points ? distToPolyline(x, y, e.points) <= (e.radiusM ?? 80) : false;
+        e.ring
+          ? pointInRing(x, y, e.ring)
+          : e.points
+            ? distToPolyline(x, y, e.points) <= (e.radiusM ?? 80)
+            : false;
       const zoneFor = (ring: Ring): ZoneEdit | undefined => {
         const c = centroid(ring);
         return input.zoneEdits!.find((e) => covers(c[0], c[1], e));

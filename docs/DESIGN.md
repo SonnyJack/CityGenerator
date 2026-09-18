@@ -505,6 +505,15 @@ branch, spur, siding, yard; elevated and subway variants for metropolises after
   cap enforced; sleepers rendered at high zoom.
 - **Tram** lines radiate from the centre along arterials in the years they
   existed, and generate the streetcar suburbs around their termini.
+- Implementation (Phase 5): `railStage` runs after siting and before the
+  society stage (its corridors and yards are nuisance sources); it routes on
+  the terrain raster with a class-specific gradient cap in the cost, eases
+  curves to a minimum radius, fits a vertical profile within the cap and
+  splits each line into surface/cutting/embankment/viaduct/tunnel runs.
+  `tramStage` runs per settlement after the town stage on the town's street
+  graph and also computes the crossings between the railway and the streets;
+  crossings with regional roads are computed when the tile layers are built.
+  Both are memoised like every other stage.
 - **Water**: shipping approach along deepest bathymetry; ferries where a
   crossing lacks a bridge; canals (1760–1900) as straight cuts with locks where
   terrain requires, with wharves and warehouses along them.

@@ -233,21 +233,52 @@ reseed and a year change" passes.
 
 ## Phase 5 — Rail and tram
 
-- [ ] Rail graph with gradient and curve-radius constraints; regional mainlines
-      and junctions; branch lines by population and year.
-- [ ] Stations (central, suburban, halt), goods yards beside early stations;
-      level crossings, bridges, viaducts, tunnels; elevated and subway variants
-      for metropolises after 1900.
-- [ ] Freight spurs and sidings to industrial districts and ports.
-- [ ] **Rail yard** feature: ladder tracks, throats, roundhouse and turntable,
-      coaling and water (steam era), diesel depot and intermodal cranes later.
-- [ ] Tram/streetcar lines 1880–1960 with depots; streetcar suburbs around
-      termini.
-- [ ] Rail and tram rendering across zooms; rail noise into the wealth field.
+- [x] Rail graph: served places by population and year (towns from the 1840s,
+      villages from 1900, closures after 1965 leave disused alignments); MST
+      links with a sea-crossing penalty; mainlines between the large places
+      and out to the region edges through the hub (0–4, from the spec);
+      branches to the rest. Each link routed on the terrain with a ruling
+      gradient (2 % mainline, 3 % branch, 3.5 % spur) and eased to a minimum
+      curve radius (300 / 180 / 120 m); a vertical profile within the gradient
+      cap classifies every run as surface, cutting, embankment, viaduct or
+      tunnel, with portals; rivers are crossed on viaducts.
+- [x] Stations at the edge of each old core facing the network (central,
+      town, halt), suburban stations along the lines inside the built-up area
+      from 1880; goods yards beside stations (1840–1965, later for big cities
+      only); marshalling yards for cities with ladder tracks joining the line
+      at both throats, a steam-era roundhouse, turntable, coaling stage and
+      water tower, a diesel depot after 1960 and an intermodal terminal from
+      1970; freight spurs to the docks of ports and the downwind (industrial)
+      edge of cities; subways under metropolitan cores after 1900 and elevated
+      viaducts in 1890–1950.
+- [x] Trams (per settlement, on its streets): lines radiate from the central
+      station along arteries and collectors to termini in the outer rings in
+      the eras with trams and towns above 15 000 people, with stops every
+      350 m and a depot at the longest line's terminus.
+- [x] Level crossings, rail bridges and underpasses where tracks meet town
+      streets and regional roads; rail corridors and yards feed the society
+      stage as nuisance so wealth falls beside the tracks.
+- [x] Rendering across zooms in both themes: mainlines heavy with sleepers at
+      high zoom, branches lighter, disused faint and dashed, tunnels and
+      subways dashed, viaducts and elevated lines with casings, cuttings as a
+      pale band, yards as ladders; stations by kind; yards, sheds and depots as
+      footprints; crossings and portals as marks. Networks panel (rail on/off,
+      mainline count), rail and station layer toggles, rail statistics.
+- [x] Siting fix found on the way: settlements no longer land on islets; a
+      site must be on the mainland (or an island several times its area)
+      with dry ground around it.
+- [ ] Deferred: streetcar suburbs biased around tram termini, junction
+      geometry (crossovers, flying junctions), sidings for individual
+      industries, tram networks that share track between lines explicitly.
 
-Acceptance: no track exceeds the gradient cap on hill presets; yards connect at
-both throats; a 1925 metropolis has a central station, goods yard, at least one
-suburban line and a tram network; stats report track length and stations.
+Acceptance (met): on a hills preset with 0.7 relief every track segment stays
+within its class cap (max 3.5 % on spurs, 2 % on mainlines); yard ladders start
+and end on the host line; a 1925 metropolis gets a central station, suburban
+stations, a goods yard, a marshalling yard with roundhouse and turntable, an
+industrial spur, a subway core and a tram network with stops and a depot; the
+region statistics report track length by class, stations, yards, tunnels,
+viaducts, maximum gradient and tram lines; a 24 × 18 km hills region with five
+settlements and two mainlines routes in about 0.9 s.
 
 ## Phase 6 — Placement engine, ports, industry and institutions
 

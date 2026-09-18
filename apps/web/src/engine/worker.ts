@@ -7,6 +7,8 @@ import {
   roadsStage,
   sitingStage,
   societyStage,
+  railStage,
+  tramStage,
   terrainStage,
   townStage,
   LANDCOVER,
@@ -23,6 +25,7 @@ import {
   type TerrainInput,
   type TerrainOutput,
   type TownOutput,
+  type TramOutput,
 } from '@citygen/core';
 import { biomeTerrain, eraForYear, eraParams } from '@citygen/features';
 import {
@@ -31,6 +34,7 @@ import {
   createDemSampler,
   demTilePng,
   renderThumbnail,
+  railLayers,
   settlementLayers,
   societyLayers,
   terrainLayers,
@@ -120,6 +124,23 @@ const api: EngineApi = {
       { signal },
     );
     const era = eraForYear(doc.spec.year);
+    const eras = eraParams();
+    // Rail before society: the lines and yards are noise sources for the wealth field.
+    const t5 = performance.now();
+    const rail = await runner.run(
+      railStage,
+      {
+        seed,
+        terrain,
+        sites: siting.sites,
+        year: doc.spec.year,
+        eras,
+        mainlines: doc.spec.networks.rail.mainlines,
+        enabled: doc.spec.networks.rail.enabled,
+      },
+      { signal },
+    );
+    let railMs = performance.now() - t5;
     const edits = fieldEdits(doc);
     const society = await runner.run(
       societyStage,
@@ -132,10 +153,10 @@ const api: EngineApi = {
         density: doc.spec.society.density,
         inequality: doc.spec.society.inequality,
         ...(edits.length ? { edits } : {}),
+        ...(rail.nuisance.length ? { nuisance: rail.nuisance } : {}),
       },
       { signal },
     );
-    const eras = eraParams();
     const zones = zoneEdits(doc);
     const towns: TownOutput[] = [];
     for (const site of siting.sites) {
@@ -167,6 +188,27 @@ const api: EngineApi = {
     const t4 = performance.now();
     const roads = await runner.run(roadsStage, { seed, terrain, sites: siting.sites }, { signal });
     const roadsMs = performance.now() - t4;
+    // Trams and crossings per town, after the streets exist.
+    const t6 = performance.now();
+    const trams: TramOutput[] = [];
+    for (let i = 0; i < towns.length; i++) {
+      trams.push(
+        await runner.run(
+          tramStage,
+          {
+            seed,
+            site: siting.sites[i]!,
+            town: towns[i]!,
+            year: doc.spec.year,
+            eras,
+            rail,
+            enabled: doc.spec.networks.rail.enabled,
+          },
+          { signal },
+        ),
+      );
+    }
+    railMs += performance.now() - t6;
 
     const t2 = performance.now();
     version += 1;
@@ -192,6 +234,7 @@ const api: EngineApi = {
         { name: 'graticule', features: outline.graticule, minZoom: 9 },
         ...terrainLayers(terrain, landcover, options.sketch ? { sketch: { seed: doc.spec.seed } } : {}),
         ...settlementLayers(towns, roads, siting),
+        ...railLayers(rail, trams, roads),
         ...societyLayers(society),
       ],
       version,
@@ -205,7 +248,7 @@ const api: EngineApi = {
       terrainMs,
       landcoverMs,
       settlementsMs,
-      roadsMs,
+      roadsMs: roadsMs + railMs,
       tilesMs,
       totalMs: performance.now() - started,
       memoHits: runner.hits,
@@ -226,6 +269,19 @@ const api: EngineApi = {
       })),
       era: { id: era.id, name: era.name, year: era.year },
       roads: roads.stats,
+      rail: {
+        trackKm: rail.stats.trackKm,
+        mainlineKm: rail.stats.mainlineKm,
+        stations: rail.stats.stations,
+        yards: rail.stats.yards,
+        tunnels: rail.stats.tunnels,
+        viaducts: rail.stats.viaducts,
+        maxGradient: rail.stats.maxGradient,
+        disusedKm: rail.stats.disusedKm,
+        tramKm: trams.reduce((a, t) => a + t.stats.tramKm, 0),
+        tramLines: trams.reduce((a, t) => a + t.stats.lines, 0),
+        crossings: trams.reduce((a, t) => a + t.stats.crossings, 0),
+      },
       blocks: blocks.length,
     };
     return { version, stats };

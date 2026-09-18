@@ -269,3 +269,62 @@ test('society overlays toggle with a legend and the inspector explains a zone', 
   expect(info.patch!.why.length).toBeGreaterThan(3);
   expect(['slum', 'poor', 'modest', 'comfortable', 'affluent', 'elite']).toContain(info.wealthClass);
 });
+
+test('railways, stations and trams render and respond to the network settings', async ({ page }) => {
+  await ready(page);
+  type Stats = { rail: { trackKm: number; stations: number; tramLines: number; maxGradient: number } };
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as Stats;
+  expect(stats.rail.trackKm).toBeGreaterThan(5);
+  expect(stats.rail.stations).toBeGreaterThan(0);
+  expect(stats.rail.maxGradient).toBeLessThanOrEqual(0.0351);
+  await expect(page.getByTestId('rail-stats')).toContainText('km of track');
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  if (!webglMissing) {
+    await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 60_000 });
+    await page.waitForFunction(
+      () => {
+        const map = window.__citygenMap!;
+        return map.areTilesLoaded() && map.queryRenderedFeatures({ layers: ['rail-track'] }).length > 0;
+      },
+      undefined,
+      { timeout: 60_000 },
+    );
+    const counts = await page.evaluate(() => {
+      const map = window.__citygenMap!;
+      return {
+        rail: map.queryRenderedFeatures({ layers: ['rail-track'] }).length,
+        stations: map.queryRenderedFeatures({ layers: ['stations'] }).length,
+      };
+    });
+    expect(counts.rail).toBeGreaterThan(0);
+    expect(counts.stations).toBeGreaterThan(0);
+  }
+  // Before the railway age there is no rail; switching the network off removes it too.
+  const v1 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.evaluate(() => window.__citygen.dispatch({ type: 'year.set', year: 1780 }));
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v1,
+    { timeout: 90_000 },
+  );
+  expect(((await page.evaluate(() => window.__citygen.stats())) as Stats).rail.trackKm).toBe(0);
+  const v2 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.evaluate(() => window.__citygen.dispatch({ type: 'year.set', year: 1925 }));
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v2,
+    { timeout: 90_000 },
+  );
+  const v3 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.getByLabel('Railways', { exact: true }).uncheck();
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v3,
+    { timeout: 90_000 },
+  );
+  expect(((await page.evaluate(() => window.__citygen.stats())) as Stats).rail.trackKm).toBe(0);
+  const doc = (await page.evaluate(() => window.__citygen.getDocument())) as {
+    spec: { networks: { rail: { enabled: boolean } } };
+  };
+  expect(doc.spec.networks.rail.enabled).toBe(false);
+});

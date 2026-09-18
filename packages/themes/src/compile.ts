@@ -37,7 +37,9 @@ export type LayerGroup =
   | 'wealth'
   | 'density'
   | 'edits'
-  | 'annotations';
+  | 'annotations'
+  | 'rail'
+  | 'stations';
 
 const LANDCOVER_KINDS: LandcoverKind[] = [
   'snow',
@@ -357,6 +359,9 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     },
   });
 
+  // --- Railways and trams ---------------------------------------------------
+  layers.push(...railLayers(theme, options, visible));
+
   // --- Society overlays (opt-in) --------------------------------------------
   for (const field of ['wealth', 'density'] as const) {
     const colours = theme.overlays[field];
@@ -436,6 +441,286 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
 }
 
 const EMPTY = { type: 'FeatureCollection', features: [] } as const;
+
+/**
+ * Railway styling by class and mode: mainlines heavy with sleepers at high
+ * zoom, branches lighter, disused lines faint and dashed, tunnels and subways
+ * dashed, viaducts and elevated lines with a wide casing, yards as thin
+ * ladders; tram lines thin in the accent colour; stations by kind; yards and
+ * sheds as hatched or grey footprints; crossings and portals as small marks.
+ */
+function railLayers(
+  theme: Theme,
+  options: CompileOptions,
+  visible: (group: LayerGroup) => 'visible' | 'none',
+): LayerSpecification[] {
+  const p = theme.palette;
+  const src = options.sourceId;
+  const out: LayerSpecification[] = [];
+  const cls = (...ids: string[]): ExpressionSpecification => ['in', ['get', 'class'], ['literal', ids]];
+  const mode = (...ids: string[]): ExpressionSpecification => ['in', ['get', 'mode'], ['literal', ids]];
+  const railInk = theme.sketch ? p.ink : '#2f2a26';
+  const heavy: ExpressionSpecification = [
+    'match',
+    ['get', 'class'],
+    'mainline',
+    1,
+    'branch',
+    0.75,
+    'spur',
+    0.6,
+    'yard',
+    0.45,
+    0.6,
+  ];
+  const width = (z12: number, z17: number): ExpressionSpecification => [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    9,
+    ['*', heavy, z12 * 0.5],
+    12,
+    ['*', heavy, z12],
+    17,
+    ['*', heavy, z17],
+  ];
+
+  // Structures first so tracks draw over them.
+  out.push({
+    id: 'rail-structures',
+    type: 'fill',
+    source: src,
+    'source-layer': 'railStructures',
+    minzoom: 11,
+    layout: { visibility: visible('rail') },
+    paint: {
+      'fill-color': [
+        'match',
+        ['get', 'kind'],
+        'railYard',
+        theme.sketch ? p.background : '#d8d3ca',
+        'goodsYard',
+        theme.sketch ? p.background : '#cfc9bd',
+        'intermodal',
+        theme.sketch ? p.background : '#c9ccd2',
+        'tramDepot',
+        theme.sketch ? p.background : '#d4cfc4',
+        theme.town.building,
+      ],
+      'fill-opacity': theme.sketch ? 0.6 : 0.9,
+      'fill-outline-color': railInk,
+    },
+  });
+  out.push({
+    id: 'rail-structures-outline',
+    type: 'line',
+    source: src,
+    'source-layer': 'railStructures',
+    minzoom: 12,
+    filter: ['in', ['get', 'kind'], ['literal', ['railYard', 'goodsYard', 'intermodal', 'tramDepot']]],
+    layout: { visibility: visible('rail') },
+    paint: { 'line-color': railInk, 'line-width': 0.8, 'line-dasharray': [3, 2], 'line-opacity': 0.8 },
+  });
+
+  // Viaduct / elevated casing.
+  out.push({
+    id: 'rail-viaduct-casing',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    filter: ['all', cls('mainline', 'branch', 'spur'), mode('viaduct', 'elevated')],
+    layout: { visibility: visible('rail'), 'line-cap': 'butt' },
+    paint: { 'line-color': railInk, 'line-width': width(4, 11), 'line-opacity': 0.35 },
+  });
+  out.push({
+    id: 'rail-viaduct-inner',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    filter: ['all', cls('mainline', 'branch', 'spur'), mode('viaduct', 'elevated')],
+    layout: { visibility: visible('rail'), 'line-cap': 'butt' },
+    paint: { 'line-color': p.background, 'line-width': width(2.6, 8) },
+  });
+  // Cuttings: a pale band.
+  out.push({
+    id: 'rail-cutting',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    minzoom: 12,
+    filter: ['all', cls('mainline', 'branch', 'spur'), mode('cutting')],
+    layout: { visibility: visible('rail'), 'line-cap': 'butt' },
+    paint: { 'line-color': railInk, 'line-width': width(4, 12), 'line-opacity': 0.12 },
+  });
+  // Surface and engineered tracks.
+  out.push({
+    id: 'rail-track',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    filter: ['all', cls('mainline', 'branch', 'spur', 'yard'), ['!', mode('tunnel', 'subway')]],
+    layout: { visibility: visible('rail'), 'line-join': 'round', 'line-cap': 'butt' },
+    paint: { 'line-color': railInk, 'line-width': width(1.6, 3.2) },
+  });
+  // Sleepers: a dashed light line over the track at high zoom.
+  out.push({
+    id: 'rail-sleepers',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    minzoom: 13,
+    filter: ['all', cls('mainline', 'branch', 'spur'), ['!', mode('tunnel', 'subway')]],
+    layout: { visibility: visible('rail'), 'line-cap': 'butt' },
+    paint: { 'line-color': p.background, 'line-width': width(0.7, 1.4), 'line-dasharray': [3, 3] },
+  });
+  out.push({
+    id: 'rail-tunnel',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    filter: ['all', cls('mainline', 'branch', 'spur'), mode('tunnel')],
+    layout: { visibility: visible('rail'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': railInk,
+      'line-width': width(1.4, 2.6),
+      'line-dasharray': [2, 2.5],
+      'line-opacity': 0.55,
+    },
+  });
+  out.push({
+    id: 'rail-subway',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    filter: ['all', cls('mainline', 'branch'), mode('subway')],
+    layout: { visibility: visible('rail'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': theme.sketch ? p.ink : '#1e4fd8',
+      'line-width': width(1.6, 3),
+      'line-dasharray': [1.5, 2],
+      'line-opacity': 0.75,
+    },
+  });
+  out.push({
+    id: 'rail-disused',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    filter: cls('disused'),
+    layout: { visibility: visible('rail'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': p.inkMuted,
+      'line-width': width(1.2, 2.2),
+      'line-dasharray': [4, 3],
+      'line-opacity': 0.6,
+    },
+  });
+  out.push({
+    id: 'tram-line',
+    type: 'line',
+    source: src,
+    'source-layer': 'rail',
+    minzoom: 11,
+    filter: cls('tram'),
+    layout: { visibility: visible('rail'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': theme.sketch ? p.ink : p.accent,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 14, 1.4, 17, 2.4],
+      'line-opacity': theme.sketch ? 0.9 : 0.85,
+      ...(theme.sketch ? { 'line-dasharray': [6, 1.5] } : {}),
+    },
+  });
+
+  // Crossings and tunnel portals.
+  out.push({
+    id: 'rail-crossings',
+    type: 'circle',
+    source: src,
+    'source-layer': 'crossings',
+    minzoom: 13,
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 1.5, 17, 4],
+      'circle-color': [
+        'match',
+        ['get', 'kind'],
+        'levelCrossing',
+        p.accent,
+        'tunnelPortal',
+        railInk,
+        p.background,
+      ],
+      'circle-stroke-color': railInk,
+      'circle-stroke-width': 1,
+      'circle-opacity': ['match', ['get', 'kind'], 'railUnderpass', 0.6, 1],
+    },
+    layout: { visibility: visible('rail') },
+  });
+
+  // Stations: rail stations as ringed circles, tram stops as small dots at high zoom.
+  out.push({
+    id: 'tram-stops',
+    type: 'circle',
+    source: src,
+    'source-layer': 'stations',
+    minzoom: 13,
+    filter: ['in', ['get', 'kind'], ['literal', ['tramStop', 'tramTerminus']]],
+    layout: { visibility: visible('stations') },
+    paint: {
+      'circle-radius': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        13,
+        1.5,
+        17,
+        ['match', ['get', 'kind'], 'tramTerminus', 5, 3],
+      ],
+      'circle-color': p.background,
+      'circle-stroke-color': theme.sketch ? p.ink : p.accent,
+      'circle-stroke-width': 1.2,
+    },
+  });
+  out.push({
+    id: 'stations',
+    type: 'circle',
+    source: src,
+    'source-layer': 'stations',
+    minzoom: 9,
+    filter: ['in', ['get', 'kind'], ['literal', ['central', 'town', 'halt', 'suburban']]],
+    layout: { visibility: visible('stations') },
+    paint: {
+      'circle-radius': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        9,
+        ['match', ['get', 'kind'], 'central', 3, 'town', 2.2, 1.5],
+        14,
+        ['match', ['get', 'kind'], 'central', 8, 'town', 6, 4],
+        17,
+        ['match', ['get', 'kind'], 'central', 14, 'town', 10, 7],
+      ],
+      'circle-color': ['case', ['get', 'closed'], p.inkMuted, p.background],
+      'circle-stroke-color': railInk,
+      'circle-stroke-width': ['match', ['get', 'kind'], 'central', 2.5, 'town', 2, 1.5],
+      'circle-opacity': ['case', ['get', 'closed'], 0.5, 1],
+    },
+  });
+  out.push({
+    id: 'stations-inner',
+    type: 'circle',
+    source: src,
+    'source-layer': 'stations',
+    minzoom: 12,
+    filter: ['in', ['get', 'kind'], ['literal', ['central', 'town']]],
+    layout: { visibility: visible('stations') },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 1.2, 17, 4],
+      'circle-color': railInk,
+    },
+  });
+  return out;
+}
 
 /** Highlight colour for selection and drafts; deliberately outside both palettes. */
 export const EDITOR_ACCENT = '#2563eb';

@@ -107,7 +107,7 @@ function synthesiseSpecs(rng: Rng, policy: SitingInput['policy'], coastal: boole
 
 export const sitingStage = defineStage<SitingInput, SitingOutput>({
   id: 'siting',
-  version: 1,
+  version: 2,
   seedOf: (i) => i.seed,
   keyOf: (i) =>
     `${i.terrain.key}|${i.year}|${JSON.stringify(i.settlements)}|${JSON.stringify(i.policy)}|${i.seed}`,
@@ -123,6 +123,54 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
     const specs = input.settlements.length
       ? input.settlements
       : synthesiseSpecs(rng.fork('specs'), input.policy, regionCoastal);
+
+    // Connected landmasses (4-neighbour; rivers count as land) so nothing lands on an islet.
+    const component = new Int32Array(n).fill(-1);
+    const componentArea: number[] = [];
+    {
+      const stack: number[] = [];
+      for (let seed = 0; seed < n; seed++) {
+        if (component[seed] !== -1 || water[seed] === WATER.sea || water[seed] === WATER.lake) continue;
+        const id = componentArea.length;
+        let area = 0;
+        component[seed] = id;
+        stack.push(seed);
+        while (stack.length) {
+          const i = stack.pop()!;
+          area++;
+          const c = i % width;
+          const r = (i / width) | 0;
+          for (const j of [
+            c > 0 ? i - 1 : -1,
+            c < width - 1 ? i + 1 : -1,
+            r > 0 ? i - width : -1,
+            r < rows - 1 ? i + width : -1,
+          ]) {
+            if (j < 0 || component[j] !== -1 || water[j] === WATER.sea || water[j] === WATER.lake) continue;
+            component[j] = id;
+            stack.push(j);
+          }
+        }
+        componentArea.push(area);
+      }
+    }
+    const mainland = componentArea.reduce((best, a, i) => (a > componentArea[best]! ? i : best), 0);
+    /** Land fraction on a ring of radius r around a cell. */
+    const landAround = (i: number, r: number): number => {
+      const cx = i % width;
+      const cy = (i / width) | 0;
+      const rc = r / cellSizeM;
+      let land = 0;
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const c = Math.round(cx + Math.cos(a) * rc);
+        const rr = Math.round(cy + Math.sin(a) * rc);
+        if (c < 0 || rr < 0 || c >= width || rr >= rows) continue;
+        const w = water[rr * width + c]!;
+        if (w === WATER.land || w === WATER.river) land++;
+      }
+      return land / 16;
+    };
 
     // Candidate cells: land, gentle, above the sea. Sampled deterministically.
     const candRng = rng.fork('candidates');
@@ -154,6 +202,12 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
           // Hard constraints.
           if (Math.abs(x) > halfW - radiusM * 0.6 || Math.abs(y) > halfH - radiusM * 0.6) continue;
           if (wantsCoast && distToSea[i]! > radiusM * 0.9 + 300) continue;
+          // Room to grow: on the mainland (or an island several times the town's area) with
+          // most of the ground around the centre dry.
+          const comp = component[i]!;
+          const areaM2 = componentArea[comp]! * cellSizeM * cellSizeM;
+          if (comp !== mainland && areaM2 < Math.PI * radiusM * radiusM * 4) continue;
+          if (landAround(i, radiusM * 0.7) < 0.6) continue;
           let score = 1 - slope[i]! / 0.12;
           const dSea = distToSea[i]!;
           const dWater = distToWater[i]!;

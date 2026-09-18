@@ -88,5 +88,18 @@ export interface EngineStats {
   }[];
   era: { id: string; name: string; year: number };
   roads: { links: number; roadKm: number; bridges: number };
+  rail: {
+    trackKm: number;
+    mainlineKm: number;
+    stations: number;
+    yards: number;
+    tunnels: number;
+    viaducts: number;
+    maxGradient: number;
+    disusedKm: number;
+    tramKm: number;
+    tramLines: number;
+    crossings: number;
+  };
   blocks: number;
 }
