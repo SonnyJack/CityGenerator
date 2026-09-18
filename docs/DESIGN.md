@@ -1,21 +1,22 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.1** (for review)
+Status: **Draft v0.2** (revised after owner decisions; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
-This document describes a browser-based procedural city generator for tabletop
-maps. It is inspired by watabou's
+CityGenerator is a browser-based procedural generator and editor for
+metropolitan-scale maps aimed at tabletop role-playing games, with Call of
+Cthulhu as the primary target. It is inspired by watabou's
 [Medieval Fantasy City Generator (TownGeneratorOS)](https://github.com/watabou/TownGeneratorOS)
-and extends it with modern infrastructure (rail, ports, industry), explicit
-wealth and density modelling, a general feature-placement and gap-filling
-system, topography, and an LLM assistant that can answer questions about a map
-and edit it.
+and extends it with metropolitan regions, modern infrastructure (rail, ports,
+industry), explicit wealth and density modelling, a general feature-placement
+and gap-filling system, topography, a full editor, and an LLM assistant that
+can answer questions about a map and edit it.
 
-The companion documents are:
+Companion documents:
 
 - [ROADMAP.md](./ROADMAP.md) — phased delivery plan with acceptance criteria.
-- [OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md) — clarifying questions that need answers
-  before or during Phase 1, plus suggested extra features.
+- [OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md) — decisions taken, questions still
+  open, and suggested features.
 
 ---
 
@@ -23,44 +24,65 @@ The companion documents are:
 
 ### 1.1 Goals
 
-1. **Generate believable city maps** across eras (medieval → industrial → modern)
-   from a small set of parameters and a seed, deterministically.
-2. **Model modern infrastructure**: railways, train yards, container ports, dry
-   docks, industrial zones and facilities, with realistic siting rules.
-3. **Model wealth and density** as first-class, continuous fields that drive
-   layout, building style, and rendering, and are visible as overlays.
-4. **General placement engine**: a declarative rule system for positioning any
-   feature (built or natural), manual pinning, and multi-pass "gap filling" so
-   there is no unexplained empty land.
-5. **Topography**: a heightmap with hydrology (rivers, lakes, coast), slope
-   constraints, contour rendering, and terrain-aware road and rail routing.
-6. **Run as a static site on GitHub Pages**: no backend required for generation,
-   editing, or export. Maps are shareable by URL.
-7. **LLM integration**: a chat panel where the user can ask questions about the
-   current map and request changes in natural language; the assistant edits the
-   map through the same command API the UI uses.
-8. **Industry-standard stack**: TypeScript, Vite, React, GeoJSON, Web Workers,
-   GitHub Actions, official LLM SDKs. No exotic languages or toolchains.
+1. **Metropolitan regions.** A single document can hold a region of tens of
+   kilometres containing a core city, satellite towns, villages, and the
+   countryside between them, all generated coherently, and navigable from
+   region overview down to individual buildings without loading pauses.
+2. **Eras from medieval to modern**, chosen by **year** rather than by a fixed
+   list, with mixed-era layouts (an old core inside a later grid) and
+   particular care for the periods Call of Cthulhu uses: Gaslight (1890s),
+   Classic (1920s–30s) and Modern.
+3. **Modern infrastructure**: railways, train yards, ports (break-bulk and
+   container), dry docks and shipyards, industrial zones and facilities, with
+   realistic siting rules and era-appropriate variants.
+4. **Wealth and density** as continuous fields that drive layout, building
+   style and rendering, visible as overlays and editable with brushes.
+5. **General placement engine** with declarative constraints for any feature
+   (built or natural), plus ordered "fill" passes so no land is left
+   unexplained.
+6. **Topography**: multi-resolution heightmap with hydrology (rivers, lakes,
+   coast, bathymetry), slope constraints, contours and hillshade, and
+   terrain-aware road and rail routing with bridges, cuttings and tunnels.
+7. **Full editor.** Everything the generator makes can be selected, moved,
+   redrawn, deleted or frozen. Users can draw roads, rail, water, zones,
+   buildings and points of interest by hand, and paint terrain, zones, wealth,
+   density and vegetation with brushes. Hand-authored geometry survives
+   regeneration.
+8. **Deterministic and reproducible.** The document (`.citygen.json`) fully
+   reproduces the map in another session. The document is not size-constrained;
+   URL sharing is a convenience for small documents only.
+9. **Static site on GitHub Pages**: no backend for generation, editing, or
+   export.
+10. **LLM assistant** (Anthropic, bring-your-own-key) that answers questions
+    about the map and edits it through the same command API the editor uses.
+11. **Industry-standard stack**: TypeScript, Vite, React, GeoJSON, vector tiles,
+    MapLibre GL, Web Workers, GitHub Actions, the official Anthropic SDK.
 
-### 1.2 Non-goals (for the initial versions)
+### 1.2 Non-goals (initially)
 
-- Real-world geodata import (OpenStreetMap) as a starting point. Possible later.
-- Full 3D rendering. An isometric/3D view is a stretch feature (see §12).
+- Real-world geodata import (OpenStreetMap, DEM tiles). Planned later; the data
+  model is GeoJSON precisely so this stays possible.
 - Multiplayer or collaborative editing.
-- Simulation of traffic, economy, or population over time (a simple "growth
-  timeline" is a stretch feature).
-- Pixel-perfect reproduction of watabou's output. We take the ideas, not the code
-  (see §13 on licensing).
+- Economic or traffic simulation. A **growth timeline** (the region at year *t*)
+  is planned, but as a generation parameter, not a simulation.
+- Print tiling to paper. PNG handouts and SVG are in scope; tiled PDF is not
+  needed yet.
+- Pixel-perfect reproduction of watabou's output. We take the ideas, not the
+  code; this is a **clean-room reimplementation** (§13).
 
 ### 1.3 Primary user stories
 
-- *As a game master*, I generate a modern port city with a seed, tweak sliders,
-  print it with a 5 ft grid, and export a VTT-ready image.
-- *As a worldbuilder*, I paint a rough terrain (a bay, a river, hills), ask for a
-  wealthy district on the hill and heavy industry downwind by the rail line, and
-  iterate with the assistant: "move the train yard next to the port".
-- *As a developer*, I add a new feature type ("oil refinery") by writing a JSON
-  definition and, optionally, a small TypeScript scorer, without touching the
+- *A Keeper preparing a 1920s campaign* generates a New England-style coastal
+  region: a decaying fishing port, a university town 20 km inland, farms and
+  woods between them, a rail line joining them to the metropolis at the map
+  edge. They zoom into the port, drag the cannery next to the wharves, paint the
+  waterfront district poorer, add a boarding house and a warehouse by hand, and
+  export a period-style handout of the harbour.
+- *A worldbuilder* paints a bay and a river, asks the assistant for "a
+  container port on the deep side of the bay with a rail yard behind it and the
+  wealthy suburbs on the opposite shore", then refines by hand.
+- *A developer* adds a new feature type ("gasworks", "asylum") as a JSON
+  definition plus an optional TypeScript layout function, without touching the
   core pipeline.
 
 ---
@@ -85,55 +107,62 @@ The reference project (Haxe/OpenFL, GPL-3.0) works roughly like this:
 5. Each ward subdivides its patch into building footprints with a recursive
    splitter tuned per ward (block size, regularity, gaps).
 
-**What we keep:** the patch/ward decomposition, `rateLocation`-style scoring,
-gate-driven artery generation, recursive lot subdivision, seeded determinism and
-URL-shareable parameters, and the clean ink aesthetic.
+**What we keep:** patch/ward decomposition for organic settlements,
+`rateLocation`-style scoring, gate-driven artery generation, recursive lot
+subdivision, seeded determinism, and the clean ink aesthetic as one theme.
 
 **What we change:**
 
 | Limitation in the reference | Our approach |
 |---|---|
-| One global Voronoi partition; no notion of terrain | Terrain layer first; partition respects water, slope and the street network |
-| Wards are discrete, hand-picked classes | Continuous wealth/density fields, discretised into classes per district; ward types become data-driven **zone profiles** |
-| Only pre-modern features | Feature library with era gating: rail, yards, ports, dry docks, industry, and more |
-| Placement is implicit in ward selection | Explicit **placement engine** with constraints, scoring, orientation, and manual pins |
-| Empty land outside wards | Multi-pass **fill** system (parcels → buildings → greenery → texture) |
-| Streets only from gates to plaza | Road hierarchy (motorway/arterial/collector/local), grid and organic patterns, rail and water networks as separate graphs |
-| No editing after generation | Command-based editing with undo; UI and LLM use the same commands |
+| One town, one Voronoi partition, no terrain | Region → settlements → districts → blocks hierarchy on top of a terrain layer |
+| Everything generated and drawn at once | Settlement-level stages eager; block-level detail generated lazily per tile and cached |
+| Wards are discrete, hand-picked classes | Continuous wealth/density fields discretised per district; ward types become data-driven **zone profiles** |
+| Only pre-modern features | Year-gated feature library: trams, rail, yards, docks, container ports, dry docks, industry, and more |
+| Placement implicit in ward selection | Explicit **placement engine** with constraints, scoring, orientation, manual pins |
+| Empty land outside wards | Multi-pass **fill** system at settlement and rural scale |
+| Streets only from gates to plaza | Road hierarchy, grid/organic/radial patterns; rail, tram and water as separate graphs |
+| No editing after generation | Full editor; authored geometry is part of the document and survives regeneration |
 
 ---
 
 ## 3. System overview
 
 ```
-┌─────────────────────────────── Browser (GitHub Pages) ───────────────────────────────┐
-│                                                                                      │
-│   ┌──────────────┐    commands     ┌──────────────────┐   CitySpec    ┌────────────┐ │
-│   │  UI (React)  │ ──────────────▶ │  Command bus /   │ ────────────▶ │  Worker:   │ │
-│   │  panels,     │                 │  store (Zustand) │               │  core      │ │
-│   │  canvas      │ ◀────────────── │  undo/redo, URL  │ ◀──────────── │  pipeline  │ │
-│   └──────────────┘   CityModel     └──────────────────┘   CityModel   └────────────┘ │
-│          ▲                                  ▲                                        │
-│          │ render                           │ tool calls (same commands)             │
-│   ┌──────┴───────┐                  ┌───────┴────────┐        HTTPS (BYOK)           │
-│   │  Renderers   │                  │  LLM assistant │ ───────────────────▶ Claude   │
-│   │  Canvas/SVG  │                  │  (tool use)    │                        API    │
-│   └──────────────┘                  └────────────────┘                               │
-└──────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────── Browser (GitHub Pages) ─────────────────────────────┐
+│                                                                                 │
+│  ┌────────────┐  commands   ┌──────────────────┐  document   ┌────────────────┐ │
+│  │ Editor UI  │ ──────────▶ │ Command bus /    │ ──────────▶ │ Worker pool:   │ │
+│  │ (React)    │             │ document store   │             │ generation     │ │
+│  │            │ ◀────────── │ undo/redo,       │ ◀────────── │ pipeline +     │ │
+│  └────────────┘  results    │ autosave (IDB)   │  tiles,     │ tile builder   │ │
+│        ▲                    └──────────────────┘  summaries  └────────────────┘ │
+│        │ vector tiles (custom protocol)     ▲                                   │
+│  ┌─────┴──────┐                     ┌───────┴────────┐    HTTPS (BYOK)          │
+│  │ MapLibre GL│                     │ LLM assistant  │ ─────────────▶ Claude    │
+│  │ + themes   │                     │ (tool use)     │                API       │
+│  └────────────┘                     └────────────────┘                          │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Three ideas hold the design together:
+Four ideas hold the design together:
 
-1. **Spec in, model out.** A small, serialisable `CitySpec` (seed + parameters +
-   user overrides) is the only input. The generation pipeline turns it into a
-   large derived `CityModel`. The spec is what goes in the URL, in saved files,
-   and in undo history. The model is never edited directly.
-2. **Everything is a command.** UI controls, manual edits and LLM tool calls all
-   dispatch typed commands that mutate the spec. This gives undo/redo, URL
-   sharing, and LLM safety for free.
-3. **Stages are pure and cached.** The pipeline is a DAG of stages keyed by a
-   hash of their inputs. Changing the style re-renders only; moving a pin re-runs
-   placement and fill but not terrain.
+1. **Document in, tiles out.** A `MapDocument` (generation spec + authored
+   geometry + overrides + annotations) is the only input. The pipeline derives
+   region- and settlement-level results eagerly, and block-level detail lazily
+   per tile. Nothing derived is edited directly; edits become authored geometry
+   or overrides in the document.
+2. **Everything is a command.** Editor tools, brushes and LLM tool calls all
+   dispatch typed commands that mutate the document. Undo/redo, autosave and
+   LLM safety follow from that.
+3. **Stages are pure, cached and hierarchical.** Each stage is keyed by a hash
+   of its inputs and a named PRNG stream. Region stages feed settlement stages
+   feed block stages. Moving a pinned port re-runs that settlement's placement
+   and the affected tiles, not the terrain.
+4. **The renderer is a map engine.** The generator produces vector tiles in a
+   synthetic planar CRS; MapLibre GL renders them with JSON style themes. This
+   gives level-of-detail, label collision, smooth zoom from 60 km to 6 m, and
+   optional 3D extrusion without custom rendering code.
 
 ---
 
@@ -141,622 +170,676 @@ Three ideas hold the design together:
 
 | Concern | Choice | Why |
 |---|---|---|
-| Language | TypeScript (strict) | Industry standard, runs in browser and Node (for tests, CLI, MCP server) |
-| Build / dev | Vite | Fast, static output, first-class Web Worker support |
-| UI | React 19 + Zustand + Tailwind CSS | Widely known; Zustand keeps state simple and serialisable |
-| Forms | JSON Schema for `CitySpec` + generated form (`@rjsf` or hand-built) | One schema drives validation, the UI, the URL codec, and LLM tool schemas |
-| Geometry | `d3-delaunay` (Voronoi), `polygon-clipping` (boolean ops), `flatbush`/`rbush` (spatial index), `simplify-js`, `poisson-disk-sampling` | Mature, small, deterministic |
-| Terrain | `simplex-noise` / `open-simplex-noise`, `d3-contour` (marching squares) | Standard noise + contour extraction |
-| Data model | GeoJSON `FeatureCollection` in local planar metres + typed `properties` | Interoperable (QGIS, turf.js, any GIS tool), trivially serialisable |
-| Randomness | Own seeded PRNG (xoshiro128** or PCG32) with named sub-streams | Determinism across browsers; `Math.random` is banned in `core` |
-| Rendering | Canvas 2D for the interactive view; SVG for export; shared scene description | Canvas handles 100k+ polygons with culling and LOD; SVG gives crisp print and editable vectors |
-| Concurrency | Web Worker via `comlink` | Keeps the UI at 60 fps during 1–3 s generations; also allows cancellation |
-| URL state | `CitySpec` → JSON → `lz-string` → URL hash | Shareable links like the reference project, without a backend |
-| Persistence | `localStorage` (recent maps, settings), file download/upload (`.city.json`) | No backend |
-| LLM | `@anthropic-ai/sdk` in the browser (BYOK), provider adapter interface | Official SDK; tool use; vision for "look at the map" questions |
-| Testing | Vitest (unit, golden-seed snapshots), Playwright (e2e + visual regression) | Standard |
-| CI/CD | GitHub Actions → `gh-pages` deployment via `actions/deploy-pages` | Required by the "GitHub site" goal |
-| Repo | pnpm workspaces monorepo | Separates engine from app so the engine can be reused (CLI, MCP, tests) |
+| Language | TypeScript (strict) | Runs in browser and Node (tests, CLI, MCP server) |
+| Build / dev | Vite | Static output, first-class Web Worker support |
+| UI | React 19 + Zustand + Tailwind CSS | Decided; Zustand keeps state serialisable |
+| Forms | JSON Schema (from Zod) for the spec + generated forms | One schema drives validation, the UI, migrations and LLM tool schemas |
+| Map rendering | **MapLibre GL JS** with an in-browser custom tile protocol | Industry-standard vector map engine: LOD, label collision, style JSON, hillshade, `fill-extrusion` 3D, high-DPI export; designed for exactly the "region to street" zoom range |
+| Vector tiles | `geojson-vt` + `vt-pbf` inside the worker | Standard MVT tiles from our GeoJSON, no server |
+| Geometry | `d3-delaunay` (Voronoi), `polygon-clipping`, `flatbush` (spatial index), `simplify-js`, `poisson-disk-sampling`, `@turf/*` selectively | Mature, deterministic |
+| Terrain | `simplex-noise`, `d3-contour`; hillshade via MapLibre `raster-dem` from generated Terrain-RGB tiles | Standard noise and contour extraction; free hillshade/3D terrain |
+| Data model | GeoJSON `FeatureCollection` in local planar metres, typed `properties` | Interoperable (QGIS, turf), trivially serialisable |
+| Randomness | Own seeded PRNG (PCG32) with named sub-streams and per-tile derivation | Determinism across browsers; `Math.random` is banned in `core` |
+| Concurrency | Worker pool via `comlink`; tile requests cancellable | Keeps the UI at 60 fps; parallel tile builds |
+| Persistence | `.citygen.json` import/export; IndexedDB autosave and recent documents; optional URL hash for small documents | No backend; the document is the source of truth |
+| LLM | `@anthropic-ai/sdk` in the browser, bring-your-own-key | Decided: Anthropic only to start |
+| Testing | Vitest (unit, golden-seed hashes), Playwright (e2e, visual regression on Chromium/Firefox/WebKit) | Standard |
+| CI/CD | GitHub Actions → GitHub Pages | Required |
+| Repo | pnpm workspaces monorepo | Engine reusable outside the app |
+| Licence | Clean-room, permissive (MIT proposed) | Decided |
 
-### 4.1 Repository layout
+### 4.1 Why MapLibre and not a custom Canvas renderer
+
+A 40 km region at 1920s density contains on the order of a million building
+footprints. Drawing that with Canvas 2D means writing tiling, culling, LOD,
+label placement and style zoom-interpolation ourselves. MapLibre already does
+all of it on WebGL and is what real-world map products use. The costs are:
+
+- The **ink theme** must be expressed as a MapLibre style: hatched fills from
+  a sprite, dashed and cased lines, and a "sketch" geometry post-process
+  (controlled jitter applied when the ink theme's tiles are built). It will be
+  close to the reference's look, not identical. Phase 1 includes a spike to
+  prove this is good enough; the fallback is a PixiJS renderer behind the same
+  tile source.
+- **SVG export** cannot come from MapLibre. A separate `svg-export` package
+  walks the model for a chosen bounding box and applies the same theme
+  definitions (themes are authored in a small intermediate format compiled to
+  both MapLibre style JSON and SVG styles).
+- Coordinates must be lon/lat internally for MapLibre. We use a **synthetic
+  CRS**: the region origin is placed at longitude 0, latitude 0 and metres are
+  converted with a fixed factor (1° ≈ 111.32 km). Mercator distortion below
+  0.5° of latitude is under 0.005 %, so a 60 km region is effectively planar.
+  The model stays in metres; the conversion happens in the tile builder.
+
+### 4.2 Repository layout
 
 ```
 CityGenerator/
 ├── apps/
-│   └── web/                 # Vite + React site deployed to GitHub Pages
+│   └── web/                 # Vite + React editor deployed to GitHub Pages
 ├── packages/
-│   ├── core/                # generation engine: spec, stages, geometry, features (no DOM)
-│   ├── render/              # scene builder, Canvas renderer, SVG exporter, themes
-│   ├── llm/                 # provider adapters, tool definitions, system prompts
-│   ├── features/            # built-in feature library (JSON + scorers)
-│   ├── exporters/           # PNG, PDF, GeoJSON, VTT formats
-│   └── mcp/                 # (later) MCP server exposing the same tools headlessly
-├── docs/                    # this design doc, roadmap, ADRs
-└── .github/workflows/       # ci.yml (lint, test), pages.yml (deploy)
+│   ├── core/                # document schema, PRNG, stage runner, geometry, pipeline (no DOM)
+│   ├── features/            # feature library: zone profiles, feature types, layouts (JSON + TS)
+│   ├── tiles/               # tile builder: model → MVT + Terrain-RGB, sketch post-process
+│   ├── themes/              # theme sources compiled to MapLibre style JSON and SVG styles
+│   ├── editor/              # command bus, tools, selection, snapping, history (framework-agnostic)
+│   ├── llm/                 # Anthropic adapter, tool definitions, prompts, evals
+│   ├── export/              # PNG, SVG, GeoJSON, Universal VTT, Foundry
+│   └── mcp/                 # (later) MCP server and CLI over the same commands
+├── docs/                    # design, roadmap, ADRs, feature-authoring guide
+└── .github/workflows/       # ci.yml, pages.yml
 ```
 
 ---
 
 ## 5. Data model
 
-### 5.1 `CitySpec` (input)
+### 5.1 `MapDocument` (the `.citygen.json` file)
 
-Small, declarative, versioned. Everything the user or the assistant can change
-lives here.
+The document is the unit of persistence and is not size-constrained. It has
+four parts:
 
 ```ts
-interface CitySpec {
-  version: 1;
-  seed: string;                       // any string; hashed into the PRNG
-  name?: string;
-  extent: { widthM: number; heightM: number };   // map size in metres
-  era: 'medieval' | 'renaissance' | 'industrial' | 'modern' | 'nearFuture';
-  population?: number;                // drives size/density defaults
+interface MapDocument {
+  format: 'citygen'; version: 2;          // migrations are part of core
+  meta: { name: string; created: string; modified: string; app: string; notes?: string };
 
-  terrain: {
-    preset: 'plains' | 'coast' | 'bay' | 'riverValley' | 'hills' | 'island' | 'delta' | 'custom';
-    relief: number;                   // 0..1 vertical exaggeration
-    seaLevel: number;                 // metres
-    roughness: number;                // noise octaves/persistence
-    rivers: { count: number; minLength: number };
-    edits?: TerrainEdit[];            // user brush strokes: raise/lower/flatten/water
-    importedHeightmap?: { dataUrl: string; minM: number; maxM: number };
-  };
-
-  society: {
-    wealth: FieldParams;              // baseline, gradient, noise, painted overrides
-    density: FieldParams;
-    inequality: number;               // spread between richest and poorest districts
-  };
-
-  networks: {
-    streetPattern: 'organic' | 'grid' | 'radial' | 'mixed';
-    blockSizeM: number;
-    roads: { motorways: number; arterials: number; ringRoad: boolean };
-    rail: { enabled: boolean; mainlines: number; stations: number; freight: boolean };
-    water: { port: boolean; canals: boolean };
-  };
-
-  features: FeatureRequest[];         // e.g. { type: 'containerPort', size: 'large', pin?: Pose, lock?: true }
-  walls?: { enabled: boolean; citadel: boolean };
-
-  style: { theme: string; labels: boolean; grid?: GridSpec; overlays: OverlayId[] };
-  overrides: Override[];              // targeted patches produced by editing (see §10)
+  spec: RegionSpec;                        // generation parameters (small)
+  authored: FeatureCollection<AuthoredProps>;   // hand-drawn geometry (can be large)
+  overrides: Override[];                   // targeted patches to generated results, e.g. pins, frozen features
+  annotations: Annotation[];               // GM notes, labels, markers, handout regions
+  viewport?: { center: [number, number]; zoom: number; bearing: number; pitch: number };
+  ui?: { theme: string; layers: LayerState; year?: number };   // presentation only
 }
 ```
 
-Design notes:
+- `spec` is what the generator reads. `authored` and `overrides` are inputs
+  too: the generator treats authored geometry as fixed and generates around it.
+- Derived results are **never** stored in the document; they are recomputed
+  (and cached in IndexedDB keyed by hash for fast reopen).
+- Every feature in `authored` carries `layer` (`street`, `rail`, `tram`,
+  `water`, `zone`, `building`, `facility`, `poi`, `vegetation`, `terrainEdit`,
+  `fieldEdit`) and `origin: 'authored' | 'frozen'` (frozen = generated then
+  fixed by the user, keeps its original id for provenance).
 
-- **Presets over parameters.** Most users touch `era`, `terrain.preset`,
-  `population`, and a handful of sliders. Everything else has defaults derived
-  from those.
-- **Overrides are append-only patches** (`{ target, op, value }`) so that
-  "regenerate with a new seed but keep my pinned port" is well defined.
-- The spec has a JSON Schema. It validates uploads, drives the parameter UI, and
-  is reused verbatim as the `input_schema` of the LLM's `update_spec` tool.
-
-### 5.2 `CityModel` (output)
-
-Large, derived, never hand-edited. Serialisable for export and caching.
+### 5.2 `RegionSpec`
 
 ```ts
-interface CityModel {
-  spec: CitySpec;                     // the exact spec that produced it
-  crs: { unit: 'm'; origin: [number, number]; cellSizeM: number };
+interface RegionSpec {
+  seed: string;
+  extent: { widthM: number; heightM: number };          // up to ~60 km on a side
+  year: number;                                          // 1100..2050; drives era profile
+  climate: 'temperate' | 'maritime' | 'continental' | 'mediterranean' | 'arid' | 'boreal';
+  culture: string;                                       // naming/style pack id, e.g. 'newEngland', 'england', 'centralEurope'
 
   terrain: {
-    height: Float32Array; width: number; height_: number;   // heightmap grid
-    slope: Float32Array; aspect: Float32Array;
-    waterMask: Uint8Array;            // sea, lake, river
-    flowAccum: Float32Array;
-    contours: Feature<MultiLineString>[];      // at style-defined intervals
-    coastline: Feature<MultiPolygon>;
-    rivers: Feature<LineString>[];    // with width property
+    preset: 'plains' | 'coast' | 'bay' | 'riverValley' | 'hills' | 'archipelago' | 'delta' | 'estuary' | 'custom';
+    relief: number; roughness: number; seaLevel: number;
+    rivers: { major: number; minor: number };
+    importedHeightmap?: { dataUrl: string; minM: number; maxM: number; cellSizeM: number };
   };
 
-  fields: {
-    wealth: Float32Array;             // 0..1, same grid as terrain
-    density: Float32Array;
-    landValue: Float32Array;          // derived; used by placement scoring
-  };
+  settlements: SettlementSpec[];     // explicit list; empty = let the generator place them
+  settlementPolicy: { count: [number, number]; kinds: Record<SettlementKind, number> };   // weights
+  society: { wealth: FieldParams; density: FieldParams; inequality: number };
+  networks: RegionNetworkSpec;       // inter-settlement roads, rail, ferries, canals
+  features: FeatureRequest[];        // region-level requests (e.g. "one naval base", "quarry")
+  overridesPolicy: { keepFrozenOnReseed: boolean };
+}
 
-  districts: Feature<Polygon, DistrictProps>[];   // zone, wealthClass, densityClass, name
-  networks: {
-    street: Graph<StreetNode, StreetEdge>;       // class, width, oneWay, bridge/tunnel
-    rail: Graph<RailNode, RailEdge>;             // mainline/siding/yard, gradient, radius
-    water: Graph<WaterNode, WaterEdge>;          // shipping lanes, canals
-  };
-  parcels: Feature<Polygon, ParcelProps>[];
-  buildings: Feature<Polygon, BuildingProps>[];  // kind, floors, wealthClass, districtId
-  facilities: Feature<Polygon | MultiPolygon, FacilityProps>[];  // port, yard, plant… with sub-parts
-  greenery: Feature<Polygon | Point, GreenProps>[];              // parks, woods, trees, fields
-  labels: Label[];
-  stats: CityStats;                   // area by zone, population estimate, km of rail, berths…
+interface SettlementSpec {
+  id: string; name?: string;
+  kind: 'metropolis' | 'city' | 'town' | 'village' | 'hamlet' | 'portTown' | 'fishingVillage'
+      | 'millTown' | 'miningTown' | 'resort' | 'universityTown' | 'suburb' | 'industrialSatellite';
+  site?: { center: [number, number]; lock: boolean };    // pin or let the placement engine choose
+  population: number;
+  founded?: number;                                      // year; older core = organic + walls
+  growth?: { year: number; population: number }[];       // optional timeline
+  layout: { streetPattern: 'organic' | 'grid' | 'radial' | 'mixed'; blockSizeM?: number; walls?: boolean };
+  features: FeatureRequest[];                            // settlement-level requests (port, yard, campus…)
+  overrides?: Partial<SocietyParams>;
 }
 ```
 
-All `Feature`s are standard GeoJSON with an `id` and typed `properties`. The
-grid arrays share one raster definition so fields can be sampled cheaply.
+`year` selects an **era profile** (a data file) that gates feature types, street
+widths, building kinds, vehicle-era assumptions (horse, tram, car) and the
+default mix of zone profiles. Profiles exist for 1100, 1400, 1650, 1780, 1850,
+1890, 1925, 1955, 1985, 2020; intermediate years interpolate weights and pick
+the nearest profile for discrete choices.
 
-### 5.3 Coordinate system
+### 5.3 Derived model
 
-Local planar metres, origin at map centre, x east, y north. Renderers flip y.
-Exports to GeoJSON stay planar (a synthetic CRS is declared in metadata); if a
-user wants a real-world anchor later, an affine transform to a chosen
-lon/lat is a rendering-time concern only.
+The derived model is hierarchical and partially materialised:
+
+```
+RegionModel
+ ├─ terrain (base raster ~60 m/cell + lazily refined 4 m/cell detail tiles)
+ ├─ fields: wealth, density, landValue (region raster)
+ ├─ hydrology: rivers, lakes, coast, bathymetry
+ ├─ settlements[]: site, footprint, SettlementModel (eager)
+ ├─ networks: regional road/rail/water graphs
+ └─ rural: land cover polygons, farms, woods, estates (eager, coarse)
+
+SettlementModel (eager, per settlement)
+ ├─ districts[] with zone profile, wealth/density class, era
+ ├─ networks: streets, tram, rail, water (settlement scale)
+ ├─ facilities[] (placed features with parts)
+ ├─ blocks[] : polygon + block seed + generation recipe   ← boundary between eager and lazy
+ └─ stats
+
+BlockModel (lazy, cached, keyed by block id + inputs hash)
+ ├─ parcels[] ├─ buildings[] ├─ fill[] (parking, gardens, trees…) └─ pois[]
+```
+
+All geometry is GeoJSON with typed `properties`. The **block** is the unit of
+lazy generation because parcels and buildings depend only on the block polygon,
+its recipe (zone profile, wealth/density class, era, frontage streets) and the
+block seed. Tiles are assembled from the blocks that intersect them; blocks
+crossing tile boundaries are generated once and shared.
+
+### 5.4 Coordinate system
+
+Model coordinates are planar metres with origin at the region centre, x east,
+y north. The tile builder converts to the synthetic lon/lat for MapLibre
+(§4.1). Exports to GeoJSON stay in metres and declare the synthetic CRS in
+metadata.
 
 ---
 
 ## 6. Generation pipeline
 
-Stages are pure functions `(inputs, rng) → outputs`, run inside the worker,
-memoised on a content hash of their inputs. Each stage receives its own named
-PRNG stream (`rng.fork('terrain')`) so that changing one parameter does not
-reshuffle unrelated stages.
+Stages are pure functions `(inputs, rng) → outputs`, memoised on a content hash
+of their inputs, each with its own named PRNG stream. The pipeline runs in a
+worker pool; region and settlement stages run eagerly on document change, block
+stages on demand.
 
 ```
- 1. Terrain        heightmap → hydrology → water masks → coast/rivers → slope
- 2. Site           city centre(s), buildable mask, growth axes, era profile
- 3. Society fields wealth, density, land value (from centre distance, terrain, noise, pins)
- 4. Macro network  motorways/arterials/ring, rail mainlines, shipping approach
- 5. Districts      partition buildable land into districts; assign zone profile
- 6. Placement      large facilities (ports, yards, plants, stadiums…) with constraints
- 7. Local network  streets inside districts (grid/organic), spurs, sidings, quays
- 8. Parcels        subdivide blocks into lots per zone/wealth/density
- 9. Buildings      footprints and attributes per parcel
-10. Fill           parks, woods, fields, lots, yards, trees; texture in leftovers
-11. Labels & stats naming, label placement, summary statistics
-12. Scene          renderer-agnostic draw list (done in `render`, not `core`)
+Region level (eager)
+  R1 Terrain base       heightmap → hydrology → coast/rivers/lakes → slope/bathymetry
+  R2 Land cover         climate + terrain → forest, marsh, moor, farmland suitability
+  R3 Settlement siting  place settlements (placement engine): harbours, crossings, confluences…
+  R4 Society fields     wealth, density, land value across the region
+  R5 Regional networks  roads/turnpikes, rail mainlines + junctions, ferries, canals between settlements
+  R6 Rural fill         estates, farms, hamlets, woods, quarries, mills along rivers, country lanes
+
+Settlement level (eager, per settlement, parallel)
+  S1 Site               buildable mask, growth axes, historic core extent per `founded`/`year`
+  S2 Districts          partition + zone profile + wealth/density/era class
+  S3 Macro network      arterials, ring roads, tram lines, rail approach + stations
+  S4 Placement          facilities (ports, yards, plants, campuses, parks…) with connectors
+  S5 Local network      streets per district pattern; spurs, sidings, quays
+  S6 Blocks             block polygons + recipes (the eager/lazy boundary)
+  S7 Amenities & POIs   what each district is "owed": churches, schools, pubs, police, hospital…
+  S8 Naming & stats
+
+Block level (lazy, per tile request)
+  B1 Parcels            lot subdivision by recipe
+  B2 Buildings          footprints, kind, floors, roof, use, address
+  B3 Fill               gardens, yards, parking, trees, sheds, walls
+  B4 Sketch (ink theme) controlled jitter for hand-drawn look
+
+Terrain detail (lazy, per tile)
+  T1 Refine             upsample base heightmap + detail noise, re-cut rivers, contours, Terrain-RGB
 ```
 
-Stages 4–7 form a loop in practice: a placed port requests a rail spur and a
-quay road; those are added to the networks and the districts are re-cut around
-them. We implement this as **placement emits network requests** that the local
-network stage fulfils, with at most one extra pass to avoid oscillation.
+Authored geometry enters at every level: authored terrain and field edits
+before R1/R4, authored regional networks before R5, authored districts/zones
+before S2, authored streets/rail before S5, authored buildings before B2. The
+generator treats authored features as fixed constraints and fills around them.
 
-### 6.1 Terrain (Goal 5)
+### 6.1 Terrain (Goal 6)
 
-- **Heightmap generation**: fractional Brownian motion (simplex) with domain
-  warping, blended with a preset *shape function* (coast gradient, valley
-  profile, island falloff, bay mask). Resolution defaults to 2–5 m per cell,
-  capped at ~1024² cells for interactive speed.
-- **User edits**: brush strokes stored in the spec (`raise`, `lower`, `flatten`,
-  `water`, `smooth`) are replayed after generation. **Imported heightmaps**
-  (8/16-bit PNG) replace the noise.
-- **Hydrology**: priority-flood depression filling, D8 flow direction, flow
-  accumulation; rivers where accumulation exceeds a threshold, widened by
-  accumulation; lakes where filling raised terrain; sea where height < sea level.
-  Rivers are extracted as smoothed polylines with width, then buffered to
-  polygons for rendering and collision.
-- **Derived rasters**: slope, aspect, distance-to-water, distance-to-sea,
-  bathymetry (depth below sea level, needed for ports).
-- **Contours** via marching squares at style-chosen intervals; **hillshade** as a
-  precomputed raster for the terrain layer.
-- **Constraints for later stages**: buildable = slope < `maxSlope(zone)` and not
-  water; flat land is scarce in hill presets, which naturally pushes industry to
-  valley floors and wealthy housing onto slopes with views.
-- **Terrain-aware routing**: major roads and rail use A* on the raster with cost
-  = distance × (1 + k·slope) and a hard gradient cap (rail: ~2.5%, motorway:
-  ~6%, local streets: ~12%). When the path must cross water or exceed the cap we
-  insert **bridges**, **cuttings/embankments** or **tunnels**, recorded on the
-  edge and rendered distinctly. Local streets on slopes are aligned along
-  contours (terraces) rather than straight down them.
+- **Multi-resolution.** The base raster covers the region at ~60 m/cell
+  (1000² cells for 60 km, ~4 MB per Float32 layer). Detail tiles at 4 m/cell
+  are produced on demand by bicubic upsampling plus band-limited detail noise
+  seeded per tile, so any two tiles agree at their shared edge. Hydrology runs on
+  the base raster; river centrelines are refined at the detail level.
+- **Generation**: fBm with domain warping blended with preset shape functions
+  (coast gradient, valley profile, bay/estuary mask, archipelago falloff).
+  Imported heightmaps replace the noise. User brush edits (raise, lower,
+  smooth, flatten, water) are authored features replayed after generation.
+- **Hydrology**: priority-flood depression filling, D8 flow, accumulation,
+  rivers above a threshold with width from accumulation, lakes from filled
+  depressions, sea below sea level, **bathymetry** from a smoothed extension of
+  the land slope below the coast (needed for harbours and ports), tidal flats
+  and marsh where slope is near zero at the coast.
+- **Derived**: slope, aspect, distance to water/sea, viewshed proxy (elevation
+  above local mean), flood risk (low and near water).
+- **Contours** (marching squares) at theme-chosen intervals; **hillshade** and
+  optional 3D terrain from Terrain-RGB tiles rendered by MapLibre.
+- **Routing**: regional roads and rail use A* on the base raster with cost =
+  distance × (1 + k·slope) and hard gradient caps (rail ≈ 2.5 %, motorway 6 %,
+  local streets 12 %). Crossings of water or over-cap segments become bridges,
+  cuttings, embankments, viaducts or tunnels, stored on the edge and rendered
+  distinctly. Local streets on slopes follow contours (terraces).
 
-### 6.2 Society fields: wealth and density (Goal 3)
+### 6.2 Society fields: wealth and density (Goal 4)
 
-Two scalar rasters in `[0,1]`, plus a derived land-value raster.
+Two scalar rasters in `[0, 1]` at region resolution, refined per settlement,
+plus derived land value.
 
 ```
 density(p) = σ( a·centreProximity(p) + b·transitAccess(p) + c·flatness(p) + noise )
 wealth(p)  = σ( d·elevationAdvantage(p) + e·waterfrontAmenity(p) + f·distanceFromNuisance(p)
-              − g·industrialProximity(p) − h·railNoise(p) + i·paintedOverrides(p) + noise )
+              − g·industrialProximity(p) − h·railNoise(p) − i·floodRisk(p)
+              + j·paintedOverrides(p) + noise )
 ```
 
-- `centreProximity` uses the site's growth axes (multi-centre cities supported).
-- `nuisance` sources: heavy industry, rail yards, ports, power plants, prevailing
-  wind direction (downwind = poorer). The fields therefore depend on placement,
-  so they are computed twice: once before placement (coarse), once after.
-- `inequality` scales the spread; `era` shifts the baseline (medieval density is
-  high inside walls and near zero outside).
-- **Discretisation**: each district takes the area-weighted mean and is assigned
-  `wealthClass ∈ {slum, poor, modest, comfortable, affluent, elite}` and
-  `densityClass ∈ {rural, suburban, low, medium, high, core}`.
-- **Effects** (encoded in zone profiles, §7): lot size, building footprint and
-  height, setback, street width and pattern (cul-de-sacs for affluent suburbs,
-  tight grids for poor dense areas, courtyards for elite), tree density, park
-  probability, quality of road surface, presence of amenities.
-- **Rendering**: choropleth overlays for wealth and density (colour on screen,
-  hatch patterns in print themes), legends, and per-district labels.
+- `centreProximity` is per settlement and per growth axis; the metropolis
+  dominates the regional field, satellites add local peaks.
+- Nuisance sources (industry, yards, ports, gasworks, power plants, tanneries in
+  early eras) and prevailing wind produce the classic "poor east end, rich west
+  end" pattern automatically. Because nuisance depends on placement, fields are
+  computed coarse before placement and refined after.
+- `inequality` scales the spread; `year` shifts baselines (1925: dense
+  tenements near work, streetcar suburbs for the middle class, estates for the
+  rich).
+- **Discretisation** per district: `wealthClass ∈ {slum, poor, modest,
+  comfortable, affluent, elite}`, `densityClass ∈ {rural, suburban, low,
+  medium, high, core}`. Both numeric and class values are exposed to the UI and
+  the assistant.
+- **Effects** via zone profiles: lot size, footprint, floors, setback, street
+  width and pattern, tree density, park probability, road surface, amenity
+  quality.
+- **Editing**: wealth and density brushes write authored `fieldEdit` features;
+  the inspector shows the numeric value and class for any point.
+- **Rendering**: choropleth overlays with legends in colour themes; hatch
+  patterns in ink/print themes; GM-only by default in player exports.
 
-### 6.3 Districts and zone profiles
+### 6.3 Settlements and districts
 
-The buildable mask is partitioned into **districts**:
-
-- *Organic eras*: relaxed Voronoi patches (as in the reference) clipped to the
-  buildable mask and split by rivers and major roads.
-- *Grid eras*: the macro network defines super-blocks; districts are unions of
-  super-blocks with similar field values.
-- *Mixed*: an organic old town core (optionally walled, with remnants) surrounded
-  by a grid.
-
-Each district gets a **zone profile**, chosen by a scoring function over the
-fields and adjacency (the generalisation of `rateLocation`). Zone profiles are
-data (JSON), for example:
-
-```jsonc
-{
-  "id": "industrial.heavy",
-  "eras": ["industrial", "modern", "nearFuture"],
-  "prefers": { "density": [0.2, 0.7], "wealth": [0, 0.35], "slope": [0, 0.03] },
-  "adjacency": { "wants": ["rail.mainline", "water.deep", "road.arterial"], "avoids": ["residential.affluent"] },
-  "lots": { "minAreaM2": 4000, "maxAreaM2": 60000, "regularity": 0.9 },
-  "streets": { "pattern": "grid", "widthM": 14, "blockM": 250 },
-  "buildings": { "kinds": ["shed", "hall", "tankFarm", "chimney"], "coverage": 0.45 },
-  "fill": ["parking", "storageYard", "scrub"]
-}
-```
-
-Built-in profiles cover the reference's wards (market, craftsmen, merchant,
-patriciate/elite, slum, military, administration, cathedral/civic, park, farm,
-gate) and modern ones (CBD, residential at each wealth/density combination,
-retail strip, light/heavy industry, logistics, port, rail, institutional,
-campus, airport reserve).
+- **Settlement siting** uses the placement engine (§6.5) with feature types
+  per settlement kind: a `portTown` wants a sheltered deep harbour; a
+  `millTown` wants a river with gradient; a `universityTown` wants a mid-size
+  site away from heavy industry; a `suburb` wants to be 5–15 km from the
+  metropolis on a rail line or arterial. Users can pin sites.
+- Each settlement gets a **historic core** whose extent is derived from
+  `founded` and the growth curve: an organic Voronoi-patch core (with walls if
+  the founding era had them and the era profile keeps remnants), surrounded by
+  rings whose street pattern follows the era they were built in. This is how
+  mixed-era layouts arise naturally rather than by a "mixed" switch.
+- **Districts** are relaxed-Voronoi patches (organic rings) or super-block
+  unions (grid rings), clipped to the buildable mask and split by rivers, rail
+  and arterials.
+- **Zone profiles** are data (JSON), scored per district by fields and
+  adjacency. Built-in profiles cover the reference's wards and modern ones:
+  CBD/downtown, residential at every wealth × density combination, retail
+  strip/high street, warehouse district, light and heavy industry, logistics,
+  port, rail lands, institutional, campus, hospital, military, cemetery, park,
+  allotments, and era-specific ones (streetcar suburb, tenement district,
+  company town rows, garden suburb, tower estate).
 
 ### 6.4 Networks
 
-Three separate graphs (street, rail, water) with shared node types where they
-interact (level crossings, bridges, ferry piers, port gates).
+Graph types: **street** (motorway → arterial → collector → local → lane/alley),
+**tram/streetcar** (on streets, 1880–1960 by default), **rail** (mainline,
+branch, spur, siding, yard; elevated and subway variants for metropolises after
+1900), **water** (shipping lanes, ferries, canals with locks).
 
-- **Road hierarchy**: motorway → arterial → collector → local. Macro roads are
-  routed on the terrain raster between entry points on the map edge and the city
-  centres, then the ring road (if any). Local streets are generated per district
-  according to its profile: grid (with jitter and occasional diagonals), organic
-  (space-colonisation / growth from arterials, as in the reference's artery
-  logic), radial, or cul-de-sac trees.
-- **Rail** (Goal 1): mainlines enter at 1–3 map edges and pass near, not
-  through, the centre; a **central station** sits at the mainline/centre closest
-  approach. Constraints: minimum curve radius (scaled by map size), gradient cap,
-  no tight zig-zags. Freight **spurs** and **sidings** branch to industrial
-  districts and the port. Level crossings on local streets; bridges/underpasses
-  on arterials. Tracks are rendered as parallel lines with sleepers at high zoom.
-- **Water**: shipping approach lane from the map edge along the deepest
-  bathymetry to the port; canals (industrial era) as straight cut waterways with
-  locks if terrain requires.
+- Regional roads connect settlements by terrain-routed paths; after ~1950 a
+  motorway network with junctions and a ring road appears for the metropolis.
+- **Rail**: mainlines enter from 1–3 map edges, junction at the metropolis,
+  branch lines to towns proportional to population and year; central stations at
+  closest approach with goods yards beside them in earlier eras; suburban
+  stations spaced by era; freight spurs to industry and ports; level crossings
+  on local streets, bridges on arterials; minimum curve radius and gradient
+  cap enforced; sleepers rendered at high zoom.
+- **Tram** lines radiate from the centre along arterials in the years they
+  existed, and generate the streetcar suburbs around their termini.
+- **Water**: shipping approach along deepest bathymetry; ferries where a
+  crossing lacks a bridge; canals (1760–1900) as straight cuts with locks where
+  terrain requires, with wharves and warehouses along them.
 
-### 6.5 Placement engine (Goal 4)
+### 6.5 Placement engine (Goal 5)
 
-A single engine places every "large" thing: ports, rail yards, industrial
-plants, stadiums, cemeteries, castles, cathedrals, parks, woods, farms, and
-user-defined features. A **feature type** declares:
+A single engine places everything from a settlement to a park bench. A
+**feature type** declares:
 
 ```ts
 interface FeatureType {
-  id: string;                          // 'containerPort'
-  eras: Era[];
-  footprint: FixedFootprint | ParametricFootprint;   // e.g. rectangle 600–1500 m × 300–600 m
-  hard: Constraint[];                  // must all pass
-  soft: Scorer[];                      // weighted, summed
-  orientation: 'free' | 'alignCoast' | 'alignRail' | 'alignStreetGrid';
+  id: string;                          // 'port.container', 'rail.yard', 'settlement.millTown'
+  level: 'region' | 'settlement' | 'block';
+  years: [number, number];             // availability window
+  footprint: FixedFootprint | ParametricFootprint;
+  hard: Constraint[];                  // all must pass
+  soft: Scorer[];                      // weighted sum
+  orientation: 'free' | 'alignCoast' | 'alignRail' | 'alignStreet' | 'alignWind';
   connectors: ConnectorRequest[];      // { network: 'rail', class: 'spur' }, { network: 'street', class: 'arterial' }
-  nuisance?: { radiusM: number; strength: number };   // feeds back into wealth field
-  layout: (ctx, footprintPolygon, rng) => SubFeature[];  // internal detail generator
-  fill?: FillRule[];                   // how leftover space inside the footprint is used
+  nuisance?: { radiusM: number; strength: number };
+  layout: (ctx, footprint, rng) => SubFeature[];   // internal detail
+  fill?: FillRule[];
+  scaleCompression?: number;           // shrink real-world sizes for playability (default per type)
 }
 ```
 
-Constraints and scorers are small, composable primitives:
-`nearWater(depthM, maxDistM)`, `maxSlope(x)`, `inZone([...])`, `nearNetwork('rail', maxDistM)`,
-`awayFrom('residential.affluent', minDistM)`, `downwindOf(centre)`, `flatArea(minM2)`,
-`onMapEdge(side)`, `landValueBelow(x)`.
+Primitives: `nearWater(depthM, maxDistM)`, `sheltered()`, `maxSlope(x)`,
+`inZone([...])`, `nearNetwork(kind, maxDistM)`, `awayFrom(profile, minDistM)`,
+`downwindOf(centre)`, `flatArea(minM2)`, `onMapEdge(side)`,
+`landValueBelow(x)`, `riverGradientAbove(x)`, `populationAtLeast(n)`.
 
-Algorithm per feature request (in priority order: user-pinned first, then largest
-footprint first):
+Algorithm per request (pinned first, then by footprint size):
 
-1. If pinned: validate hard constraints (warn, don't refuse), carve, done.
-2. Sample candidate positions with Poisson-disk sampling over the mask where hard
-   constraints pass; for each candidate try the allowed orientations.
-3. Score = Σ wᵢ·scorerᵢ − overlap penalty (spatial index) − distance-from-hint
-   (if the user gave a vague hint such as "north").
-4. Take the best; run `layout()` to produce sub-features (berths, cranes,
-   container stacks, ladder tracks, halls, tanks); emit connector requests.
-5. Carve the footprint out of districts and mark nuisance for the field
-   recomputation.
+1. Pinned: validate hard constraints, warn on failure, carve, done.
+2. Poisson-disk candidates over the passing mask; try allowed orientations.
+3. Score = Σ wᵢ·scorerᵢ − overlap penalty − distance-from-hint (a vague hint
+   such as "north of the station" is resolved to a point by the app).
+4. Take the best; run `layout()`; emit connector requests; carve; register
+   nuisance.
+5. On failure: shrink, relax soft constraints, and finally report
+   "could not place X because Y" to the UI and the assistant.
 
-Failure mode: if no candidate passes, degrade (shrink footprint, relax soft
-constraints) and finally report "could not place X because Y" — this message is
-shown in the UI and returned to the LLM.
+### 6.6 Modern and period facilities (Goal 3)
 
-### 6.6 Modern facility generators (Goal 2)
+Each is a `FeatureType` with a bespoke `layout()` and era variants:
 
-Each is a `FeatureType` with a bespoke `layout()`:
-
-| Feature | Siting (hard/soft) | Internal layout |
+| Feature | Siting | Layout by era |
 |---|---|---|
-| **Container port** | Deep water (bathymetry ≥ 12 m equivalent) within 100 m; long straight-ish shoreline; flat; low land value; wants rail + arterial | Straight **quay** (possibly reclaimed land polygon), berths every 300 m, gantry **cranes** on quay rail, **container yard** grid of stacks with row spacing, gate complex, truck marshalling, customs buildings, **breakwater** if exposed coast, rail sidings alongside yard, optional Ro-Ro ramp and tank terminal |
-| **Dry dock** | Adjacent to port/harbour, deep water | Rectangular basin cut into quay, caisson gate, pump house, workshop halls alongside, slipway variant for smaller yards; graving vs floating dock variants |
-| **Rail yard** | Adjacent to a mainline, flat, elongated, near industry/port; avoids affluent | **Ladder tracks** fanning from a throat on each end, 6–30 parallel tracks, hump (optional), engine shed / roundhouse (industrial era), loco depot, container transfer cranes if intermodal |
-| **Heavy industry** | Flat, near rail/water, downwind, low wealth | Large halls, tank farms (circles), chimneys/stacks, cooling towers, pipe racks, internal roads, rail siding, parking, buffer strip |
-| **Light industry / logistics** | Near motorway junction, flat | Big-box warehouses with dock doors, truck yards, parking |
-| **Power plant** | Water for cooling, rail/pipeline for fuel, edge of city | Turbine hall, boilers, stacks/cooling towers, switchyard with lines leaving |
-| **Refinery / chemical** | Near port + rail, far from residential | Dense tank farm, process units, flare stack |
-| **Marina / fishing harbour** | Sheltered shallow water | Pontoons, slipway, fish market |
-| **Airport** (stretch) | Very flat, very large, outer edge | Runways aligned to prevailing wind, terminal, apron, hangars |
+| **Port** | Deep sheltered water, straight shoreline, flat, low land value, wants rail + arterial | *≤1900*: finger piers, wharves, bonded warehouses, customs house, ship chandlers, sail lofts. *1900–1960*: break-bulk quays, transit sheds, rail on the quay, cranes, grain elevator, cold store, coal staithes. *≥1965*: container terminal: reclaimed quay, berths every 300 m, gantry cranes, container yard grid, gate complex, Ro-Ro ramp, tank terminal, breakwater, intermodal rail |
+| **Fishing harbour** | Sheltered shallow water | Quay, fish market, ice house, net lofts, cannery/smokehouse, boat yard, slipway |
+| **Shipyard / dry dock** | Adjacent to harbour, deep water | Graving dock cut into the quay with caisson gate and pump house, slipways, building berths, mould loft, plate shops; floating dock variant; modern variant with covered halls |
+| **Rail yard** | Beside a mainline, flat, long, near industry/port; avoids affluent | Ladder tracks from a throat at each end, 6–30 roads, hump (optional), engine shed / roundhouse and turntable (steam era), coaling stage, water tower; diesel depot and intermodal cranes later |
+| **Heavy industry** | Flat, near rail/water, downwind, low wealth | Halls, tank farms, chimneys/stacks, cooling towers, pipe racks, sidings, slag heaps (steel), coke ovens |
+| **Gasworks** (1810–1970) | Edge of town near rail/canal | Retort house, gasholders (circles), coal yard, tar tanks |
+| **Mill** (water 1100–1900, textile 1780–1950) | River with gradient / canal | Mill race, wheel house, multi-storey mill, workers' rows, mill pond |
+| **Light industry / logistics** | Near motorway junction, flat | Big-box warehouses, docks, truck yards |
+| **Power plant** | Cooling water, fuel by rail/water | Turbine hall, boilers, stacks/cooling towers, switchyard, lines leaving |
+| **Refinery / chemical** | Port + rail, far from residential | Dense tank farm, process units, flare stack |
+| **Airport** (≥1925) | Very flat, very large, outer edge | Grass field and hangars early; runways aligned to wind, terminal, apron later |
+| **Institutions** | Per type | University campus (quad, library, laboratories), hospital, asylum/sanatorium (isolated, grounds, wings), prison, military base, cemetery, waterworks, observatory |
 
-Sub-features are stored as `facilities[].parts[]` with their own geometry so the
-renderer can draw cranes, tracks and tanks distinctly and exporters can include
-them.
+Sub-features are stored as `facilities[].parts[]` with their own geometry so
+renderers draw cranes, tracks and tanks distinctly and exporters keep them.
+Large facilities apply a `scaleCompression` factor by default so that a port
+does not consume the entire town, with a toggle for true scale.
 
-### 6.7 Parcels, buildings and fill (Goal 4)
+### 6.7 Parcels, buildings and fill
 
-- **Parcels**: each block (polygon bounded by streets or district edges) is
-  subdivided with the recursive OBB-split used by the reference, parameterised by
-  the zone profile (target lot area, regularity, street-frontage requirement).
-  Deep blocks get back lanes or courtyards depending on era and wealth.
-- **Buildings**: per parcel, a footprint generator picks a building *kind* from
-  the profile and wealth/density class (row house, detached, villa, tenement,
-  tower, hall, shed, big box, courtyard block…), sets setbacks, and produces the
-  polygon plus `floors`, `roof`, `use`. Density class controls coverage and
-  floors; wealth controls setback, garden, and irregularity.
-- **Fill passes** run in order over whatever remains unassigned, at district and
-  then at map level:
-  1. Amenities the district is "owed" (school, church/civic, small park, market
-     square) sized by population.
-  2. Parks/greens in leftover polygons above a size threshold.
-  3. Parking lots and yards in industrial/retail zones; allotments or cemeteries
-     on the fringe.
-  4. Woods on steep or wet land; fields/pasture on flat rural land (with hedge
-     lines and farm buildings); scrub elsewhere.
-  5. Point features: trees along affluent streets and in parks; benches, wells,
-     etc. are optional style-level detail.
-  6. Anything still empty and smaller than a threshold is merged into a
-     neighbour; larger leftovers become "wasteland" and are reported in stats so
-     the rule set can be tuned.
+- **Parcels**: blocks are subdivided with recursive OBB splitting parameterised
+  by the zone profile (target lot area, regularity, frontage). Deep blocks get
+  back lanes, mews or courtyards by era and wealth.
+- **Buildings**: per parcel, a kind from the profile and class (row house,
+  terrace, detached, villa, tenement, triple-decker, apartment block, tower,
+  hall, shed, big box, courtyard block, shopfront with flats above…), with
+  setbacks, `floors`, `roof`, `use`, `material` (for a Sanborn-style theme), and
+  an **address** on its frontage street. Density controls coverage and floors;
+  wealth controls setback, garden and irregularity; era controls kinds.
+- **Fill passes** at block, then settlement, then region level:
+  1. Amenities the district is owed (church/chapel, school, pub/tavern, corner
+     shop, police box, fire station, post office, bank, cinema by era).
+  2. Parks and greens in leftovers above a size threshold.
+  3. Parking lots and yards in industrial/retail zones; allotments and
+     cemeteries on the fringe.
+  4. Rural: fields with hedgerows or fences by culture pack, farmsteads,
+     orchards, woods on steep or wet land, moor/marsh, quarries, estates with
+     parkland, mills along rivers, hamlets at crossroads.
+  5. Point features: street trees by wealth, park trees, gardens.
+  6. Leftovers smaller than a threshold merge into a neighbour; larger ones are
+     "wasteland" and reported in stats.
 
-Fill is itself expressed as feature types with constraints, so the same engine
-applies; the difference is that fill features accept any leftover polygon as
-their footprint rather than searching for one.
+Fill features are ordinary feature types that accept any leftover polygon.
 
 ### 6.8 Determinism and performance
 
-- Same `CitySpec` ⇒ byte-identical `CityModel` on every browser. We use our own
-  PRNG, stable sorts with explicit tie-breakers, and avoid iteration over
-  `Set`/`Map` insertion orders that depend on hashing.
-- Budgets (medium city, 4 × 4 km, 2 m cells, mid-range laptop): terrain < 400 ms,
-  full pipeline < 2.5 s, incremental edit (pin moved) < 800 ms, render frame
-  < 16 ms at any zoom. Large (12 × 12 km) full pipeline < 10 s.
-- Progress and cancellation: the worker posts stage progress; a new request
-  cancels the running one.
+- Same document ⇒ identical results on every browser. Own PRNG, stable sorts
+  with explicit tie-breakers, no reliance on `Map`/`Set` iteration of hashed
+  keys, pinned geometry library versions, tile-derived seeds
+  (`hash(regionSeed, level, blockId)`).
+- Budgets (mid-range laptop): region + settlement stages for a 40 km region
+  with a 500k-population metropolis and ten towns < 6 s cold, < 1.5 s for an
+  incremental edit within one settlement; any tile < 80 ms; first paint after
+  opening a cached document < 1 s; 60 fps pan/zoom at all levels.
+- Cancellation: a new document version cancels in-flight stage and tile work.
+- Memory: block cache is LRU-bounded (~300 MB); tiles are rebuilt from blocks.
 
 ---
 
-## 7. Feature library and extensibility
+## 7. Feature library, era profiles and culture packs
 
-- Built-in feature types and zone profiles live in `packages/features` as JSON
-  plus optional TypeScript scorers/layouts, registered by id.
-- Users can paste a JSON feature definition in the UI ("custom feature"); such
-  definitions can use the constraint/scorer primitives but not arbitrary code
-  (no `eval`). Custom definitions are stored in the spec so URLs stay
-  self-contained.
-- A `FeatureType` for a natural feature (wood, marsh, quarry, cliff) is the same
-  shape as one for a built feature; the engine does not distinguish.
+- `packages/features` holds zone profiles, feature types, era profiles and
+  culture packs as JSON with optional TypeScript scorers and layouts, registered
+  by id and validated by schema.
+- **Culture packs** define naming (street, district, water, business and
+  surname wordlists with grammar), block/lot conventions (hedgerows vs. fences,
+  terraces vs. detached, alleys), roof and material mixes, religious and civic
+  building kinds. Initial packs: `newEngland`, `england`, `scotland`,
+  `centralEurope`, `mediterranean`; more via contributions.
+- Users can add custom feature types in the document (constraint/scorer
+  primitives only, no code); these travel with the `.citygen.json`.
+- Natural features (wood, marsh, quarry, cliff, sea cave) use the same shape as
+  built ones.
 
 ---
 
 ## 8. Rendering
 
-### 8.1 Scene model
+### 8.1 Tiles
 
-`render` converts a `CityModel` plus a `Theme` into a **scene**: an ordered list
-of layers, each a list of draw primitives (`fill`, `stroke`, `hatch`, `symbol`,
-`text`) with style ids rather than raw colours. Both the Canvas renderer and the
-SVG exporter consume the same scene, which guarantees the export matches the
-screen.
+The tile builder (in workers) produces two tile sets from the model:
 
-Layers (bottom to top): hillshade, water, terrain contours, land use/fill,
-district overlays (wealth/density, toggleable), parcels (optional), facilities,
-buildings, water network, rail, streets, walls, labels, grid, annotations.
+- **Vector tiles (MVT)** with layers `landcover`, `water`, `contours`,
+  `districts` (with wealth/density/zone attributes), `parcels`, `buildings`
+  (with floors, use, material, era), `facilities`, `streets`, `tram`, `rail`,
+  `waterways`, `walls`, `vegetation`, `pois`, `labels`, `annotations`. Which
+  layers and how much detail appear at a given zoom is decided by the builder
+  (`z ≤ 10`: region layers; `11–13`: settlement layers; `14–15`: blocks and
+  streets; `≥ 16`: parcels, buildings, trees).
+- **Terrain-RGB raster tiles** for MapLibre hillshade and 3D terrain.
 
-### 8.2 Interactive view
+Tiles are served through MapLibre's `addProtocol` from the worker pool; a
+document change bumps the source version so only affected tiles are rebuilt.
 
-Canvas 2D with a pan/zoom transform, per-layer visibility, spatial-index
-culling, and level-of-detail rules (e.g. hide individual buildings below a zoom
-threshold, draw blocks as filled polygons instead). Hover and click resolve to
-features via the spatial index for inspection and editing. If profiling shows
-Canvas 2D is insufficient for the largest maps, a WebGL backend (PixiJS) can be
-added behind the same scene interface; this is deliberately not a Phase 1 risk.
+### 8.2 Themes
 
-### 8.3 Themes
+Themes are authored in a compact intermediate format (feature class ×
+wealth/density/era class → paint) and compiled to MapLibre style JSON and to
+SVG styles. Initial themes:
 
-`ink` (reference-like black and white), `parchment`, `blueprint`, `atlas`
-(modern colour map), `dark`, and `print` (hatch patterns instead of colour, CMYK-
-friendly). Themes are JSON style sheets keyed by feature class and
-wealth/density class.
+- `ink` — reference-like black and white, hatched fills, sketch jitter.
+- `atlas` — modern coloured map, OSM-like clarity, wealth/density overlays.
+- `period-1920s` — street-atlas look of the era (fits Call of Cthulhu handouts).
+- `sanborn` — fire-insurance-map style: buildings coloured by material and use,
+  with names; excellent for investigative play.
+- `blueprint`, `dark`, `print` (hatch-only, high contrast).
+
+### 8.3 3D and pitch
+
+Because buildings carry `floors`, MapLibre `fill-extrusion` gives an optional
+3D view with terrain for free (a style toggle, not a separate renderer).
 
 ### 8.4 Export
 
-- **PNG** at chosen DPI and area (with optional 1 in / 5 ft grid).
-- **SVG** (editable layers, labels as text).
-- **PDF** for print: tiled across pages with overlap and crop marks (via
-  `pdf-lib`, drawing the SVG scene).
-- **GeoJSON** of the full model (planar CRS declared) for GIS tools.
-- **VTT formats**: Universal VTT (`.dd2vtt`) with optional wall lines derived
-  from building outlines; Foundry scene JSON. Others on request.
-- **`.city.json`**: the `CitySpec` (tiny) for sharing and re-import.
+- **PNG** at chosen scale and DPI for any rectangle, using an offscreen
+  MapLibre instance with `preserveDrawingBuffer`; presets for handouts and VTT
+  scenes (Foundry, Roll20 dimensions).
+- **SVG** for any rectangle via `svg-export` walking the model with the theme.
+- **GeoJSON** of the region or a rectangle (metres, synthetic CRS declared).
+- **Universal VTT** (`.dd2vtt`) with wall lines from building outlines, and
+  **Foundry scene JSON**.
+- **Player export**: hides GM-only layers (overlays, notes, secret POIs).
+- **`.citygen.json`** (the document) and, for small documents, a URL hash.
 
 ---
 
-## 9. Application UI
+## 9. The editor
 
-- **Map canvas** centre; **parameter panel** left (generated from the spec
-  schema, grouped: Basics / Terrain / Society / Networks / Features / Style);
-  **layer & legend panel** right; **assistant** as a collapsible drawer; **export**
-  dialog; **inspector** popover on click (feature properties, "why is this
-  here?" showing the winning constraint scores).
-- **Edit tools**: terrain brush; paint wealth/density; place/drag/rotate/lock a
-  feature; draw a road/rail line as a hint; delete; regenerate-from-stage.
-- **History**: undo/redo over commands; a "variations" strip showing 6 thumbnails
-  with different seeds for the same spec.
-- **Sharing**: the URL hash always reflects the current spec. Long specs (many
-  overrides) are compressed; if still too long the UI offers a file download
-  instead.
-- Keyboard accessible; colour-blind-safe default overlay palettes.
+### 9.1 Layout
+
+Map view centre with a top toolbar (tools), left dock (Generate: parameters
+from the spec schema, grouped Region / Settlements / Terrain / Society /
+Networks / Features / Year), right dock (Layers & legend, Inspector,
+Assistant), bottom bar (coordinates, scale, year slider, undo history strip).
+
+### 9.2 Tools
+
+| Group | Tools |
+|---|---|
+| Navigate | pan, zoom, rotate, pitch, minimap, bookmarks |
+| Select | click, box, lasso, by-query (all warehouses in this district), multi-select, properties panel |
+| Draw | line (street with class, rail, tram, waterway/canal, wall), polygon (zone with profile, building, water body, park, facility footprint), rectangle building, freehand building, point (POI with type) |
+| Edit | move, rotate, scale, mirror, vertex edit, split/join lines, offset, snap to grid/network/parcel/angle, alignment guides |
+| Brushes | terrain raise/lower/smooth/flatten/water; zone paint; wealth paint; density paint; vegetation paint; year paint (override era locally); erase; **reroll** (regenerate only the brushed area with a new seed) |
+| Generate | regenerate region/settlement/district/selection; place feature (from library, with hint); freeze/unfreeze selection |
+| Annotate | text label, marker, arrow, GM note (hidden in player export), handout frame (a named export rectangle) |
+| Layers | show/hide/lock, opacity, reorder overlays |
+
+### 9.3 Authored vs. generated
+
+- Anything the user draws is **authored** and stored in the document.
+- Anything generated can be **frozen**: it is copied into `authored` with
+  `origin: 'frozen'` and thereafter treated as fixed. Unfreezing removes it.
+- Regeneration (new seed, new year, new parameters) keeps all authored and
+  frozen features and generates around them. Conflicts are resolved in favour
+  of the user (a generated street is cut where it would cross an authored
+  building) and reported in the inspector.
+- Brush strokes are authored features too (`terrainEdit`, `fieldEdit`), so they
+  are undoable, visible in the layer list, and replayed on regeneration.
+
+### 9.4 History and persistence
+
+- Undo/redo over commands; a history strip with thumbnails.
+- Autosave to IndexedDB on every command (debounced); a "Recent documents"
+  screen; explicit `.citygen.json` export/import; schema migrations in `core`.
+- Derived caches in IndexedDB keyed by hash for near-instant reopen.
 
 ---
 
-## 10. Editing and the command API
+## 10. Command API
 
-All mutations go through one bus:
+All mutations, from the UI and the assistant, go through one bus:
 
 ```ts
 type Command =
-  | { type: 'spec.set'; path: JsonPointer; value: unknown }
-  | { type: 'spec.patch'; ops: JsonPatchOp[] }            // RFC 6902
-  | { type: 'feature.add'; request: FeatureRequest }
+  | { type: 'spec.patch'; ops: JsonPatchOp[] }                       // RFC 6902 on RegionSpec
+  | { type: 'settlement.add' | 'settlement.update' | 'settlement.remove'; ... }
+  | { type: 'authored.add'; features: Feature<AuthoredProps>[] }
+  | { type: 'authored.update'; id: string; geometry?: Geometry; properties?: Partial<AuthoredProps> }
+  | { type: 'authored.remove'; ids: string[] }
+  | { type: 'feature.place'; request: FeatureRequest; hint?: Hint }
   | { type: 'feature.move'; id: string; pose: Pose; lock?: boolean }
-  | { type: 'feature.remove'; id: string }
-  | { type: 'terrain.brush'; stroke: TerrainEdit }
-  | { type: 'field.paint'; field: 'wealth' | 'density'; stroke: FieldEdit }
-  | { type: 'network.hint'; network: 'street' | 'rail' | 'water'; line: LineString; class: string }
-  | { type: 'regenerate'; fromStage?: StageId; newSeed?: boolean; keepPinned?: boolean }
-  | { type: 'style.set'; patch: Partial<StyleSpec> };
+  | { type: 'freeze' | 'unfreeze'; ids: string[] }
+  | { type: 'brush'; brush: BrushKind; stroke: Stroke; value: number }
+  | { type: 'regenerate'; scope: { level: 'region' | 'settlement' | 'district' | 'area'; id?: string; polygon?: Polygon }; newSeed?: boolean }
+  | { type: 'year.set'; year: number }
+  | { type: 'annotate.*'; ... }
+  | { type: 'style.set'; patch: Partial<UiState> };
 ```
 
-Commands are validated against the schema, applied to the spec, pushed onto the
-undo stack, and trigger a pipeline run from the earliest affected stage. Each
-command returns a `CommandResult` with what changed (ids added/removed, warnings
-such as "port placed 300 m from requested position: requested spot too shallow").
-The UI, the URL codec, tests, the future CLI, and the LLM all speak this API.
+Commands are schema-validated, applied to the document, pushed to the undo
+stack, and trigger recomputation from the earliest affected stage and scope.
+Each returns a `CommandResult` with ids added/removed and warnings ("port
+placed 300 m east of the requested point: requested spot too shallow").
 
 ---
 
-## 11. LLM integration (Goal 7)
+## 11. LLM assistant
 
 ### 11.1 Principles
 
-1. **The model never draws.** It reads summaries and issues commands; the
-   deterministic pipeline produces geometry. This keeps outputs valid,
-   reproducible, and undoable.
-2. **No backend.** The site is static. The user supplies their own API key
-   (BYOK), stored only in `localStorage` if they opt in, never in the URL or
-   spec. The key is sent only to the provider's API.
-3. **Provider adapter.** A small interface (`chat(messages, tools) → stream`)
-   with Anthropic as the first and default implementation via the official
-   `@anthropic-ai/sdk` (browser mode requires the SDK's explicit
-   `dangerouslyAllowBrowser` opt-in, which is exactly the BYOK case). Additional
-   adapters (OpenAI-compatible endpoints, local Ollama) are welcome contributions
-   behind the same interface.
-4. **Cost visibility.** Token usage and estimated cost per session are shown.
+1. **Prefer commands over coordinates.** The model edits through the command
+   API. It may author simple geometry (a road along waypoints, a rectangle
+   building) when asked, but those go through the same validation and snapping
+   as a human drawing, and the pipeline fills in everything else.
+2. **No backend.** Bring-your-own-key, stored only in `localStorage` if the user
+   opts in, never in the document or URL, sent only to the Anthropic API.
+3. **Anthropic only, via the official `@anthropic-ai/sdk`** with the SDK's
+   explicit browser opt-in. The adapter interface stays small so other
+   providers can be added later if wanted.
+4. **Cost visibility**: token usage and estimated cost per session are shown.
 
-### 11.2 Models
+### 11.2 Models and request shape
 
-- Default: `claude-opus-5` with adaptive thinking for editing and reasoning
-  about the map.
-- `claude-sonnet-5` for high-volume, low-stakes tasks: naming streets and
-  districts, writing flavour text.
-- Requests use streaming; the server-side refusal `fallbacks` option is enabled
-  so a declined request degrades gracefully instead of failing.
+- Default model `claude-opus-5` with adaptive thinking, streaming, and the
+  server-side refusal `fallbacks` option enabled so a declined request degrades
+  gracefully.
+- `claude-sonnet-5` for bulk naming and flavour text with structured output.
+- Tools use `strict: true` schemas generated from the command definitions.
+- The map summary and tool definitions are placed first in the request so
+  prompt caching applies across turns.
 
-### 11.3 Tools exposed to the model
-
-All tools are thin wrappers over the command API and read-only queries; their
-JSON schemas are generated from the same Zod/JSON-Schema definitions used for
-validation.
+### 11.3 Tools
 
 | Tool | Purpose |
 |---|---|
-| `get_city_summary` | Compact structured overview: era, size, districts with zone/wealth/density, facilities, networks (km of rail, stations, berths), water bodies, notable terrain, stats |
-| `get_spec` / `update_spec` | Read the spec; apply a JSON Patch (validated) |
-| `list_features(filter)` | Query features by type, zone, area, bounding box |
-| `describe_area(polygon | featureId)` | Detailed description of one region (buildings, land use, terrain, neighbours) |
-| `add_feature`, `move_feature`, `remove_feature`, `lock_feature` | Feature edits with hints such as "north of the station" resolved to positions by the app |
-| `paint_field(field, region, value)` | Raise/lower wealth or density in an area |
-| `edit_terrain(op, region, value)` | Terrain brush ops |
-| `add_network_hint` | Suggest a road/rail/canal alignment |
-| `regenerate(fromStage, keepPinned)` | Re-run the pipeline |
-| `render_snapshot(bbox, layers)` | Returns a PNG of the current map (or an area) as an image block so the model can *look* at it for questions like "what is on the hill north-west of the port?" |
-| `name_features(ids, style)` | Batch-name streets/districts (usually on the cheaper model, structured output) |
-| `undo` / `redo` | Same stack as the UI |
+| `get_region_summary` | Settlements, kinds, populations, networks, terrain highlights, year |
+| `get_settlement_summary(id)` | Districts with zone/wealth/density/era, facilities, stations, stats |
+| `describe_area(polygon | featureId)` | Buildings, land use, terrain, neighbours, names |
+| `find_features(query)` | By type, zone, name, bbox, property filter |
+| `render_snapshot(bbox, layers, theme)` | PNG of an area as an image block so the model can look at it |
+| `get_spec` / `patch_spec` | Read and JSON-Patch the spec |
+| `place_feature`, `move_feature`, `remove_feature`, `freeze`, `unfreeze` | Feature edits with hints resolved by the app |
+| `draw(layer, geometry, properties)` | Authored geometry, validated and snapped |
+| `brush(kind, region, value)` | Terrain, zone, wealth, density, vegetation, year |
+| `regenerate(scope, newSeed)` | Re-run the pipeline at region/settlement/district/area scope |
+| `set_year(year)` | Move the region along its timeline |
+| `name_features(ids, culturePack, style)` | Batch naming, structured output |
+| `annotate(kind, geometry, text, gmOnly)` | Notes and labels |
+| `undo` / `redo` | Shared history |
 
-The system prompt describes the map's conventions (units, compass, era) and the
-rule that changes are proposed via tools, never described as done unless a tool
-succeeded. Multi-step requests ("add a container port and connect it by rail to
-the yard") are handled by the model calling several tools in one turn; results
-include warnings so it can adapt (e.g. "no deep water on the west coast; try
-east?").
+The system prompt describes units, compass, year and the rule that nothing is
+reported as done unless a tool succeeded. Multi-step requests are handled by
+several tool calls per turn; warnings in results let the model adapt.
 
 ### 11.4 Conversation flow
 
-- The chat panel shows tool calls as collapsible cards ("Placed container port at
-  (1200, −300), 4 berths") with an inline **undo** button.
-- The first user message of a session is preceded by a `get_city_summary` call
-  the app performs automatically, so the model starts with context.
-- Long sessions use the SDK's message history; the app trims old tool results
-  and keeps the latest summary to bound context.
+- The assistant drawer shows tool calls as cards with an inline undo.
+- Each session starts with an automatic `get_region_summary`; when the user has
+  a settlement or selection focused, its summary is included too.
+- Old tool results are trimmed; the latest summaries are kept to bound context.
+- An **evaluation set** of scripted requests with expected command outcomes runs
+  in CI against recorded responses and periodically live.
 
-### 11.5 Headless reuse (later)
+### 11.5 Headless reuse
 
-Because `core` and the tools have no DOM dependency, the same tool set can be
-exposed as an **MCP server** (`packages/mcp`) for desktop assistants and
-automation, and as a **CLI** (`citygen generate spec.json --png out.png`). This
-is roadmap Phase 7.
+`core`, `features` and `llm` tool definitions have no DOM dependency, so the
+same tool set is exposed as an **MCP server** and a **CLI**
+(`citygen generate region.citygen.json --png harbour.png --bbox …`).
 
 ---
 
 ## 12. Suggested additional features
 
-Grouped by how strongly we recommend them. These are also listed in
-[OPEN-QUESTIONS.md](./OPEN-QUESTIONS.md) for prioritisation.
+Now that the scope is metropolitan and the editor is full, these are candidate
+roadmap items rather than a wish list; see ROADMAP.md for where they land.
 
-**Recommended for v1**
+**Play-focused (Call of Cthulhu first)**
 
-- **Era slider with mixed eras**: old town core + modern periphery is the most
-  common real-world shape and the most useful for games.
-- **Naming and labels**: Markov-chain/wordlist generator by culture pack, LLM
-  refinement optional; street, district, water and facility labels with
-  collision-avoiding placement.
-- **Grid overlays and print tiling** for tabletop use (square/hex, scale bar,
-  compass rose, legend).
-- **"Why is this here?" inspector** showing constraint scores — invaluable for
-  tuning and for users' trust.
-- **Variations strip** (six seeds at a glance) and **history thumbnails**.
+- **Period content packs**: 1890s and 1920s–30s New England and English
+  settings with era-correct amenities (speakeasies as unmarked buildings,
+  telephone exchanges, boarding houses, dime museums, trolley barns, gasworks,
+  canneries, asylums, sanatoria, observatories, funeral parlours).
+- **Business and resident directory**: every non-residential building gets a
+  named business and every address a household, generated from culture packs,
+  searchable in the editor, and exportable as a directory handout. The
+  assistant can answer "who lives at 14 Ash Street?".
+- **Sanborn and period-atlas themes** for authentic handouts.
+- **Handout frames**: named export rectangles with their own theme, layers and
+  GM/player visibility, re-exportable in one click.
+- **Decay and events**: a condition brush and year-based decay so a fishing
+  town can look abandoned; flood, fire and storm damage as overlays.
+- **Building interiors (stretch)**: generate floor plans for a selected
+  building from its footprint, floors, use and era.
 
-**Recommended for v2**
+**General**
 
-- **Points of interest layer**: hospitals, schools, police/fire, stadium,
-  university campus, prison, water treatment, cemetery, military base, with the
-  same placement rules.
-- **Utility networks**: high-voltage lines from the power plant, pipelines from
-  the refinery to the port, canals with locks.
-- **Growth timeline**: generate the city at year *t* by animating population and
-  era; useful for campaigns spanning decades.
-- **Condition layer**: ruins, abandonment, war damage, flooding (raise sea
-  level and see the port drown).
-- **Isometric/3D view** (three.js) with extruded buildings, for reference
-  imagery rather than editing.
-- **Player-facing export**: fog-of-war friendly layers, removing GM-only labels.
-
-**Nice to have**
-
-- Culture/style packs (Northern European, Mediterranean, East Asian, colonial
-  grid…), OSM import as a starting spec, PWA offline install, gallery of shared
-  specs (stored as gists or repo issues, no backend), plugin registry for
-  community feature types, localisation.
+- **Growth timeline**: the region at any year, with a scrubber; buildings carry
+  built/demolished years so the same seed shows 1890, 1925 and 1985 coherently.
+- **Points of interest and institutions** as first-class feature types.
+- **Utility networks**: power lines, pipelines, aqueducts, canals with locks,
+  sewers as GM-only layer.
+- **3D view** via extrusion (cheap given MapLibre) and later a glTF export.
+- **Culture/style packs** beyond the initial five; naming grammars.
+- **OSM import** as a starting document; **DEM import**.
+- **PWA offline**, **gallery** of shared documents (as GitHub gists), **plugin
+  registry** for community feature types, localisation.
 
 ---
 
 ## 13. Licensing and provenance
 
-TownGeneratorOS is GPL-3.0. Two options:
-
-1. **Clean-room reimplementation** (recommended): we borrow the *ideas*
-   documented in §2, write all code from scratch in TypeScript, and may choose a
-   permissive licence (MIT/Apache-2.0). Contributors must not paste code from the
-   reference. This maximises reuse by the tabletop community.
-2. **Port the reference**: faster start for the medieval core, but the project
-   must be GPL-3.0 and the boundary between ported and original code has to be
-   tracked.
-
-This document assumes option 1; it is listed as an open question.
+Decided: **clean-room reimplementation** under a permissive licence (MIT
+proposed; confirm the copyright holder string before Phase 0 adds the file).
+Contributors must not copy code from the GPL-3.0 reference; the ideas
+summarised in §2 are used, not the source. This policy goes in CONTRIBUTING.md.
 
 ---
 
@@ -764,23 +847,39 @@ This document assumes option 1; it is listed as an open question.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Placement rules produce implausible results for some presets | Poor first impression | Golden-seed visual tests per preset; "why is this here?" inspector; tuning sprint in each phase |
-| Performance on large maps in Canvas 2D | Laggy UI | Worker isolation, LOD, budgets in CI; WebGL backend behind the scene interface if needed |
-| Determinism drifts across browsers (floating point in geometry libs) | Broken share links | Own PRNG, pinned library versions, snapshot tests run on Chromium + WebKit + Firefox in CI |
-| Browser-side API keys are misused or leak | User cost / trust | Opt-in storage, clear warning, never in URL/spec, per-session cost display; optional self-hosted proxy documented for teams |
-| Scope creep (every facility is a project) | Never ships | Feature library is data-driven; each facility is a separate roadmap item with its own acceptance test |
-| GPL contamination | Licence dispute | Clean-room policy in CONTRIBUTING.md; no code copied from the reference |
+| Ink theme in MapLibre looks too "GIS", not hand-drawn | Loses the reference's charm | Phase 1 spike with sketch jitter, hatch sprites, cased lines; PixiJS fallback behind the tile source |
+| Lazy block generation shows seams or popping at tile edges | Ugly | Block-keyed generation shared across tiles; deterministic per-tile terrain detail with edge-consistent noise; visual tests at tile boundaries |
+| Region-scale eager stages too slow on big documents | Sluggish editing | Scope-limited recomputation (settlement/district/area), worker pool, budgets in CI |
+| Authored/generated conflicts produce broken geometry | Trust | Conflict rules favour the user; inspector explains cuts; geometry validity tests on every command |
+| Document migrations break old files | Data loss | Versioned schema, migration tests with fixture documents from each release |
+| Browser-side API keys misused | Cost | Opt-in storage, warnings, never in document/URL, per-session cost display |
+| Scope creep from the feature library | Never ships | Each facility is a roadmap item with an acceptance test; library is data so contributions scale |
+| GPL contamination | Licence dispute | Clean-room policy; no copied code |
 
 ---
 
 ## 15. Decision log
 
-| # | Decision | Alternatives considered | Rationale |
+| # | Decision | Alternatives | Rationale |
 |---|---|---|---|
-| 1 | TypeScript + Vite + React | Svelte, SolidJS, plain TS | Largest contributor pool; Svelte is a reasonable swap if the owner prefers it (open question) |
-| 2 | GeoJSON as the model format | Custom binary, ECS | Interoperability, tooling, and readability outweigh size |
-| 3 | Canvas 2D + SVG export from one scene | SVG-only, MapLibre GL, PixiJS | SVG-only does not scale to modern cities; MapLibre assumes lon/lat and tile styling; PixiJS kept as an upgrade path |
-| 4 | Spec/model split with command bus | Mutable model editing | Undo, URL sharing, and safe LLM editing all fall out of it |
-| 5 | Browser-side BYOK for LLM | Serverless proxy | GitHub Pages cannot host a proxy; a proxy is documented as optional |
-| 6 | Own PRNG with named streams | `seedrandom` global | Local streams keep unrelated stages stable when one parameter changes |
-| 7 | Clean-room reimplementation | Port of the GPL reference | Licence freedom (pending owner's confirmation) |
+| 1 | TypeScript + Vite + React | Svelte, SolidJS | Owner decision; largest contributor pool |
+| 2 | GeoJSON as the model format | Custom binary, ECS | Interoperability and readability; tiles solve the size problem |
+| 3 | MapLibre GL with in-browser tiles | Canvas 2D, PixiJS, deck.gl | Metropolitan scale needs LOD, culling, label collision; MapLibre is the standard; PixiJS kept as fallback for the ink look |
+| 4 | Lazy block-level generation | Generate everything eagerly | Millions of buildings cannot be generated or held eagerly; blocks are the natural unit |
+| 5 | Year, not an era enum | Enum of eras | Continuous timelines, mixed-era rings, growth scrubber |
+| 6 | Document = spec + authored + overrides + annotations, unconstrained size | Tiny URL-only spec | Owner decision; full editor needs authored geometry; JSON import/export is the persistence contract |
+| 7 | Browser-side BYOK, Anthropic only | Proxy, multi-provider | Owner decision; adapter interface left in place |
+| 8 | Clean-room, permissive licence | GPL port | Owner decision |
+| 9 | Own PRNG with named and tile-derived streams | Global `seedrandom` | Local streams keep unrelated stages stable; tile derivation enables laziness |
+
+---
+
+## 16. Change history
+
+- **v0.2** — Applied owner decisions: metropolitan regions (hierarchical,
+  lazy generation; MapLibre rendering), full editor with authored/frozen
+  geometry and brushes, year-based eras with Call of Cthulhu period focus,
+  unconstrained document size with JSON import/export, BYOK Anthropic-only
+  assistant, clean-room licence, React. Removed effort estimates from the
+  roadmap; expanded ambition.
+- **v0.1** — Initial draft.

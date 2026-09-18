@@ -1,182 +1,228 @@
 # CityGenerator — Roadmap
 
-Status: **Draft v0.1**. Effort estimates assume **one to two part-time
-developers** and are ranges of calendar weeks; they will be revised once the
-open questions are answered. Each phase ends with a deployed site on GitHub
-Pages so there is always something to try.
+Status: **Draft v0.2**. No calendar estimates by owner request. Phases are
+ordered by dependency and by risk: the riskiest architectural pieces
+(metropolitan-scale lazy generation and MapLibre rendering) are proven first.
+Every phase ends with a deployed site on GitHub Pages so there is always
+something to try, and each phase lists acceptance criteria that are testable in
+CI or by a reviewer.
 
-Phases are ordered so that every phase produces a usable generator on its own
-and later phases only add layers. The numbering matches the pipeline stages in
-[DESIGN.md §6](./DESIGN.md#6-generation-pipeline).
+| Phase | Theme | Outcome |
+|---|---|---|
+| 0 | Foundation | Repo, CI, empty editor deployed, engine skeleton, document format v2 |
+| 1 | Terrain, tiles, rendering | Region-scale terrain rendered by MapLibre through in-browser tiles; ink spike |
+| 2 | Settlements, districts, classic town | Organic towns with walls, wards, streets on terrain; lazy blocks; reference parity |
+| 3 | Years, society, modern streets | Year-based eras, wealth/density fields and overlays, road hierarchy, mixed-era rings |
+| 4 | Editor | Full editing: draw, edit, brushes, freeze, regenerate-in-scope, annotations, autosave |
+| 5 | Rail and tram | Regional and settlement rail, stations, spurs, yards; tram lines and streetcar suburbs |
+| 6 | Placement engine, ports, industry | Generic placement, ports by era, dry docks, industry, institutions, fill passes |
+| 7 | Naming, POIs, directory, themes, export | Culture packs, businesses and residents, period/Sanborn themes, PNG/SVG/GeoJSON/VTT, handout frames |
+| 8 | LLM assistant | Chat drawer, tools over the command API, BYOK, evals |
+| 9 | Timeline, 3D, condition | Growth scrubber, extrusion view, decay/flood/fire overlays |
+| 10 | Ecosystem | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs |
 
-| Phase | Theme | Outcome | Est. |
-|---|---|---|---|
-| 0 | Foundation | Repo, CI, empty site deployed, engine skeleton | 1–2 wks |
-| 1 | Terrain & rendering | Seeded terrain with water, contours, pan/zoom, URL sharing | 3–4 wks |
-| 2 | Classic town | Parity with the reference's medieval town on top of terrain | 4–6 wks |
-| 3 | Society & modern streets | Wealth/density fields and overlays, road hierarchy, grid districts, eras | 4–6 wks |
-| 4 | Rail | Mainlines, stations, spurs, rail yards | 3–4 wks |
-| 5 | Placement engine & facilities | Generic placement, ports, dry docks, industry, fill passes | 6–8 wks |
-| 6 | Editing & export | Manual tools, undo, themes, PNG/SVG/PDF/GeoJSON/VTT | 4–5 wks |
-| 7 | LLM assistant | Chat panel, tool use, BYOK, naming | 3–4 wks |
-| 8 | Polish & ecosystem | Labels, POIs, custom features, MCP/CLI, docs, community | ongoing |
-
-Total to a feature-complete v1 (through Phase 7): roughly **7–10 months** of
-part-time effort, or 3–5 months with two people full-time.
+Milestones: `v0.1` after Phase 1, `v0.2` after Phase 2, `v0.3` after Phase 3,
+`v0.5` after Phase 6, `v0.8` after Phase 8, `v1.0` after Phase 9 plus a tuning
+pass across all presets and eras.
 
 ---
 
 ## Phase 0 — Foundation
 
-Goal: a green pipeline and an empty page at `https://<owner>.github.io/CityGenerator/`.
+- [ ] MIT `LICENSE` (confirm copyright holder string), `CONTRIBUTING.md` with
+      the clean-room policy, ADR folder seeded with the decisions in
+      DESIGN §15.
+- [ ] pnpm monorepo: `apps/web`, `packages/core`, `packages/tiles`,
+      `packages/themes`, `packages/editor`, `packages/features`.
+- [ ] Vite + React 19 + TypeScript strict + ESLint + Prettier + Vitest +
+      Playwright; Tailwind; Zustand.
+- [ ] GitHub Actions: `ci.yml` (lint, typecheck, unit, e2e on Chromium/Firefox/
+      WebKit), `pages.yml` (build and deploy `main`), PR preview artifacts.
+- [ ] `core`: PCG32 PRNG with named streams and tile-derived seeds;
+      `MapDocument` v2 schema (Zod → JSON Schema) with migration framework;
+      stage runner with input hashing, memoisation, scope and cancellation;
+      worker pool bridge (`comlink`).
+- [ ] `apps/web`: empty MapLibre map with the synthetic CRS, document store,
+      command bus skeleton, IndexedDB autosave, JSON import/export.
 
-- [ ] Decide licence and framework (see OPEN-QUESTIONS Q1, Q8).
-- [ ] pnpm monorepo: `apps/web`, `packages/core`, `packages/render`.
-- [ ] Vite + React + TypeScript strict + ESLint + Prettier + Vitest + Playwright.
-- [ ] GitHub Actions: `ci.yml` (lint, typecheck, test), `pages.yml` (build and
-      deploy on `main`), preview builds on PRs as artifacts.
-- [ ] `core`: seeded PRNG with named streams, `CitySpec` v1 schema (Zod → JSON
-      Schema), stage runner with input hashing and memoisation, worker bridge.
-- [ ] CONTRIBUTING.md with the clean-room policy; ADR folder.
+Acceptance: merging to `main` deploys; a determinism test hashes a fixed stage
+output identically on all three browsers; a round-trip test exports and
+re-imports a document unchanged.
 
-Acceptance: a PR merging to `main` deploys; `pnpm test` runs a determinism test
-(same seed → same hash) on Chromium, Firefox and WebKit.
+## Phase 1 — Terrain, tiles and rendering
 
-## Phase 1 — Terrain and rendering
+- [ ] Base heightmap (fBm + domain warp + presets: plains, coast, bay, river
+      valley, hills, archipelago, delta, estuary); imported heightmap.
+- [ ] Hydrology: depression filling, flow, rivers with width, lakes, sea,
+      bathymetry, tidal flats and marsh.
+- [ ] Derived rasters: slope, aspect, distance to water, flood risk.
+- [ ] Land cover (R2): forest, moor, marsh, farmland suitability by climate.
+- [ ] Lazy terrain detail tiles with edge-consistent noise; contours; Terrain-RGB
+      tiles for hillshade and 3D terrain.
+- [ ] Tile builder (`geojson-vt` + `vt-pbf`) behind a MapLibre custom protocol
+      served by the worker pool, with versioning and cancellation.
+- [ ] Theme compiler (intermediate format → MapLibre style JSON); `atlas` theme.
+- [ ] **Ink spike**: hatch sprites, cased/dashed lines, sketch jitter in the
+      tile builder; reviewer decision on MapLibre vs. PixiJS fallback.
+- [ ] Generate dock with Region/Terrain parameters; six-seed variations strip.
 
-Goal: pick a preset and seed, see a landscape.
+Acceptance: 60 km region terrain in < 3 s cold; any tile < 80 ms; no visible
+seams at tile edges in a visual test; ink spike signed off or fallback chosen.
 
-- [ ] Heightmap generation: fBm + domain warp + preset shape functions
-      (plains, coast, bay, river valley, hills, island, delta).
-- [ ] Hydrology: depression filling, flow accumulation, rivers, lakes, sea.
-- [ ] Derived rasters: slope, aspect, distance-to-water, bathymetry.
-- [ ] Contours (d3-contour) and hillshade.
-- [ ] Scene model + Canvas renderer with pan/zoom, layers, culling.
-- [ ] Parameter panel generated from the spec schema (Basics + Terrain groups).
-- [ ] URL hash codec (lz-string), variations strip (6 seeds).
-- [ ] Heightmap PNG import.
+## Phase 2 — Settlements, districts and the classic town
 
-Acceptance: 4 × 4 km terrain in < 400 ms; contours and rivers render correctly
-at all zooms; a shared URL reproduces the same terrain in another browser.
+- [ ] Settlement siting via the placement engine core (constraints, scorers,
+      Poisson candidates); settlement kinds; pinning.
+- [ ] Buildable mask, growth axes, historic core extent from `founded`.
+- [ ] Relaxed-Voronoi districts clipped to terrain and split by rivers.
+- [ ] Curtain wall, gates, citadel, plaza; gate-to-plaza arteries; organic
+      streets; bridges.
+- [ ] Zone profiles for the reference's ward set with `rateLocation`-style
+      scoring.
+- [ ] **Block boundary**: block polygons + recipes; lazy block generation
+      (parcels, buildings, fill) keyed by block id; LRU cache; tiles assembled
+      from blocks.
+- [ ] Regional roads between settlements (terrain-routed); rural fill: farms,
+      woods, hamlets, lanes.
+- [ ] `ink` theme complete; district labels.
 
-## Phase 2 — Classic town (reference parity on terrain)
+Acceptance: golden-seed hash tests for 10 seeds × 4 presets; a 40 km region
+with a city and ten villages navigates from region to street at 60 fps; a
+reviewer comparing the medieval town with the reference finds no loss of
+believability.
 
-Goal: a medieval/renaissance town that is at least as good as the reference,
-but respecting water and slope.
+## Phase 3 — Years, society fields and modern streets
 
-- [ ] Site selection and buildable mask from terrain.
-- [ ] Relaxed-Voronoi districts clipped to buildable land and split by rivers.
-- [ ] Curtain wall, gates, citadel, plaza; walls follow terrain where sensible.
-- [ ] Gate-to-plaza arteries and organic streets; bridges over rivers.
-- [ ] Zone profiles for the reference's ward set; `rateLocation`-style scoring.
-- [ ] Recursive lot subdivision and building footprints per profile.
-- [ ] Farms, woods and gate wards as the first fill passes.
-- [ ] `ink` theme; labels for district types.
+- [ ] Era profiles for 1100, 1400, 1650, 1780, 1850, 1890, 1925, 1955, 1985,
+      2020 with interpolation; `year` in the spec and the bottom bar.
+- [ ] Wealth and density rasters (DESIGN §6.2), nuisance feedback, inequality;
+      district classes; overlays with legends; hatch variants.
+- [ ] Road hierarchy: arterials, ring roads, motorways with junctions after
+      1950; bridges, cuttings, tunnels; contour-aligned local streets.
+- [ ] Street patterns: grid (jitter, diagonals), radial, cul-de-sac, garden
+      suburb; growth rings by era around the historic core (mixed eras).
+- [ ] Zone profiles for every wealth × density combination, CBD, high street,
+      warehouse district, tenement district, streetcar suburb, garden suburb,
+      tower estate; building kinds per era.
+- [ ] "Why is this here?" inspector showing zone and placement scores.
 
-Acceptance: golden-seed snapshot tests for 10 seeds × 3 presets; a reviewer
-comparing against the reference finds no regressions in believability.
+Acceptance: overlays show coherent gradients (rich uphill/upwind, poor by
+industry) on 8 of 10 seeds without edits; changing the year from 1890 to 1925
+to 1985 on one seed produces a recognisably continuous city.
 
-## Phase 3 — Society fields and modern streets
+## Phase 4 — Editor
 
-Goal: industrial and modern eras with visible wealth/density.
+- [ ] Selection: click, box, lasso, by-query; properties panel; multi-select.
+- [ ] Draw: street/rail/tram/waterway/wall lines with class; zone, building,
+      water, park, facility polygons; rectangle and freehand buildings; POIs.
+- [ ] Edit: move, rotate, scale, mirror, vertex edit, split/join, offset,
+      snapping (grid, network, parcel, angle), alignment guides.
+- [ ] Brushes: terrain (raise/lower/smooth/flatten/water), zone, wealth,
+      density, vegetation, year, erase, reroll.
+- [ ] Authored vs. generated: freeze/unfreeze; regeneration around authored
+      features with conflict rules and inspector reporting.
+- [ ] Regenerate at region/settlement/district/area scope with pins kept.
+- [ ] Annotations: labels, markers, arrows, GM notes, handout frames.
+- [ ] Layers panel (show/hide/lock/opacity); undo/redo with history strip;
+      autosave; recent documents; migrations tested against fixtures.
 
-- [ ] Wealth and density rasters with the formulas in DESIGN §6.2; painted
-      overrides.
-- [ ] District classification (wealth × density classes) and overlays with
-      legends; print-safe hatch variants.
-- [ ] Road hierarchy: terrain-routed motorways/arterials, ring road, entry points.
-- [ ] Street patterns: grid (jitter, diagonals), radial, cul-de-sac trees, mixed.
-- [ ] Zone profiles for modern residential (all wealth × density combinations),
-      CBD, retail strip, institutional; building kinds per class.
-- [ ] Era selection and mixed-era layout (old core + modern periphery).
-- [ ] Bridges, cuttings and tunnels on major roads; contour-aligned local streets.
+Acceptance: Playwright e2e for every tool; geometry validity checks pass after
+each command in a fuzz test; a hand-drawn street and building survive a reseed
+and a year change.
 
-Acceptance: toggling wealth/density overlays shows coherent gradients; the
-"why is this here?" inspector explains zone choice; modern 6 × 6 km city in < 4 s.
+## Phase 5 — Rail and tram
 
-## Phase 4 — Rail
+- [ ] Rail graph with gradient and curve-radius constraints; regional mainlines
+      and junctions; branch lines by population and year.
+- [ ] Stations (central, suburban, halt), goods yards beside early stations;
+      level crossings, bridges, viaducts, tunnels; elevated and subway variants
+      for metropolises after 1900.
+- [ ] Freight spurs and sidings to industrial districts and ports.
+- [ ] **Rail yard** feature: ladder tracks, throats, roundhouse and turntable,
+      coaling and water (steam era), diesel depot and intermodal cranes later.
+- [ ] Tram/streetcar lines 1880–1960 with depots; streetcar suburbs around
+      termini.
+- [ ] Rail and tram rendering across zooms; rail noise into the wealth field.
 
-- [ ] Rail graph type with gradient and curve-radius constraints.
-- [ ] Mainlines from map edges, central station siting, secondary stations.
-- [ ] Level crossings, rail bridges/underpasses over roads and water.
-- [ ] Freight spurs and sidings to industrial districts.
-- [ ] **Rail yard** feature: ladder tracks, throat geometry, depot, roundhouse
-      (industrial era), intermodal cranes (modern).
-- [ ] Rail rendering (parallel lines, sleepers at high zoom, station symbols).
-- [ ] Rail noise as a nuisance input to the wealth field.
+Acceptance: no track exceeds the gradient cap on hill presets; yards connect at
+both throats; a 1925 metropolis has a central station, goods yard, at least one
+suburban line and a tram network; stats report track length and stations.
 
-Acceptance: rail never exceeds the gradient cap on hill presets; yards align to
-the mainline and connect at both ends; stats report km of track and stations.
+## Phase 6 — Placement engine, ports, industry and institutions
 
-## Phase 5 — Placement engine, ports and industry
-
-- [ ] Placement engine: feature types, constraint/scorer primitives, Poisson
-      candidate sampling, orientation, collision, degrade-and-report.
-- [ ] Connector requests fulfilled by the local network stage (spur, quay road).
-- [ ] **Container port**: quay/reclamation, berths, cranes, container yard,
-      gate, breakwater, rail sidings, shipping approach lane.
-- [ ] **Dry dock**: graving dock, gate, pump house, workshops; slipway variant.
-- [ ] **Heavy industry**, **light industry/logistics**, **power plant**,
-      **refinery**, **marina/fishing harbour**.
-- [ ] Nuisance feedback into wealth field (second field pass).
-- [ ] Fill passes: amenities, parks, parking/yards, woods/fields, trees, leftover
+- [ ] Placement engine complete: orientation modes, connector requests fulfilled
+      by S5, degrade-and-report, scale compression.
+- [ ] Ports by era: finger-pier harbour, break-bulk quay with transit sheds and
+      cranes, container terminal with yard grid, gate, breakwater, Ro-Ro, tanks.
+- [ ] Fishing harbour with cannery and boat yard; marina.
+- [ ] Shipyard and dry dock: graving dock, caisson, pump house, slipways,
+      building berths; floating dock; modern halls.
+- [ ] Industry: heavy, gasworks, mills (water and textile), light/logistics,
+      power plant, refinery, brewery, tannery.
+- [ ] Institutions: campus, hospital, asylum/sanatorium, prison, military base,
+      cemetery, waterworks, observatory; airport after 1925.
+- [ ] Fill passes complete at block, settlement and region levels; wasteland
       reporting.
-- [ ] Custom feature definitions (JSON) in the spec.
+- [ ] Custom feature types in the document.
 
-Acceptance: a `bay` preset in `modern` era produces a port with rail and road
-access and industry behind it, with wealthy housing on the opposite shore, for
-at least 8 of 10 seeds without manual edits; reported wasteland < 3 % of
-buildable land.
+Acceptance: a `bay` preset at 1925 places a break-bulk port with rail on the
+quay, a yard behind it, gasworks and warehouses nearby and affluent housing on
+the far shore on 8 of 10 seeds; the same seed at 2020 replaces the quay with a
+container terminal; wasteland < 3 % of buildable land.
 
-## Phase 6 — Editing, themes and export
+## Phase 7 — Naming, POIs, directory, themes and export
 
-- [ ] Command bus, undo/redo, history thumbnails.
-- [ ] Tools: terrain brush, field paint, place/drag/rotate/lock features,
-      network hint lines, delete, regenerate-from-stage with pins kept.
-- [ ] Inspector popover with constraint scores.
-- [ ] Themes: parchment, blueprint, atlas, dark, print.
-- [ ] Export: PNG (DPI, grid), SVG, tiled PDF, GeoJSON, Universal VTT, Foundry
-      scene, `.city.json` save/load.
-- [ ] Grid overlays, scale bar, compass, legend.
+- [ ] Culture packs (`newEngland`, `england`, `scotland`, `centralEurope`,
+      `mediterranean`) with naming grammars; label placement via MapLibre.
+- [ ] Addresses; business and resident directory for every building; search.
+- [ ] Amenities and POIs by era (church, chapel, school, pub, corner shop,
+      police, fire, post office, bank, cinema, boarding house, telephone
+      exchange, funeral parlour…).
+- [ ] Themes: `period-1920s`, `sanborn` (material and use colouring), `blueprint`,
+      `dark`, `print`.
+- [ ] Export: PNG (offscreen MapLibre, DPI, presets for Foundry/Roll20 scenes and
+      handouts), SVG (`svg-export`), GeoJSON, Universal VTT with walls, Foundry
+      scene JSON, player export, handout frames re-export.
 
-Acceptance: an edited map survives reload via URL or file; Playwright e2e for
-each tool; exported SVG matches the Canvas view pixel-for-pixel at 1:1 in a
-visual test.
+Acceptance: exported SVG and PNG of the same frame match in a visual test;
+directory export lists every non-residential building with a name; a Keeper
+can produce a player handout of a harbour district with GM notes hidden.
 
-## Phase 7 — LLM assistant
+## Phase 8 — LLM assistant
 
-- [ ] Provider adapter interface; Anthropic adapter with the official SDK
-      (streaming, adaptive thinking, refusal fallbacks), BYOK settings with cost
-      display.
-- [ ] Tool definitions generated from the command/query schemas
-      (DESIGN §11.3), including `render_snapshot` for vision questions.
-- [ ] Chat drawer with tool-call cards and inline undo; automatic
-      `get_city_summary` at session start; context trimming.
-- [ ] Naming tool on the cheaper model with structured output; label placement.
-- [ ] Evaluation set: 30 scripted requests ("add a rail yard next to the port",
-      "what is north of the cathedral?") with expected command outcomes, run in
-      CI against recorded responses and periodically live.
+- [ ] Anthropic adapter with the official SDK: streaming, adaptive thinking,
+      refusal fallbacks, prompt caching of summaries and tools; BYOK settings
+      with cost display.
+- [ ] Tools from DESIGN §11.3 generated from command and query schemas with
+      strict schemas; `render_snapshot` for vision questions.
+- [ ] Assistant drawer: tool cards with inline undo; automatic region and
+      focus summaries; context trimming.
+- [ ] Naming and flavour text on `claude-sonnet-5` with structured output.
+- [ ] Evaluation set of 50 scripted requests (questions, single edits,
+      multi-step edits, drawing) with expected outcomes; CI against recorded
+      responses, scheduled live runs.
 
-Acceptance: all 30 eval requests produce valid commands; no tool can emit
-geometry; a session with an invalid key fails with a clear message and no crash.
+Acceptance: all eval requests produce valid commands or correct answers; no
+tool can emit unvalidated geometry; invalid key and network failures produce
+clear messages without crashes.
 
-## Phase 8 — Polish and ecosystem (ongoing)
+## Phase 9 — Timeline, 3D and condition
 
-- POI layer (hospital, school, stadium, campus, prison, cemetery, military).
-- Utility networks (power lines, pipelines, canals with locks).
-- Growth timeline; condition layer (ruins, flooding).
-- Isometric/3D view; player-facing export.
-- `packages/mcp` MCP server and `citygen` CLI over the same commands.
-- Culture/naming packs, localisation, PWA, gallery, plugin registry.
-- Documentation site (user guide, feature-authoring guide, architecture).
+- [ ] Buildings and networks carry built/demolished years; the year scrubber
+      shows a coherent history of one seed.
+- [ ] Extrusion 3D view with terrain; glTF export of a frame.
+- [ ] Condition brush and year-based decay; flood (raise sea level), fire and
+      storm overlays; abandonment for shrinking settlements.
 
----
+Acceptance: scrubbing 1850 → 2020 on one seed shows growth without flicker of
+unrelated areas; a flooded harbour district renders correctly in all themes.
 
-## Milestone tags
+## Phase 10 — Ecosystem (ongoing)
 
-- `v0.1` — end of Phase 1 (terrain playground)
-- `v0.2` — end of Phase 2 (medieval towns)
-- `v0.3` — end of Phase 3 (modern cities with wealth/density)
-- `v0.5` — end of Phase 5 (ports, rail, industry)
-- `v0.8` — end of Phase 6 (editing and export)
-- `v1.0` — end of Phase 7 (assistant) plus a tuning pass over all presets
+- MCP server and `citygen` CLI over the same commands.
+- Feature-authoring guide; plugin registry for community feature types and
+  culture packs.
+- OSM and DEM import as a starting document.
+- PWA offline install; gallery of shared documents (gists); localisation.
+- Building interiors (floor plans from footprint, floors, use and era) as a
+  stretch project.

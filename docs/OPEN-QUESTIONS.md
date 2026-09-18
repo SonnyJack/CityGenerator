@@ -1,106 +1,73 @@
-# Open questions and suggested features
+# Decisions, open questions and suggested features
 
-Answers to the questions below change the design or the roadmap. Each question
-lists the default we will assume if there is no answer, so work can start.
+## A. Decided (v0.2)
 
-## A. Questions that affect Phase 0 (please answer first)
+| # | Question | Decision | Consequence |
+|---|---|---|---|
+| 1 | Licence | Clean-room reimplementation, permissive licence (MIT proposed) | CONTRIBUTING.md clean-room policy; no code from the GPL reference |
+| 2 | Scale | Metropolitan regions | Hierarchical region → settlement → block model; lazy block generation; MapLibre GL rendering via in-browser vector tiles |
+| 3 | Aesthetic | Both ink and modern atlas as themes | Theme compiler to MapLibre style JSON and SVG; ink spike in Phase 1 |
+| 4 | Eras | Medieval through modern | Year-based era profiles, growth rings, Call of Cthulhu period packs (1890s, 1920s–30s, modern) |
+| 5 | LLM | Bring-your-own-key, Anthropic only to start | Browser-side official SDK; adapter interface kept minimal |
+| 6 | Editing | Full editor including brushes | Authored/frozen geometry in the document; draw, edit, brush, freeze, regenerate-in-scope |
+| 7 | Export | Call of Cthulhu primarily; no print tiling yet | PNG handouts, SVG, GeoJSON, Universal VTT, Foundry; period and Sanborn themes; player export |
+| 8 | Framework | React | — |
+| 9 | Estimates | None; be ambitious | Roadmap is dependency-ordered with acceptance criteria and no dates |
+| — | Document size | Not constrained; JSON import/export is the persistence contract | `.citygen.json` holds spec + authored + overrides + annotations; URL hash only for small documents |
 
-**Q1. Licence and relationship to TownGeneratorOS.**
-The reference is GPL-3.0. Do you want a clean-room reimplementation under a
-permissive licence (MIT/Apache-2.0), or a port that stays GPL-3.0?
-*Default: clean-room, MIT.*
+## B. Still open (answer when convenient; defaults shown)
 
-**Q2. Primary map scale.**
-Is the typical output a single town/city of 2–6 km across (like the reference),
-or do you also need metropolitan regions of 20 km+ with suburbs and satellite
-towns? This decides the rendering backend and raster resolutions.
-*Default: 2–12 km, single city, Canvas 2D; regions deferred.*
+**Q10. Copyright holder string for the MIT licence.** *Default: the GitHub
+account name.*
 
-**Q3. Aesthetic.**
-Should the default look be the reference's hand-drawn ink style, a modern
-atlas/OSM-like style, or both as switchable themes? Is a "satellite-like"
-raster style wanted?
-*Default: ink and atlas themes at v1; others later.*
+**Q11. Call of Cthulhu settings to prioritise.** 1920s New England (Lovecraft
+Country) and 1890s/1920s England are assumed first; is Modern-day needed early,
+and are non-Anglophone settings (Berlin, Cairo, Shanghai) wanted in the first
+culture packs? *Default: `newEngland` and `england` first.*
 
-**Q4. Era range and fantasy.**
-Modern only, or the full medieval → modern spectrum? Any fantasy or sci-fi
-elements (airship docks, walls around modern cities, magical districts)?
-*Default: medieval through modern with mixed-era cities; no fantasy-specific
-features at v1, but the feature library makes them easy to add.*
+**Q12. Realism vs. playability for large facilities.** Ports and yards shrink
+by a per-type scale-compression factor by default so a port does not consume a
+town; a "true scale" toggle exists. Acceptable? *Default: compression on.*
 
-**Q5. LLM provider and key handling.**
-Is bring-your-own-key in the browser acceptable? Do you want Anthropic only, or
-also OpenAI-compatible and local (Ollama) adapters? Would you consider a tiny
-serverless proxy (e.g. Cloudflare Worker) so users do not paste keys, even
-though that is outside GitHub Pages?
-*Default: BYOK, Anthropic first, adapter interface for others, no proxy.*
+**Q13. Maximum region size to design for.** 60 km on a side is the working
+target; larger regions are possible with a coarser base raster. *Default:
+60 km.*
 
-**Q6. Editing depth.**
-Generate-and-tweak (sliders, pins, regenerate) or a full editor where users
-draw roads and buildings by hand?
-*Default: generate-and-tweak with pins, brushes and hint lines; no freehand
-building drawing.*
+**Q14. Ink theme fidelity.** If the Phase 1 spike shows the MapLibre ink theme
+is close but not identical to the reference's hand-drawn look, is that
+acceptable, or should a dedicated PixiJS renderer be built for it? *Default:
+accept if a reviewer judges it "clearly hand-drawn in spirit".*
 
-**Q7. Export targets.**
-Which virtual tabletops matter (Foundry, Roll20, Owlbear Rodeo, Fantasy
-Grounds)? Is print (tiled PDF with grid) needed at v1?
-*Default: PNG, SVG, GeoJSON, Universal VTT, Foundry; tiled PDF at v1.*
+**Q15. Directory depth.** Should every building get a named business or
+household by default (larger documents and generation cost), or only on
+demand per district? *Default: on demand per district, cached.*
 
-**Q8. Framework preference.**
-React is proposed; Svelte or SolidJS are equally viable. Any preference or
-existing team skills?
-*Default: React.*
+**Q16. VTT specifics.** Foundry VTT scene export is assumed; are Roll20 or
+Owlbear Rodeo needed, and is Universal VTT wall data (line-of-sight from
+building outlines) valuable for your play? *Default: Foundry + Universal VTT.*
 
-**Q9. Team and timeline.**
-How many people, how much time per week, and is there a date this needs to be
-usable by? The roadmap estimates assume 1–2 part-time developers.
+**Q17. Public engine API.** Should `@citygen/core` be published to npm as a
+supported library, or remain internal until v1? *Default: internal until v1.*
 
-## B. Questions that can wait until the relevant phase
+**Q18. Building interiors.** Floor-plan generation for selected buildings is
+listed as a stretch project; is it important enough to plan for early (it
+affects what buildings store)? *Default: store `floors`, `use`, `era`,
+`material` from Phase 3 so interiors can be added without regeneration.*
 
-**Q10. Topography inputs.** Noise presets and a brush are planned. Do you also
-need import of real-world DEM tiles or hand-drawn heightmaps from other tools?
+## C. Suggested features and where they land
 
-**Q11. Realism vs. gameability.** For example, should container ports be to
-scale (a real large port is 5–10 km of quay, larger than most maps) or
-compressed to fit a game map? *Default: a "scale compression" factor for large
-facilities, on by default.*
-
-**Q12. Wealth and density semantics.** Six classes each are proposed. Do you
-want them exposed as numbers (0–1), as classes, or both? Should the overlay be
-GM-only?
-
-**Q13. Naming.** Which cultures/languages for street and district names?
-Should naming be offline (wordlists) by default, with LLM refinement optional?
-
-**Q14. Data model exposure.** Is GeoJSON export enough, or is a documented
-public JavaScript API / npm package for the engine a goal?
-
-**Q15. 3D.** Is an isometric or 3D view important enough to plan for early
-(affects how buildings store height data)? *Default: store floors/height from
-Phase 3 so 3D can be added later without regenerating.*
-
-## C. Suggested additional features (for prioritisation)
-
-Recommended for v1:
-
-1. Era slider with mixed-era layouts (old core + modern periphery).
-2. Naming and labels with collision-avoiding placement.
-3. Grid overlays, scale bar, compass, legend, tiled print.
-4. "Why is this here?" inspector showing placement scores.
-5. Variations strip (six seeds) and history thumbnails.
-
-Recommended for v2:
-
-6. Points-of-interest layer (hospital, school, stadium, campus, prison,
-   cemetery, military base, water treatment).
-7. Utility networks: power lines, pipelines, canals with locks.
-8. Growth timeline (city at year *t*) and condition layer (ruins, flooding,
-   war damage).
-9. Isometric/3D view with extruded buildings.
-10. Player-facing export (hide GM-only labels and overlays).
-
-Nice to have:
-
-11. Culture/style packs; OSM import as a starting spec; PWA offline mode;
-    shareable gallery without a backend; community plugin registry for feature
-    types; localisation; MCP server and CLI for automation.
+| Feature | Phase |
+|---|---|
+| Year-based eras with mixed-era growth rings | 3 |
+| "Why is this here?" inspector | 3 |
+| Six-seed variations strip | 1 |
+| Full editor with brushes, freeze, reroll brush, handout frames | 4 |
+| Tram/streetcar networks and streetcar suburbs | 5 |
+| Ports by era, shipyards and dry docks, gasworks, mills, institutions | 6 |
+| Culture packs, addresses, business and resident directory | 7 |
+| Period-1920s and Sanborn themes; player export | 7 |
+| LLM assistant with vision snapshots | 8 |
+| Growth timeline scrubber; 3D extrusion; decay, flood, fire | 9 |
+| Utility networks (power, pipelines, aqueducts, sewers) | 9–10 |
+| MCP server and CLI; plugin registry; OSM/DEM import; PWA; gallery | 10 |
+| Building interiors | 10 (stretch) |
