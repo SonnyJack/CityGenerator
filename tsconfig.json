@@ -1,12 +1,29 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/core" },
-    { "path": "packages/features" },
-    { "path": "packages/themes" },
-    { "path": "packages/tiles" },
-    { "path": "packages/export" },
-    { "path": "packages/editor" },
-    { "path": "apps/web" }
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/features"
+    },
+    {
+      "path": "packages/themes"
+    },
+    {
+      "path": "packages/tiles"
+    },
+    {
+      "path": "packages/export"
+    },
+    {
+      "path": "packages/editor"
+    },
+    {
+      "path": "packages/assistant"
+    },
+    {
+      "path": "apps/web"
+    }
   ]
 }

@@ -393,23 +393,57 @@ kinds, materials and names (unit test). Labels render from the bundled glyphs
 (the e2e test watches the font requests). The full suite is 125 unit tests
 and 28 end-to-end tests.
 
-## Phase 8 — LLM assistant
+## Phase 8 — LLM assistant (done, items deferred)
 
-- [ ] Anthropic adapter with the official SDK: streaming, adaptive thinking,
-      refusal fallbacks, prompt caching of summaries and tools; BYOK settings
-      with cost display.
-- [ ] Tools from DESIGN §11.3 generated from command and query schemas with
-      strict schemas; `render_snapshot` for vision questions.
-- [ ] Assistant drawer: tool cards with inline undo; automatic region and
-      focus summaries; context trimming.
-- [ ] Naming and flavour text on `claude-sonnet-5` with structured output.
-- [ ] Evaluation set of 50 scripted requests (questions, single edits,
-      multi-step edits, drawing) with expected outcomes; CI against recorded
-      responses, scheduled live runs.
+- [x] `@citygen/assistant`: a DOM-free package over the official
+      `@anthropic-ai/sdk` (browser opt-in, streaming, adaptive thinking,
+      effort, prompt caching on the system prompt and the tool list). The
+      client interface is small (`stream`, `structured`) so a scripted client
+      replays recorded turns in tests and the evaluation set. SDK errors map
+      to plain messages (bad key, network, rate limit, server, cancelled);
+      a `refusal` stop reason ends the turn with a notice and no change.
+      BYOK settings: the key lives in memory and, only if the user opts in,
+      in localStorage; it is never written to the document. Usage and an
+      estimated cost (editable price table) are shown per session.
+- [x] Twenty-three tools generated from zod schemas with strict JSON schemas
+      (optionals nullable, every property required, constraints kept for
+      local validation): region and settlement summaries, describe_area,
+      find_features, render_snapshot (the hidden export map as an image
+      block), get/patch_spec, set_year, set_theme, regenerate (region,
+      settlement, area), draw, remove_feature, freeze/unfreeze,
+      place_feature, move_feature, brush, annotate, name_features,
+      add/remove_settlement, undo/redo. Every mutation goes through the
+      command bus; out-of-region or non-finite geometry, wrong geometry
+      kinds and unknown ids come back as tool errors the model can read.
+- [x] Assistant drawer: streaming replies with a thinking fold, a card per
+      tool call with an inline undo (jumps the shared history back to the
+      point before the call), warnings, cost line, settings (key, model,
+      effort, thinking, focus settlement). Each conversation is primed with
+      the region summary and the focused settlement; old tool results are
+      trimmed to a stub and images dropped once six newer results exist.
+- [x] Renames land in the engine: `setProperty` overrides rename
+      settlements, facilities, ways (and their streets) and buildings.
+- [x] Flavour text on `claude-sonnet-5` with structured output (title,
+      description, hooks, rumours, NPCs) from the drawer's Flavour button.
+- [x] Evaluation set: 50 scripted requests (12 questions, 18 single edits,
+      12 multi-step edits, 8 drawing requests, one deliberately invalid)
+      with expected tools, document checks, result and answer substrings.
+      CI replays recorded responses through the real tool executor and
+      command bus against an in-memory host; the package's `eval:live` script runs them against the API and can
+      re-record; a weekly workflow runs live when the repository enables it.
+- [ ] Deferred: the recordings are authored by hand until a live run
+      records real responses (the runner writes them); the server-side
+      refusal fallback option from DESIGN §11.2 is not in the SDK, so
+      refusals are handled client-side; the MCP server and CLI from DESIGN
+      §11.5 wait for a later phase.
 
-Acceptance: all eval requests produce valid commands or correct answers; no
-tool can emit unvalidated geometry; invalid key and network failures produce
-clear messages without crashes.
+Acceptance: all 50 recorded requests produce valid commands or correct
+answers (unit test); no tool can emit unvalidated geometry (the executor
+rejects non-finite, out-of-region and wrong-kind geometry before the bus,
+which validates again); invalid keys, network failures and refusals produce
+messages in the drawer without crashing or changing the document (unit and
+e2e tests); a scripted conversation in the browser sets the year, renames
+the port through the engine, adds a GM note and undoes from a tool card.
 
 ## Phase 9 — Timeline, 3D and condition
 

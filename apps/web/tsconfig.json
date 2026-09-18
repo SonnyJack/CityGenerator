@@ -11,11 +11,26 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/editor" },
-    { "path": "../../packages/features" },
-    { "path": "../../packages/themes" },
-    { "path": "../../packages/tiles" },
-    { "path": "../../packages/export" }
+    {
+      "path": "../../packages/assistant"
+    },
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/editor"
+    },
+    {
+      "path": "../../packages/features"
+    },
+    {
+      "path": "../../packages/themes"
+    },
+    {
+      "path": "../../packages/tiles"
+    },
+    {
+      "path": "../../packages/export"
+    }
   ]
 }

@@ -1,4 +1,6 @@
 import { useApp } from './store.js';
+import { useAssistant } from './assistant/store.js';
+import { scriptedClient, type ScriptedTurn } from '@citygen/assistant';
 import { engine } from './engine/client.js';
 import {
   currentViewFrame,
@@ -41,6 +43,24 @@ export function installTestApi() {
     generatedHit: () => useApp.getState().generatedHit,
     recent: () => useApp.getState().recent,
     openRecent: (key) => useApp.getState().openRecent(key),
+    assistant: {
+      useScripted(turns, structured) {
+        useAssistant
+          .getState()
+          .setClientFactory(() => scriptedClient(turns as ScriptedTurn[], structured ?? []));
+      },
+      useRealClient(apiKey) {
+        useAssistant.getState().setClientFactory(null);
+        useAssistant.getState().setSettings({ apiKey, remember: false });
+      },
+      open: (open) => useAssistant.getState().setOpen(open),
+      send: (text) => useAssistant.getState().send(text),
+      transcript: () => JSON.parse(JSON.stringify(useAssistant.getState().session?.transcript ?? [])),
+      usage: () => {
+        const s = useAssistant.getState().session;
+        return s ? { ...s.usage, costUsd: s.costUsd } : null;
+      },
+    },
   };
 }
 
@@ -73,6 +93,14 @@ declare global {
       generatedHit(): unknown;
       recent(): { key: string; name: string; seed: string }[];
       openRecent(key: string): Promise<boolean>;
+      assistant: {
+        useScripted(turns: unknown[], structured?: unknown[]): void;
+        useRealClient(apiKey: string): void;
+        open(open: boolean): void;
+        send(text: string): Promise<void>;
+        transcript(): unknown[];
+        usage(): unknown;
+      };
     };
   }
 }

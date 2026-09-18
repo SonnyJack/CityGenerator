@@ -17,6 +17,8 @@ export interface BlockOptions {
   address?: (x: number, y: number) => { street: string; number: number } | null;
   /** Second-culture share for names (colonial overlays, culture mix). */
   cultureMix?: { culture: string; weight: number }[];
+  /** User or assistant renames by building id. */
+  renames?: Record<string, string>;
 }
 
 export interface BuildingProps {
@@ -137,6 +139,8 @@ function describeBuildings(model: BlockModel, year: number, options: BlockOption
       const who = gen.person(b.id as string);
       p.name = `${who.family} household`;
     }
+    const renamed = options.renames?.[String(b.id)];
+    if (renamed) p.name = renamed;
     if (options.address) {
       const ring = b.geometry.coordinates[0]!;
       const n = ring.length - 1 || 1;

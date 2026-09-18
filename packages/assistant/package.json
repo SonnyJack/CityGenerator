@@ -1,0 +1,27 @@
+{
+  "name": "@citygen/assistant",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "eval:live": "tsc -b && node scripts/eval-live.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
+    "@citygen/core": "workspace:*",
+    "@citygen/editor": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "description": "LLM assistant: Anthropic client, tools over the command API, session loop, evaluation set",
+  "license": "MIT"
+}

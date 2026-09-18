@@ -64,8 +64,15 @@ pre-modern street pattern; every building has a use, an occupant and an
 address, searchable in a directory; labels render in all themes, including
 the new 1920s survey, Sanborn, blueprint, dark and print themes; and any
 frame exports as PNG, SVG, GeoJSON, Universal VTT or a Foundry scene with
-walls, with a player version that hides the Keeper's notes. The LLM
-assistant is next (Phase 8).
+walls, with a player version that hides the Keeper's notes.
+
+Phase 8 adds the assistant: bring your own Anthropic key and ask in plain
+words. It reads the region through summaries, area descriptions, feature
+search and map snapshots, and edits through the same commands as the
+editor: year, spec, facilities, drawing, brushes, renames, notes and
+regeneration. Every tool call is a card with its own undo, usage and cost
+are shown, and fifty scripted requests run in CI against recorded
+responses. Timeline, 3D and condition are next (Phase 9).
 
 ## Development
 

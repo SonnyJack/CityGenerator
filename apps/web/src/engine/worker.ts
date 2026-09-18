@@ -53,7 +53,15 @@ import {
   terrainLayers,
   type DemSampler,
 } from '@citygen/tiles';
-import type { DirectoryEntry, EngineApi, EngineStats, GeneratedHit, Thumbnail } from './api.js';
+import type {
+  DirectoryEntry,
+  EngineApi,
+  EngineStats,
+  FoundFeature,
+  GeneratedHit,
+  SettlementSummary,
+  Thumbnail,
+} from './api.js';
 import type { ExportModel } from '@citygen/export';
 import type { Feature, Geometry, LineString, Point, Polygon } from 'geojson';
 
@@ -162,7 +170,14 @@ const api: EngineApi = {
       },
       { signal },
     );
-    const sites = siting.sites.map((s) => (s.name ? s : { ...s, name: regionNames.siteNames[s.id] }));
+    const renames: Record<string, string> = {};
+    for (const o of doc.overrides)
+      if (o.op === 'setProperty' && o.key === 'name' && typeof o.value === 'string')
+        renames[o.target] = o.value;
+    const sites = siting.sites.map((s) => ({
+      ...s,
+      name: renames[s.id] ?? s.name ?? regionNames.siteNames[s.id],
+    }));
     const namedSiting = { ...siting, sites };
     // Rail before society: the lines and yards are noise sources for the wealth field.
     const t5 = performance.now();
@@ -183,7 +198,7 @@ const api: EngineApi = {
     // Facilities: ports, industry, institutions and airports, placed before society
     // (they are nuisance sources) and before the towns (which reserve their land).
     const t7 = performance.now();
-    const facilities = await runner.run(
+    let facilities = await runner.run(
       facilitiesStage,
       {
         seed,
@@ -222,6 +237,18 @@ const api: EngineApi = {
       { signal },
     );
     const facilitiesMs = performance.now() - t7;
+    if (Object.keys(renames).length)
+      facilities = {
+        ...facilities,
+        features: {
+          ...facilities.features,
+          features: facilities.features.features.map((f) =>
+            renames[f.properties.id]
+              ? { ...f, properties: { ...f.properties, name: renames[f.properties.id]! } }
+              : f,
+          ),
+        },
+      };
     const edits = fieldEdits(doc);
     const society = await runner.run(
       societyStage,
@@ -332,6 +359,8 @@ const api: EngineApi = {
         ),
       );
     }
+    if (Object.keys(renames).length)
+      for (let i = 0; i < townNames.length; i++) townNames[i] = renameWays(townNames[i]!, renames);
     const streetIndex = new StreetIndex(townNames.map((t) => t.ways));
     const namesMs = performance.now() - t8;
 
@@ -355,6 +384,7 @@ const api: EngineApi = {
       block: {
         pack: culturePack(doc.spec.culture),
         address: (x, y) => streetIndex.address(x, y),
+        ...(Object.keys(renames).length ? { renames } : {}),
         ...(doc.spec.cultureMix
           ? { cultureMix: doc.spec.cultureMix.map((m) => ({ culture: m.culture, weight: m.weight })) }
           : {}),
@@ -407,6 +437,7 @@ const api: EngineApi = {
       memoMisses: runner.misses,
       terrain: { ...terrain.stats, contourIntervalM: terrain.contourIntervalM },
       regionName: regionNames.regionName,
+      riverNames: Object.values(regionNames.riverNames),
       culture: doc.spec.culture,
       settlements: towns.map((t, i) => ({
         id: t.id,
@@ -779,6 +810,209 @@ const api: EngineApi = {
     return { total, entries };
   },
 
+  async find(query) {
+    if (!latest || !currentDoc) return [];
+    const { siting, facilities, rail, townNames, towns, tiler } = latest;
+    const want = (k: NonNullable<typeof query.kind>) => !query.kind || query.kind === k;
+    const out: FoundFeature[] = [];
+    if (want('settlement'))
+      for (const s of siting.sites)
+        out.push({
+          id: s.id,
+          kind: 'settlement',
+          name: s.name ?? s.id,
+          center: s.center,
+          properties: { kind: s.kind, population: s.population, radiusM: s.radiusM },
+        });
+    if (want('facility'))
+      for (const f of facilities.features.features)
+        out.push({
+          id: f.properties.id,
+          kind: 'facility',
+          name: f.properties.name,
+          center: centroidOf(f.geometry.coordinates[0]!),
+          settlement: f.properties.settlement,
+          properties: { type: f.properties.type, pinned: f.properties.pinned, outcome: f.properties.outcome },
+        });
+    if (want('station') && rail)
+      for (const st of rail.stations.features)
+        out.push({
+          id: String(st.id),
+          kind: 'station',
+          name: st.properties.name ?? `${st.properties.kind} station`,
+          center: [st.geometry.coordinates[0]!, st.geometry.coordinates[1]!],
+          settlement: st.properties.settlement,
+          properties: { stationKind: st.properties.kind, closed: st.properties.closed },
+        });
+    if (want('district'))
+      for (const tn of townNames)
+        for (const d of tn.districts.features)
+          out.push({
+            id: String(d.id),
+            kind: 'district',
+            name: d.properties.name,
+            center: [d.geometry.coordinates[0]!, d.geometry.coordinates[1]!],
+            settlement: d.properties.settlement,
+            properties: { districtKind: d.properties.kind, patches: d.properties.patches },
+          });
+    if (want('street'))
+      for (const tn of townNames)
+        for (const w of tn.ways.features) {
+          const c = w.geometry.coordinates;
+          const mid = c[Math.floor(c.length / 2)]!;
+          out.push({
+            id: String(w.id),
+            kind: 'street',
+            name: w.properties.name,
+            center: [mid[0]!, mid[1]!],
+            settlement: w.properties.settlement,
+            properties: { class: w.properties.class, lengthM: Math.round(w.properties.lengthM) },
+          });
+        }
+    if (want('annotation'))
+      for (const a of currentDoc.annotations)
+        out.push({
+          id: a.id,
+          kind: 'annotation',
+          name: a.text,
+          center: centroidOfGeometry(a.geometry as Geometry),
+          properties: { annotationKind: a.kind, gmOnly: a.gmOnly },
+        });
+    if (want('authored'))
+      for (const f of currentDoc.authored.features)
+        out.push({
+          id: f.id,
+          kind: 'authored',
+          name: String(f.properties.name ?? f.properties.layer),
+          center: centroidOfGeometry(f.geometry as Geometry),
+          properties: {
+            layer: f.properties.layer,
+            origin: f.properties.origin,
+            ...(f.properties.kind ? { kind: f.properties.kind } : {}),
+          },
+        });
+    const q = query.name?.trim().toLowerCase();
+    const inBox = (p: [number, number]) =>
+      !query.bbox ||
+      (p[0] >= query.bbox[0] && p[0] <= query.bbox[2] && p[1] >= query.bbox[1] && p[1] <= query.bbox[3]);
+    const limit = query.limit ?? 50;
+    const filtered = out.filter(
+      (f) =>
+        (!q || f.name.toLowerCase().includes(q)) &&
+        (!query.settlement || f.settlement === query.settlement || f.id === query.settlement) &&
+        inBox(f.center),
+    );
+    // Buildings are generated lazily and number in the tens of thousands: search them only with a name or a bbox.
+    if (want('building') && (q || query.bbox) && filtered.length < limit) {
+      for (const town of towns) {
+        if (query.settlement && town.id !== query.settlement) continue;
+        for (const block of town.blocks) {
+          if (query.bbox) {
+            const xs = block.ring.map((p) => p[0]);
+            const ys = block.ring.map((p) => p[1]);
+            if (
+              Math.max(...xs) < query.bbox[0] ||
+              Math.min(...xs) > query.bbox[2] ||
+              Math.max(...ys) < query.bbox[1] ||
+              Math.min(...ys) > query.bbox[3]
+            )
+              continue;
+          }
+          for (const b of tiler.model(block).buildings) {
+            const e = buildingSummary(b.properties, String(b.id));
+            if (q && !`${e.name} ${e.useLabel} ${e.address ?? ''}`.toLowerCase().includes(q)) continue;
+            const center = centroidOf(b.geometry.coordinates[0]!);
+            if (!inBox(center)) continue;
+            filtered.push({
+              id: e.id,
+              kind: 'building',
+              name: e.name,
+              center,
+              settlement: town.id,
+              properties: {
+                use: e.use,
+                kind: e.kindLabel,
+                ...(e.address ? { address: e.address } : {}),
+                floors: e.floors,
+              },
+            });
+            if (filtered.length >= limit) break;
+          }
+          if (filtered.length >= limit) break;
+        }
+        if (filtered.length >= limit) break;
+      }
+    }
+    return filtered.slice(0, limit);
+  },
+
+  async settlementSummary(id) {
+    if (!latest || !currentDoc) return null;
+    const { siting, towns, townNames, facilities, rail, society, tiler } = latest;
+    const i = siting.sites.findIndex((s) => s.id === id);
+    if (i < 0) return null;
+    const site = siting.sites[i]!;
+    const town = towns[i]!;
+    const names = townNames[i];
+    const businesses: SettlementSummary['businesses'] = [];
+    let premises = 0;
+    for (const block of town.blocks)
+      for (const b of tiler.model(block).buildings) {
+        premises++;
+        const p = b.properties;
+        if (p.use && p.use !== 'residential' && businesses.length < 40)
+          businesses.push({
+            name: p.name ?? '',
+            use: p.useLabel ?? p.use,
+            ...(p.address ? { address: p.address } : {}),
+          });
+      }
+    const f = society.sample(site.center[0], site.center[1]);
+    const summary: SettlementSummary = {
+      id: site.id,
+      name: site.name ?? site.id,
+      kind: site.kind,
+      population: site.population,
+      center: site.center,
+      radiusM: town.radiusM,
+      walled: town.stats.walled,
+      founded: site.founded,
+      streetPattern: site.spec.layout.streetPattern,
+      ways: names?.stats.ways ?? 0,
+      districts: names?.stats.districts ?? 0,
+      districtList: (names?.districts.features ?? []).map((d) => ({
+        id: String(d.id),
+        name: d.properties.name,
+        ward: d.properties.kind,
+        center: [d.geometry.coordinates[0]!, d.geometry.coordinates[1]!],
+      })),
+      facilities: facilities.features.features
+        .filter((x) => x.properties.settlement === id)
+        .map((x) => ({
+          id: x.properties.id,
+          type: x.properties.type,
+          name: x.properties.name,
+          settlement: x.properties.settlement,
+          center: centroidOf(x.geometry.coordinates[0]!),
+          pinned: x.properties.pinned,
+          outcome: x.properties.outcome,
+        })),
+      stations: (rail?.stations.features ?? [])
+        .filter((st) => st.properties.settlement === id)
+        .map((st) => ({
+          id: String(st.id),
+          name: st.properties.name ?? `${st.properties.kind} station`,
+          center: [st.geometry.coordinates[0]!, st.geometry.coordinates[1]!],
+        })),
+      premises,
+      businesses,
+      wealth: f.wealthClass,
+      density: f.densityClass,
+    };
+    if (site.spec.culture) summary.culture = site.spec.culture;
+    return summary;
+  },
+
   async generatedAt(x, y, toleranceM) {
     if (!latest) return null;
     const { towns, tiler } = latest;
@@ -814,6 +1048,35 @@ const api: EngineApi = {
     return null;
   },
 };
+
+function centroidOfGeometry(g: Geometry): [number, number] {
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  const walk = (c: unknown): void => {
+    if (Array.isArray(c) && typeof c[0] === 'number') {
+      sx += c[0] as number;
+      sy += c[1] as number;
+      n++;
+    } else if (Array.isArray(c)) for (const x of c) walk(x);
+  };
+  walk((g as { coordinates?: unknown }).coordinates);
+  return n ? [sx / n, sy / n] : [0, 0];
+}
+
+/** Apply name overrides to ways (by way id or by any member street id) and their streets. */
+function renameWays(names: TownNamesOutput, renames: Record<string, string>): TownNamesOutput {
+  const streetNames = { ...names.streetNames };
+  let changed = false;
+  const features = names.ways.features.map((w) => {
+    const name = renames[String(w.id)] ?? w.properties.streets.map((id) => renames[id]).find(Boolean);
+    if (!name) return w;
+    changed = true;
+    for (const id of w.properties.streets) streetNames[id] = name;
+    return { ...w, properties: { ...w.properties, name } };
+  });
+  return changed ? { ...names, streetNames, ways: { ...names.ways, features } } : names;
+}
 
 function buildingSummary(p: BuildingProps, id: string): Omit<DirectoryEntry, 'settlement' | 'center'> {
   return {

@@ -1,0 +1,1380 @@
+{
+  "q-region-name": [
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The region is Greyton, in 1925 (Classic era)."
+        }
+      ]
+    }
+  ],
+  "q-largest": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu1",
+          "name": "get_region_summary",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "New Boston, a city of 42,000, is the largest."
+        }
+      ]
+    }
+  ],
+  "q-rivers": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu2",
+          "name": "get_region_summary",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Two rivers: the Miskatonic River and Cold Brook."
+        }
+      ]
+    }
+  ],
+  "q-port-where": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu3",
+          "name": "find_features",
+          "input": {
+            "kind": "facility",
+            "name": "port"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "New Boston Port (city-port-1) sits at about x 2000, y -1500, on the eastern shore of the city."
+        }
+      ]
+    }
+  ],
+  "q-point": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu4",
+          "name": "describe_area",
+          "input": {
+            "x": 1250,
+            "y": -850
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "That is The Gilman House, a hotel at 12 Water Street in New Boston."
+        }
+      ]
+    }
+  ],
+  "q-stations": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu5",
+          "name": "find_features",
+          "input": {
+            "kind": "station"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "One station: New Boston Central at 800, -1300."
+        }
+      ]
+    }
+  ],
+  "q-districts": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu6",
+          "name": "get_settlement_summary",
+          "input": {
+            "id": "city"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Old Town (market core), The Docks (port) and the North End (residential)."
+        }
+      ]
+    }
+  ],
+  "q-businesses": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu7",
+          "name": "find_features",
+          "input": {
+            "kind": "building",
+            "name": "Water Street"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The Gilman House hotel at 12 Water Street."
+        }
+      ]
+    }
+  ],
+  "q-hospital": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu8",
+          "name": "find_features",
+          "input": {
+            "kind": "facility",
+            "name": "hospital"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Yes: Mercy Hospital (city-hospital-1) in New Boston."
+        }
+      ]
+    }
+  ],
+  "q-village": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu9",
+          "name": "get_settlement_summary",
+          "input": {
+            "id": "village"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Martin's Corner is a village of 900 around The Green, with a meeting house."
+        }
+      ]
+    }
+  ],
+  "q-spec": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu10",
+          "name": "get_spec",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Preset coast with relief 0.4."
+        }
+      ]
+    }
+  ],
+  "q-nearby-station": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu11",
+          "name": "describe_area",
+          "input": {
+            "x": 800,
+            "y": -1300,
+            "radiusM": 800
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Water Street and School Street, the Gilman House, Rice Bank Co. and the port lie within 800 m of New Boston Central."
+        }
+      ]
+    }
+  ],
+  "e-year": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu12",
+          "name": "set_year",
+          "input": {
+            "year": 1890
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Done: the region is now in 1890."
+        }
+      ]
+    }
+  ],
+  "e-year-modern": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu13",
+          "name": "set_year",
+          "input": {
+            "year": 1985
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The region is now in 1985."
+        }
+      ]
+    }
+  ],
+  "e-theme": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu14",
+          "name": "set_theme",
+          "input": {
+            "theme": "blueprint"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Switched to the blueprint theme."
+        }
+      ]
+    }
+  ],
+  "e-rename-port": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu15",
+          "name": "name_features",
+          "input": {
+            "items": [
+              {
+                "id": "city-port-1",
+                "name": "Innsmouth Wharf"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The port is now Innsmouth Wharf."
+        }
+      ]
+    }
+  ],
+  "e-rename-city": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu16",
+          "name": "name_features",
+          "input": {
+            "items": [
+              {
+                "id": "city",
+                "name": "Arkham"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "New Boston is now Arkham."
+        }
+      ]
+    }
+  ],
+  "e-note": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu17",
+          "name": "annotate",
+          "input": {
+            "kind": "note",
+            "x": 2000,
+            "y": -1500,
+            "text": "Smugglers land here on new moons",
+            "gmOnly": true
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Added a GM-only note at the port."
+        }
+      ]
+    }
+  ],
+  "e-label": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu18",
+          "name": "annotate",
+          "input": {
+            "kind": "label",
+            "x": -200,
+            "y": -500,
+            "text": "Gallows Hill"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Labelled Gallows Hill."
+        }
+      ]
+    }
+  ],
+  "e-marker": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu19",
+          "name": "annotate",
+          "input": {
+            "kind": "marker",
+            "x": -4210,
+            "y": 2610,
+            "text": "Meeting house"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Marker placed on the meeting house."
+        }
+      ]
+    }
+  ],
+  "e-frame": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu20",
+          "name": "annotate",
+          "input": {
+            "kind": "handoutFrame",
+            "polygon": [
+              [1700, -1600],
+              [2100, -1600],
+              [2100, -1200],
+              [1700, -1200]
+            ],
+            "text": "The Docks"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Handout frame added around the docks."
+        }
+      ]
+    }
+  ],
+  "e-relief": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu21",
+          "name": "patch_spec",
+          "input": {
+            "ops": [
+              {
+                "op": "replace",
+                "path": "/terrain/relief",
+                "value": 0.9
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Relief raised to 0.9; the region regenerates."
+        }
+      ]
+    }
+  ],
+  "e-sea": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu22",
+          "name": "get_spec",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu23",
+          "name": "patch_spec",
+          "input": {
+            "ops": [
+              {
+                "op": "replace",
+                "path": "/terrain/seaLevel",
+                "value": 5
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Sea level is now 5 m."
+        }
+      ]
+    }
+  ],
+  "e-inequality": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu24",
+          "name": "patch_spec",
+          "input": {
+            "ops": [
+              {
+                "op": "replace",
+                "path": "/society/inequality",
+                "value": 0.9
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Inequality set to 0.9."
+        }
+      ]
+    }
+  ],
+  "e-no-rail": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu25",
+          "name": "patch_spec",
+          "input": {
+            "ops": [
+              {
+                "op": "replace",
+                "path": "/networks/rail/enabled",
+                "value": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Rail disabled; the lines and stations are gone."
+        }
+      ]
+    }
+  ],
+  "e-mainlines": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu26",
+          "name": "patch_spec",
+          "input": {
+            "ops": [
+              {
+                "op": "replace",
+                "path": "/networks/rail/mainlines",
+                "value": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Two mainlines now."
+        }
+      ]
+    }
+  ],
+  "e-regen-region": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu27",
+          "name": "regenerate",
+          "input": {
+            "scope": "region"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Layout re-rolled; authored features were kept."
+        }
+      ]
+    }
+  ],
+  "e-regen-village": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu28",
+          "name": "regenerate",
+          "input": {
+            "scope": "settlement",
+            "id": "village"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Martin's Corner has been re-rolled."
+        }
+      ]
+    }
+  ],
+  "e-remove-gasworks": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu29",
+          "name": "remove_feature",
+          "input": {
+            "id": "city-gasworks-1"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The gasworks is gone."
+        }
+      ]
+    }
+  ],
+  "e-move-hospital": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu30",
+          "name": "move_feature",
+          "input": {
+            "id": "city-hospital-1",
+            "x": 1100,
+            "y": 900
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Mercy Hospital pinned at 1100, 900."
+        }
+      ]
+    }
+  ],
+  "m-year-note": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu31",
+          "name": "set_year",
+          "input": {
+            "year": 1928
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "tu32",
+          "name": "annotate",
+          "input": {
+            "kind": "note",
+            "x": 1900,
+            "y": -1400,
+            "text": "The Marsh refinery has opened",
+            "gmOnly": true
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Year 1928; note added at the docks."
+        }
+      ]
+    }
+  ],
+  "m-find-remove": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu33",
+          "name": "find_features",
+          "input": {
+            "kind": "building",
+            "name": "bank"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu34",
+          "name": "remove_feature",
+          "input": {
+            "id": "b-2"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Rice Bank Co. (b-2) has been removed."
+        }
+      ]
+    }
+  ],
+  "m-find-rename": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu35",
+          "name": "find_features",
+          "input": {
+            "kind": "building",
+            "name": "Water Street"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu36",
+          "name": "name_features",
+          "input": {
+            "items": [
+              {
+                "id": "b-1",
+                "name": "The Marsh Hotel"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The Gilman House is now The Marsh Hotel."
+        }
+      ]
+    }
+  ],
+  "m-add-village": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu37",
+          "name": "add_settlement",
+          "input": {
+            "kind": "village",
+            "x": 2600,
+            "y": 2200,
+            "population": 300,
+            "name": "Kingsport"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Kingsport added at 2600, 2200."
+        }
+      ]
+    }
+  ],
+  "m-place-annotate": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu38",
+          "name": "place_feature",
+          "input": {
+            "type": "institution.cemetery",
+            "settlement": "city"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu39",
+          "name": "annotate",
+          "input": {
+            "kind": "note",
+            "x": 1200,
+            "y": -800,
+            "text": "the ghoul warren",
+            "gmOnly": true
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Cemetery requested for New Boston and the warren noted."
+        }
+      ]
+    }
+  ],
+  "m-wealth": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu40",
+          "name": "get_settlement_summary",
+          "input": {
+            "id": "city"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu41",
+          "name": "brush",
+          "input": {
+            "kind": "wealth",
+            "points": [[1100, 300]],
+            "radiusM": 400,
+            "amount": -0.5
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Wealth lowered around the North End."
+        }
+      ]
+    }
+  ],
+  "m-two-facilities": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu42",
+          "name": "place_feature",
+          "input": {
+            "type": "brewery",
+            "settlement": "city"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "tu43",
+          "name": "place_feature",
+          "input": {
+            "type": "tannery",
+            "settlement": "city"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Brewery and tannery requested for New Boston."
+        }
+      ]
+    }
+  ],
+  "m-reroll-area": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu44",
+          "name": "regenerate",
+          "input": {
+            "scope": "area",
+            "polygon": [
+              [-4500, 2300],
+              [-3900, 2300],
+              [-3900, 2900],
+              [-4500, 2900]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The blocks around the green were re-rolled."
+        }
+      ]
+    }
+  ],
+  "m-freeze": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu45",
+          "name": "freeze",
+          "input": {
+            "x": 1250,
+            "y": -850
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "tu46",
+          "name": "annotate",
+          "input": {
+            "kind": "note",
+            "x": 1250,
+            "y": -850,
+            "text": "Room 428 is haunted",
+            "gmOnly": true
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The Gilman House is frozen and the note is in."
+        }
+      ]
+    }
+  ],
+  "m-undo": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu47",
+          "name": "set_year",
+          "input": {
+            "year": 1700
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu48",
+          "name": "undo",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Set to 1700 and undone; the year is back to 1925."
+        }
+      ]
+    }
+  ],
+  "m-patch-year": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu49",
+          "name": "patch_spec",
+          "input": {
+            "ops": [
+              {
+                "op": "replace",
+                "path": "/terrain/relief",
+                "value": 0.7
+              },
+              {
+                "op": "replace",
+                "path": "/networks/roads/motorways",
+                "value": false
+              }
+            ]
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "tu50",
+          "name": "set_year",
+          "input": {
+            "year": 1850
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Relief 0.7, motorways off, year 1850."
+        }
+      ]
+    }
+  ],
+  "m-move-village": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu51",
+          "name": "add_settlement",
+          "input": {
+            "kind": "hamlet",
+            "x": -1000,
+            "y": 3000,
+            "population": 80
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu52",
+          "name": "move_feature",
+          "input": {
+            "id": "hamlet-1",
+            "x": -1500,
+            "y": 3200
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Hamlet added and moved to -1500, 3200."
+        }
+      ]
+    }
+  ],
+  "d-street": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu53",
+          "name": "draw",
+          "input": {
+            "layer": "street",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [800, -1300],
+                [2000, -1500]
+              ]
+            },
+            "kind": "collector",
+            "name": "Harbour Road"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Harbour Road drawn from the station to the port."
+        }
+      ]
+    }
+  ],
+  "d-rail": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu54",
+          "name": "draw",
+          "input": {
+            "layer": "rail",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [800, -1300],
+                [1200, -1300]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Siding drawn."
+        }
+      ]
+    }
+  ],
+  "d-building": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu55",
+          "name": "draw",
+          "input": {
+            "layer": "building",
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [1935, -1460],
+                  [1965, -1460],
+                  [1965, -1440],
+                  [1935, -1440],
+                  [1935, -1460]
+                ]
+              ]
+            },
+            "kind": "warehouse",
+            "floors": 2
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Warehouse drawn on the quay."
+        }
+      ]
+    }
+  ],
+  "d-park": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu56",
+          "name": "draw",
+          "input": {
+            "layer": "zone",
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [1000, 200],
+                  [1200, 200],
+                  [1200, 400],
+                  [1000, 400],
+                  [1000, 200]
+                ]
+              ]
+            },
+            "kind": "park"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Park zone drawn in the North End."
+        }
+      ]
+    }
+  ],
+  "d-canal": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu57",
+          "name": "draw",
+          "input": {
+            "layer": "water",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [1900, -1400],
+                [1500, -600]
+              ]
+            },
+            "kind": "canal"
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Canal drawn inland from the docks."
+        }
+      ]
+    }
+  ],
+  "d-hill": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu58",
+          "name": "brush",
+          "input": {
+            "kind": "raise",
+            "points": [[-200, -500]],
+            "radiusM": 250,
+            "amount": 40
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "A hill rises at -200, -500."
+        }
+      ]
+    }
+  ],
+  "d-flatten": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu59",
+          "name": "brush",
+          "input": {
+            "kind": "flatten",
+            "points": [
+              [0, 0],
+              [500, 0]
+            ],
+            "radiusM": 150
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "Ground flattened along the line."
+        }
+      ]
+    }
+  ],
+  "d-bad-geometry": [
+    {
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "tu60",
+          "name": "draw",
+          "input": {
+            "layer": "street",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [90000, 0],
+                [95000, 0]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "I could not draw that: those coordinates lie outside the region, so nothing was changed."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+name: Assistant live evaluation
+
+# Runs the 50 scripted assistant requests against the real Anthropic API once
+# a week (and on demand). Needs the ANTHROPIC_API_KEY repository secret; the
+# job is skipped without it. The recorded run in CI (pnpm test) never calls
+# the API.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model id
+        default: claude-opus-5
+        required: false
+
+jobs:
+  live:
+    if: ${{ vars.ASSISTANT_LIVE_EVAL == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @citygen/assistant eval:live -- --model ${{ inputs.model || 'claude-opus-5' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

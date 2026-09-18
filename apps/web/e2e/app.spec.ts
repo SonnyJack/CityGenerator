@@ -654,3 +654,175 @@ test('the export panel opens, previews the frame size and produces a report', as
   await expect(page.getByTestId('export-panel')).toBeVisible();
   await expect(page.getByTestId('export-panel')).toContainText('px');
 });
+
+// ---------------------------------------------------------------------------
+// Phase 8: the assistant.
+
+test('the assistant runs scripted tool calls through the command bus with inline undo and cost', async ({
+  page,
+}) => {
+  await ready(page);
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats & {
+    facilities: { list: { id: string; type: string; name: string }[] };
+  };
+  const port = stats.facilities.list.find((f) => f.type === 'port')!;
+  expect(port).toBeDefined();
+  await page.evaluate(
+    (portId) =>
+      window.__citygen.assistant.useScripted([
+        {
+          content: [
+            { type: 'text', text: 'Setting the year and renaming the port.' },
+            { type: 'tool_use', id: 'tu1', name: 'set_year', input: { year: 1890 } },
+            {
+              type: 'tool_use',
+              id: 'tu2',
+              name: 'name_features',
+              input: { items: [{ id: portId, name: 'Innsmouth Wharf' }] },
+            },
+            {
+              type: 'tool_use',
+              id: 'tu3',
+              name: 'annotate',
+              input: { kind: 'note', x: 0, y: 0, text: 'Deep One tunnels', gmOnly: true },
+            },
+          ],
+          usage: { inputTokens: 5000, outputTokens: 200 },
+        },
+        {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tu4',
+              name: 'find_features',
+              input: { kind: 'facility', name: 'Innsmouth' },
+            },
+          ],
+          usage: { inputTokens: 6000, outputTokens: 50, cacheReadTokens: 4000 },
+        },
+        { content: [{ type: 'text', text: 'Done: 1890, the port is now Innsmouth Wharf.' }] },
+      ]),
+    port.id,
+  );
+  await page.getByRole('button', { name: 'Assistant', exact: true }).click();
+  await expect(page.getByTestId('assistant')).toBeVisible();
+  await page.getByLabel('Ask the assistant').fill('Set the year to 1890 and rename the port Innsmouth Wharf');
+  await page.getByLabel('Ask the assistant').press('Enter');
+  await expect(page.getByTestId('assistant-reply').last()).toContainText('Innsmouth Wharf', {
+    timeout: 120_000,
+  });
+  await page.waitForFunction(() => window.__citygen.status() === 'idle', undefined, { timeout: 120_000 });
+
+  const doc = (await page.evaluate(() => window.__citygen.getDocument())) as {
+    spec: { year: number };
+    annotations: { text: string; gmOnly: boolean }[];
+    overrides: { op: string; key?: string; value?: unknown }[];
+  };
+  expect(doc.spec.year).toBe(1890);
+  expect(doc.annotations[0]).toMatchObject({ text: 'Deep One tunnels', gmOnly: true });
+  expect(doc.overrides.some((o) => o.op === 'setProperty' && o.value === 'Innsmouth Wharf')).toBe(true);
+  // The engine applied the rename and the scripted find returned it to the model.
+  const after = (await page.evaluate(() => window.__citygen.stats())) as typeof stats;
+  expect(after.facilities.list.find((f) => f.id === port.id)?.name).toBe('Innsmouth Wharf');
+  const transcript = (await page.evaluate(() => window.__citygen.assistant.transcript())) as {
+    kind: string;
+    outcome?: { name: string; isError: boolean; content: { text?: string }[] };
+  }[];
+  const find = transcript.find((t) => t.kind === 'tool' && t.outcome?.name === 'find_features')!;
+  expect(find.outcome!.isError).toBe(false);
+  expect(find.outcome!.content[0]!.text).toContain('Innsmouth Wharf');
+  await expect(page.getByTestId('assistant-tool')).toHaveCount(4);
+  // Cost and usage are shown.
+  await expect(page.getByTestId('assistant-cost')).toContainText('15000 in');
+  await expect(page.getByTestId('assistant-cost')).toContainText('$0.0');
+  // Inline undo on the first tool card reverts the year (and everything after it).
+  await page.getByRole('button', { name: 'Undo set_year' }).click();
+  await page.waitForFunction(() => window.__citygen.status() === 'idle', undefined, { timeout: 120_000 });
+  const reverted = (await page.evaluate(() => window.__citygen.getDocument())) as {
+    spec: { year: number };
+    annotations: unknown[];
+  };
+  expect(reverted.spec.year).not.toBe(1890);
+  expect(reverted.annotations).toHaveLength(0);
+});
+
+test('the assistant reports bad keys, network failures and refusals without crashing', async ({ page }) => {
+  await ready(page);
+  await page.evaluate(() =>
+    window.__citygen.assistant.useScripted([
+      { error: 'auth' },
+      { error: 'network' },
+      { content: [{ type: 'text', text: 'No.' }], stopReason: 'refusal' },
+    ]),
+  );
+  await page.evaluate(() => window.__citygen.assistant.open(true));
+  await page.getByLabel('Ask the assistant').fill('hello');
+  await page.getByLabel('Ask the assistant').press('Enter');
+  await expect(page.getByTestId('assistant-error')).toContainText('API key', { timeout: 60_000 });
+  await page.getByLabel('Ask the assistant').fill('hello again');
+  await page.getByLabel('Ask the assistant').press('Enter');
+  await expect(page.getByTestId('assistant-error').nth(1)).toContainText('network', { timeout: 60_000 });
+  await page.getByLabel('Ask the assistant').fill('do something declined');
+  await page.getByLabel('Ask the assistant').press('Enter');
+  await expect(page.getByTestId('assistant')).toContainText('declined', { timeout: 60_000 });
+  await expect(page.getByLabel('Ask the assistant')).toBeEnabled();
+  const doc = (await page.evaluate(() => window.__citygen.getDocument())) as { overrides: unknown[] };
+  expect(doc.overrides).toHaveLength(0);
+});
+
+test('the assistant reads the engine: settlement summaries, area descriptions and snapshots', async ({
+  page,
+}) => {
+  await ready(page);
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
+  const city = stats.settlements[0]!;
+  await page.evaluate(
+    ({ id, cx, cy, webgl }) =>
+      window.__citygen.assistant.useScripted([
+        {
+          content: [
+            { type: 'tool_use', id: 'r1', name: 'get_settlement_summary', input: { id } },
+            { type: 'tool_use', id: 'r2', name: 'describe_area', input: { x: cx, y: cy, radiusM: 300 } },
+            ...(webgl
+              ? [
+                  {
+                    type: 'tool_use',
+                    id: 'r3',
+                    name: 'render_snapshot',
+                    input: { bbox: [cx - 300, cy - 300, cx + 300, cy + 300] },
+                  },
+                ]
+              : []),
+          ],
+        },
+        { content: [{ type: 'text', text: 'Read it.' }] },
+      ]),
+    { id: city.id, cx: city.center[0], cy: city.center[1], webgl: !webglMissing },
+  );
+  await page.evaluate(() => window.__citygen.assistant.send('Tell me about the city'));
+  const transcript = (await page.evaluate(() => window.__citygen.assistant.transcript())) as {
+    kind: string;
+    outcome?: { name: string; isError: boolean; content: { type: string; text?: string }[] };
+  }[];
+  const tools = transcript.filter((t) => t.kind === 'tool').map((t) => t.outcome!);
+  expect(tools.every((t) => !t.isError)).toBe(true);
+  const summary = JSON.parse(tools[0]!.content[0]!.text!) as {
+    name: string;
+    districtList: unknown[];
+    businesses: unknown[];
+    premises: number;
+  };
+  expect(summary.name).toBe(city.name);
+  expect(summary.districtList.length).toBeGreaterThan(0);
+  expect(summary.premises).toBeGreaterThan(100);
+  const area = JSON.parse(tools[1]!.content[0]!.text!) as {
+    settlement: { id: string } | null;
+    nearby: unknown[];
+  };
+  expect(area.settlement?.id).toBe(city.id);
+  expect(area.nearby.length).toBeGreaterThan(0);
+  if (!webglMissing) {
+    expect(tools[2]!.content.some((c) => c.type === 'image')).toBe(true);
+  }
+});

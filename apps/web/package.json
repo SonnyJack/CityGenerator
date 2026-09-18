@@ -12,19 +12,20 @@
     "e2e": "playwright test --config playwright.config.ts"
   },
   "dependencies": {
+    "@citygen/assistant": "workspace:*",
     "@citygen/core": "workspace:*",
     "@citygen/editor": "workspace:*",
+    "@citygen/export": "workspace:*",
     "@citygen/features": "workspace:*",
     "@citygen/themes": "workspace:*",
     "@citygen/tiles": "workspace:*",
+    "@types/geojson": "^7946.0.16",
     "comlink": "^4.4.2",
     "idb-keyval": "^6.3.0",
     "maplibre-gl": "^6.10.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "zustand": "^5.0.15",
-    "@types/geojson": "^7946.0.16",
-    "@citygen/export": "workspace:*"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

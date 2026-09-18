@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.7** (Phases 3–7 delivered; see §16)
+Status: **Draft v0.8** (Phases 3–8 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -834,9 +834,10 @@ placed 300 m east of the requested point: requested spot too shallow").
 
 ### 11.2 Models and request shape
 
-- Default model `claude-opus-5` with adaptive thinking, streaming, and the
-  server-side refusal `fallbacks` option enabled so a declined request degrades
-  gracefully.
+- Default model `claude-opus-5` with adaptive thinking and streaming. A
+  declined request (`stop_reason: refusal`) ends the turn with a notice and
+  no change; the SDK in use has no server-side fallback option, so the
+  client handles it.
 - `claude-sonnet-5` for bulk naming and flavour text with structured output.
 - Tools use `strict: true` schemas generated from the command definitions.
 - The map summary and tool definitions are placed first in the request so
@@ -962,6 +963,12 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.8** — Phase 8 delivered: the assistant package, tools, drawer and
+  evaluation set. Implementation notes: tool schemas come from zod and are
+  made strict (all properties required, optionals nullable, numeric
+  constraints kept only for local validation); the session primes each
+  conversation with the region summary and trims old tool results; renames
+  are `setProperty` overrides applied in the engine worker.
 - **v0.7** — Phases 4–7 delivered: the editor, rail and trams, the placement
   engine and facility library, culture packs with naming, addresses and the
   directory, five more themes, and export (PNG, SVG, GeoJSON, Universal VTT

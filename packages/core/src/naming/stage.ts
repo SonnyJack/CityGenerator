@@ -88,6 +88,8 @@ export interface WayProps {
   name: string;
   class: 'artery' | 'road' | 'collector' | 'street' | 'lane';
   lengthM: number;
+  /** Ids of the street segments that make up the way. */
+  streets: string[];
 }
 
 export interface TownNamesOutput {
@@ -202,7 +204,13 @@ export const townNamesStage = defineStage<TownNamesInput, TownNamesOutput>({
         type: 'Feature',
         id: `${site.id}-way-${k}`,
         geometry: { type: 'LineString', coordinates: w.pts },
-        properties: { settlement: site.id, name, class: cls, lengthM: len },
+        properties: {
+          settlement: site.id,
+          name,
+          class: cls,
+          lengthM: len,
+          streets: w.members.map((m) => String(feats[m]!.id)),
+        },
       });
     });
 

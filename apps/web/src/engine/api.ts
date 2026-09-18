@@ -32,6 +32,58 @@ export interface EngineApi {
     query: string,
     limit: number,
   ): Promise<{ total: number; entries: DirectoryEntry[] }>;
+  /** Feature search for the assistant: settlements, facilities, stations, districts, ways and buildings. */
+  find(query: FindQuery): Promise<FoundFeature[]>;
+  /** Everything the assistant needs to know about one settlement. */
+  settlementSummary(id: string): Promise<SettlementSummary | null>;
+}
+
+export interface FindQuery {
+  kind?:
+    'settlement' | 'facility' | 'building' | 'street' | 'district' | 'station' | 'annotation' | 'authored';
+  name?: string;
+  settlement?: string;
+  bbox?: [number, number, number, number];
+  limit?: number;
+}
+
+export interface FoundFeature {
+  id: string;
+  kind: string;
+  name: string;
+  center: [number, number];
+  settlement?: string | null;
+  properties?: Record<string, unknown>;
+}
+
+export interface SettlementSummary {
+  id: string;
+  name: string;
+  kind: string;
+  population: number;
+  center: [number, number];
+  radiusM: number;
+  walled?: boolean;
+  culture?: string;
+  founded?: number;
+  streetPattern?: string;
+  ways: number;
+  districts: number;
+  districtList: { id: string; name: string; ward?: string; center: [number, number] }[];
+  facilities: {
+    id: string;
+    type: string;
+    name: string;
+    settlement: string | null;
+    center: [number, number];
+    pinned: boolean;
+    outcome: string;
+  }[];
+  stations: { id: string; name: string; center: [number, number] }[];
+  premises: number;
+  businesses: { name: string; use: string; address?: string }[];
+  wealth?: string;
+  density?: string;
 }
 
 export interface DirectoryEntry {
@@ -130,6 +182,7 @@ export interface EngineStats {
   }[];
   era: { id: string; name: string; year: number };
   regionName: string;
+  riverNames: string[];
   culture: string;
   roads: { links: number; roadKm: number; bridges: number };
   rail: {
