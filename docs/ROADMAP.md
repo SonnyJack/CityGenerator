@@ -1,6 +1,6 @@
 # CityGenerator — Roadmap
 
-Status: **Draft v0.2**. No calendar estimates by owner request. Phases are
+Status: **Draft v0.3**. No calendar estimates by owner request. Phases are
 ordered by dependency and by risk: the riskiest architectural pieces
 (metropolitan-scale lazy generation and MapLibre rendering) are proven first.
 Every phase ends with a deployed site on GitHub Pages so there is always
@@ -29,7 +29,8 @@ pass across all presets and eras.
 
 ## Phase 0 — Foundation
 
-- [ ] MIT `LICENSE` (confirm copyright holder string), `CONTRIBUTING.md` with
+- [x] MIT `LICENSE` (copyright "CityGenerator contributors").
+- [ ] `CONTRIBUTING.md` with
       the clean-room policy, ADR folder seeded with the decisions in
       DESIGN §15.
 - [ ] pnpm monorepo: `apps/web`, `packages/core`, `packages/tiles`,
@@ -56,7 +57,9 @@ re-imports a document unchanged.
 - [ ] Hydrology: depression filling, flow, rivers with width, lakes, sea,
       bathymetry, tidal flats and marsh.
 - [ ] Derived rasters: slope, aspect, distance to water, flood risk.
-- [ ] Land cover (R2): forest, moor, marsh, farmland suitability by climate.
+- [ ] Biome packs (first six: temperate maritime, temperate continental,
+      mediterranean, boreal, desert, tropical monsoon) and land cover (R2):
+      forest type, moor, marsh, savanna, paddy, mangrove, farmland suitability.
 - [ ] Lazy terrain detail tiles with edge-consistent noise; contours; Terrain-RGB
       tiles for hillshade and 3D terrain.
 - [ ] Tile builder (`geojson-vt` + `vt-pbf`) behind a MapLibre custom protocol
@@ -172,8 +175,13 @@ container terminal; wasteland < 3 % of buildable land.
 
 ## Phase 7 — Naming, POIs, directory, themes and export
 
-- [ ] Culture packs (`newEngland`, `england`, `scotland`, `centralEurope`,
-      `mediterranean`) with naming grammars; label placement via MapLibre.
+- [ ] Culture pack framework (naming grammars with transliteration, street
+      and block conventions, building kinds, religious/civic kinds, colonial
+      overlays) and the first eight packs: `newEngland`, `england`, `france`,
+      `germanyCentralEurope`, `iberia`, `egyptLevant`, `china`, `japan`; label
+      placement via MapLibre. Remaining packs from DESIGN §7 follow as data
+      contributions with a reference gallery each.
+- [ ] Remaining biome packs from DESIGN §7.
 - [ ] Addresses; business and resident directory for every building; search.
 - [ ] Amenities and POIs by era (church, chapel, school, pub, corner shop,
       police, fire, post office, bank, cinema, boarding house, telephone
@@ -181,12 +189,18 @@ container terminal; wasteland < 3 % of buildable land.
 - [ ] Themes: `period-1920s`, `sanborn` (material and use colouring), `blueprint`,
       `dark`, `print`.
 - [ ] Export: PNG (offscreen MapLibre, DPI, presets for Foundry/Roll20 scenes and
-      handouts), SVG (`svg-export`), GeoJSON, Universal VTT with walls, Foundry
-      scene JSON, player export, handout frames re-export.
+      handouts), SVG (`svg-export`), GeoJSON, Universal VTT with walls from
+      simplified, merged building outlines (frame-limited, segment cap with
+      warning and solid-block fallback), Foundry scene JSON with the same
+      walls, player export, handout frames re-export.
 
 Acceptance: exported SVG and PNG of the same frame match in a visual test;
 directory export lists every non-residential building with a name; a Keeper
-can produce a player handout of a harbour district with GM notes hidden.
+can produce a player handout of a harbour district with GM notes hidden; a
+Universal VTT export of a dense 1925 downtown frame of 500 × 500 m loads in
+Foundry with line of sight working and under 4,000 wall segments; a 1925
+Cairo and a 1925 Boston from the same seed differ in street pattern, building
+kinds and names.
 
 ## Phase 8 — LLM assistant
 

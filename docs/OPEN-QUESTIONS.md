@@ -1,10 +1,10 @@
 # Decisions, open questions and suggested features
 
-## A. Decided (v0.2)
+## A. Decided
 
 | # | Question | Decision | Consequence |
 |---|---|---|---|
-| 1 | Licence | Clean-room reimplementation, permissive licence (MIT proposed) | CONTRIBUTING.md clean-room policy; no code from the GPL reference |
+| 1 | Licence | Clean-room reimplementation, MIT, copyright "CityGenerator contributors" | `LICENSE` added; CONTRIBUTING.md clean-room policy; no code from the GPL reference |
 | 2 | Scale | Metropolitan regions | Hierarchical region → settlement → block model; lazy block generation; MapLibre GL rendering via in-browser vector tiles |
 | 3 | Aesthetic | Both ink and modern atlas as themes | Theme compiler to MapLibre style JSON and SVG; ink spike in Phase 1 |
 | 4 | Eras | Medieval through modern | Year-based era profiles, growth rings, Call of Cthulhu period packs (1890s, 1920s–30s, modern) |
@@ -13,25 +13,12 @@
 | 7 | Export | Call of Cthulhu primarily; no print tiling yet | PNG handouts, SVG, GeoJSON, Universal VTT, Foundry; period and Sanborn themes; player export |
 | 8 | Framework | React | — |
 | 9 | Estimates | None; be ambitious | Roadmap is dependency-ordered with acceptance criteria and no dates |
-| — | Document size | Not constrained; JSON import/export is the persistence contract | `.citygen.json` holds spec + authored + overrides + annotations; URL hash only for small documents |
+| 10 | Document size | Not constrained; JSON import/export is the persistence contract | `.citygen.json` holds spec + authored + overrides + annotations; URL hash only for small documents |
+| 11 | Settings and regions | Multiple cultures and biomes around the world | Biome and culture are independent axes with worldwide pack lists (DESIGN §7); cultures can mix per district; era availability is culture-aware |
+| 12 | Facility scale | Scale compression on by default | Per-type factor, per-document true-scale toggle, inspector shows both sizes |
+| 13 | VTT walls | Universal VTT walls wanted, if performance allows | Walls derived only for the export frame from simplified, merged outlines; segment cap with warning and solid-block fallback |
 
-## B. Still open (answer when convenient; defaults shown)
-
-**Q10. Copyright holder string for the MIT licence.** *Default: the GitHub
-account name.*
-
-**Q11. Call of Cthulhu settings to prioritise.** 1920s New England (Lovecraft
-Country) and 1890s/1920s England are assumed first; is Modern-day needed early,
-and are non-Anglophone settings (Berlin, Cairo, Shanghai) wanted in the first
-culture packs? *Default: `newEngland` and `england` first.*
-
-**Q12. Realism vs. playability for large facilities.** Ports and yards shrink
-by a per-type scale-compression factor by default so a port does not consume a
-town; a "true scale" toggle exists. Acceptable? *Default: compression on.*
-
-**Q13. Maximum region size to design for.** 60 km on a side is the working
-target; larger regions are possible with a coarser base raster. *Default:
-60 km.*
+## B. Open (defaults apply until answered)
 
 **Q14. Ink theme fidelity.** If the Phase 1 spike shows the MapLibre ink theme
 is close but not identical to the reference's hand-drawn look, is that
@@ -39,20 +26,24 @@ acceptable, or should a dedicated PixiJS renderer be built for it? *Default:
 accept if a reviewer judges it "clearly hand-drawn in spirit".*
 
 **Q15. Directory depth.** Should every building get a named business or
-household by default (larger documents and generation cost), or only on
-demand per district? *Default: on demand per district, cached.*
+household by default, or only on demand per district? *Default: on demand
+per district, cached.*
 
-**Q16. VTT specifics.** Foundry VTT scene export is assumed; are Roll20 or
-Owlbear Rodeo needed, and is Universal VTT wall data (line-of-sight from
-building outlines) valuable for your play? *Default: Foundry + Universal VTT.*
+**Q16. Maximum region size.** 60 km on a side is the working target. *Default:
+60 km; larger with a coarser base raster.*
 
-**Q17. Public engine API.** Should `@citygen/core` be published to npm as a
-supported library, or remain internal until v1? *Default: internal until v1.*
+**Q17. Public engine API.** Publish `@citygen/core` to npm before v1?
+*Default: internal until v1.*
 
-**Q18. Building interiors.** Floor-plan generation for selected buildings is
-listed as a stretch project; is it important enough to plan for early (it
-affects what buildings store)? *Default: store `floors`, `use`, `era`,
-`material` from Phase 3 so interiors can be added without regeneration.*
+**Q18. Building interiors.** Plan early or keep as a stretch project?
+*Default: store `floors`, `use`, `era`, `material` from Phase 3 so interiors
+can be added later.*
+
+**Q19. Pack priority.** With worldwide coverage decided, which eight culture
+packs and six biomes should ship first? *Default (Phase 7): `newEngland`,
+`england`, `france`, `germanyCentralEurope`, `iberia`, `egyptLevant`, `china`,
+`japan`; biomes temperate maritime, temperate continental, mediterranean,
+boreal, desert, tropical monsoon.*
 
 ## C. Suggested features and where they land
 
@@ -64,7 +55,7 @@ affects what buildings store)? *Default: store `floors`, `use`, `era`,
 | Full editor with brushes, freeze, reroll brush, handout frames | 4 |
 | Tram/streetcar networks and streetcar suburbs | 5 |
 | Ports by era, shipyards and dry docks, gasworks, mills, institutions | 6 |
-| Culture packs, addresses, business and resident directory | 7 |
+| Biome packs; culture packs, addresses, business and resident directory | 1, 7 |
 | Period-1920s and Sanborn themes; player export | 7 |
 | LLM assistant with vision snapshots | 8 |
 | Growth timeline scrubber; 3D extrusion; decay, flood, fire | 9 |

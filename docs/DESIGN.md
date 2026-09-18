@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.2** (revised after owner decisions; see §16)
+Status: **Draft v0.3** (all initial questions resolved; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -186,7 +186,7 @@ Four ideas hold the design together:
 | Testing | Vitest (unit, golden-seed hashes), Playwright (e2e, visual regression on Chromium/Firefox/WebKit) | Standard |
 | CI/CD | GitHub Actions → GitHub Pages | Required |
 | Repo | pnpm workspaces monorepo | Engine reusable outside the app |
-| Licence | Clean-room, permissive (MIT proposed) | Decided |
+| Licence | Clean-room, MIT, copyright "CityGenerator contributors" | Decided |
 
 ### 4.1 Why MapLibre and not a custom Canvas renderer
 
@@ -269,8 +269,9 @@ interface RegionSpec {
   seed: string;
   extent: { widthM: number; heightM: number };          // up to ~60 km on a side
   year: number;                                          // 1100..2050; drives era profile
-  climate: 'temperate' | 'maritime' | 'continental' | 'mediterranean' | 'arid' | 'boreal';
-  culture: string;                                       // naming/style pack id, e.g. 'newEngland', 'england', 'centralEurope'
+  biome: BiomeId;                                        // climate/vegetation pack, e.g. 'temperateMaritime', 'tropicalMonsoon'
+  culture: CultureId;                                    // naming/building-style pack, e.g. 'newEngland', 'japan', 'maghreb'
+  cultureMix?: { culture: CultureId; weight: number; districts?: string[] }[];   // colonial/immigrant quarters
 
   terrain: {
     preset: 'plains' | 'coast' | 'bay' | 'riverValley' | 'hills' | 'archipelago' | 'delta' | 'estuary' | 'custom';
@@ -395,7 +396,8 @@ generator treats authored features as fixed constraints and fills around them.
   seeded per tile, so any two tiles agree at their shared edge. Hydrology runs on
   the base raster; river centrelines are refined at the detail level.
 - **Generation**: fBm with domain warping blended with preset shape functions
-  (coast gradient, valley profile, bay/estuary mask, archipelago falloff).
+  (coast gradient, valley profile, bay/estuary mask, archipelago falloff) and
+  the biome pack's relief and coast-type parameters (fjord, reef, lagoon…).
   Imported heightmaps replace the noise. User brush edits (raise, lower,
   smooth, flatten, water) are authored features replayed after generation.
 - **Hydrology**: priority-flood depression filling, D8 flow, accumulation,
@@ -549,8 +551,10 @@ Each is a `FeatureType` with a bespoke `layout()` and era variants:
 
 Sub-features are stored as `facilities[].parts[]` with their own geometry so
 renderers draw cranes, tracks and tanks distinctly and exporters keep them.
-Large facilities apply a `scaleCompression` factor by default so that a port
-does not consume the entire town, with a toggle for true scale.
+Large facilities apply a `scaleCompression` factor by default (decided) so
+that a port does not consume the entire town; a per-document "true scale"
+toggle disables it, and the inspector shows both the compressed and real
+dimensions.
 
 ### 6.7 Parcels, buildings and fill
 
@@ -593,16 +597,47 @@ Fill features are ordinary feature types that accept any leftover polygon.
 
 ---
 
-## 7. Feature library, era profiles and culture packs
+## 7. Feature library, era profiles, biomes and culture packs
 
-- `packages/features` holds zone profiles, feature types, era profiles and
-  culture packs as JSON with optional TypeScript scorers and layouts, registered
-  by id and validated by schema.
-- **Culture packs** define naming (street, district, water, business and
-  surname wordlists with grammar), block/lot conventions (hedgerows vs. fences,
-  terraces vs. detached, alleys), roof and material mixes, religious and civic
-  building kinds. Initial packs: `newEngland`, `england`, `scotland`,
-  `centralEurope`, `mediterranean`; more via contributions.
+- `packages/features` holds zone profiles, feature types, era profiles, biome
+  packs and culture packs as JSON with optional TypeScript scorers and layouts,
+  registered by id and validated by schema.
+- **Biome and culture are independent axes** (decided: the generator must
+  cover regions around the world). A biome decides what the land does; a
+  culture decides what people build on it. Any combination is valid, and a
+  region may mix cultures by district (`cultureMix`) for colonial ports,
+  immigrant quarters or frontier towns.
+- **Biome packs** define climate-driven land cover (forest type, moor, marsh,
+  savanna, desert, paddy, mangrove, tundra), vegetation density and species
+  symbols, river regime (perennial, seasonal wadi, braided), coast types
+  (fjord, reef, lagoon, mangrove, cliff), agricultural patterns (open field,
+  hedged, terraced, irrigated, oasis, plantation), snow line and typical
+  relief, and hazards (flood, dune). Initial biomes: `temperateMaritime`,
+  `temperateContinental`, `mediterranean`, `boreal`, `subarctic`, `steppe`,
+  `desert`, `semiArid`, `subtropicalHumid`, `tropicalMonsoon`,
+  `tropicalRainforest`, `savanna`, `alpine`.
+- **Culture packs** define naming (street, district, water, business, given
+  and family names, with grammar and transliteration options), street and
+  block conventions (organic medina vs. Roman grid vs. Spanish plaza-mayor grid
+  vs. Edo castle-town vs. Anglo-American grid; alleys, hutongs, mews), lot
+  and building conventions (courtyard houses, row houses, shophouses,
+  machiya, chawls, tenements, bungalows), roof and material mixes, religious
+  and civic building kinds (church, chapel, mosque, temple, shrine, synagogue,
+  gurdwara; market hall, bazaar, bathhouse, caravanserai), walls and
+  fortification styles, cemetery conventions, and colonial-era overlays where
+  a second culture arrived with a given year. Initial culture packs, chosen to
+  span the world and to cover common Call of Cthulhu settings: `newEngland`,
+  `americanMidwest`, `americanSouth`, `england`, `scotland`, `ireland`,
+  `france`, `germanyCentralEurope`, `iberia`, `italy`, `scandinavia`,
+  `russiaEasternEurope`, `balkansOttoman`, `maghreb`, `egyptLevant`,
+  `arabianGulf`, `westAfrica`, `eastAfricaSwahili`, `southernAfrica`,
+  `indiaSouthAsia`, `china`, `japan`, `korea`, `southeastAsia`, `australiaNz`,
+  `mexicoCentralAmerica`, `andes`, `brazil`, `caribbean`. Packs are data, so
+  breadth comes from contributions; each pack ships with a small reference
+  gallery so reviewers can judge fidelity.
+- Era profiles are culture-aware: the year a tram, a railway or a container
+  port becomes available is looked up per culture pack with a global default,
+  so an 1890 Shanghai and an 1890 Boston differ in more than names.
 - Users can add custom feature types in the document (constraint/scorer
   primitives only, no code); these travel with the `.citygen.json`.
 - Natural features (wood, marsh, quarry, cliff, sea cave) use the same shape as
@@ -653,8 +688,12 @@ Because buildings carry `floors`, MapLibre `fill-extrusion` gives an optional
   scenes (Foundry, Roll20 dimensions).
 - **SVG** for any rectangle via `svg-export` walking the model with the theme.
 - **GeoJSON** of the region or a rectangle (metres, synthetic CRS declared).
-- **Universal VTT** (`.dd2vtt`) with wall lines from building outlines, and
-  **Foundry scene JSON**.
+- **Universal VTT** (`.dd2vtt`) with wall lines from building outlines
+  (decided, with a performance guard: walls are derived only for the export
+  frame, from simplified outlines, merged along shared edges, and capped at a
+  configurable segment count with a warning and a "buildings as solid blocks"
+  fallback when the frame is too large for a VTT to handle), and **Foundry
+  scene JSON** carrying the same walls.
 - **Player export**: hides GM-only layers (overlays, notes, secret POIs).
 - **`.citygen.json`** (the document) and, for small documents, a URL hash.
 
@@ -836,10 +875,10 @@ roadmap items rather than a wish list; see ROADMAP.md for where they land.
 
 ## 13. Licensing and provenance
 
-Decided: **clean-room reimplementation** under a permissive licence (MIT
-proposed; confirm the copyright holder string before Phase 0 adds the file).
-Contributors must not copy code from the GPL-3.0 reference; the ideas
-summarised in §2 are used, not the source. This policy goes in CONTRIBUTING.md.
+Decided: **clean-room reimplementation** under the **MIT licence**, with the
+copyright held by "CityGenerator contributors" (see `LICENSE`). Contributors
+must not copy code from the GPL-3.0 reference; the ideas summarised in §2 are
+used, not the source. This policy goes in CONTRIBUTING.md.
 
 ---
 
@@ -876,6 +915,10 @@ summarised in §2 are used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.3** — Closed the remaining questions: MIT licence held by
+  "CityGenerator contributors"; biome and culture as independent, worldwide
+  axes with an initial pack list; scale compression on by default; Universal
+  VTT walls with a performance guard.
 - **v0.2** — Applied owner decisions: metropolitan regions (hierarchical,
   lazy generation; MapLibre rendering), full editor with authored/frozen
   geometry and brushes, year-based eras with Call of Cthulhu period focus,

@@ -18,6 +18,7 @@ and extended with:
 - a full editor: draw, edit, brush, freeze and regenerate around your changes;
 - an LLM assistant (Anthropic, bring-your-own-key) that answers questions about
   the map and edits it;
+- worldwide biome and culture packs, mixable per district;
 - a static site on GitHub Pages built with TypeScript, Vite, React and
   MapLibre GL.
 
