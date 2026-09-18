@@ -115,7 +115,13 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
     const removed = new Set(input.removed);
     const byId = new Map<string, PlacementRequest>();
     if (input.defaults ?? true)
-      for (const s of sites) for (const r of defaultRequests(s, year)) byId.set(r.id, r);
+      for (const s of sites)
+        for (const r of defaultRequests(s, year)) {
+          // A default outside its type's years (a mill town after the mills closed) is not a failure.
+          const t = types.get(r.type);
+          if (t && (year < t.years[0] || year > t.years[1])) continue;
+          byId.set(r.id, r);
+        }
     for (const r of input.requests) byId.set(r.id, r);
     for (const id of removed) byId.delete(id);
     for (const pin of input.pins) {

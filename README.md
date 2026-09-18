@@ -104,6 +104,7 @@ pnpm install
 pnpm dev          # editor at http://localhost:5173
 pnpm check        # lint, typecheck, unit tests, build
 pnpm e2e          # Playwright end-to-end tests
+pnpm sweep        # headless matrix over presets, eras, cultures and edge cases (--quick for a subset)
 ```
 
 Deployment: pushes to `main` build the site and publish it with the

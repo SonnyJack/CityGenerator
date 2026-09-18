@@ -173,6 +173,61 @@ describe('town stage', () => {
     ).toBe(TOWN_GOLDEN);
   });
 
+  it('never drops an explicit settlement too big for its region, and keeps a built core on rugged ground', async () => {
+    const terrain = await terrainP;
+    // A 900 000-strong metropolis wants a radius wider than a 16 × 12 km region allows.
+    const big = await runner.run(sitingStage, {
+      seed: 'big',
+      terrain,
+      year: 2020,
+      settlements: [
+        {
+          id: 'big',
+          kind: 'metropolis',
+          population: 900_000,
+          layout: { streetPattern: 'mixed' },
+          features: [],
+        },
+      ],
+      policy: { count: [1, 1], kinds: {} },
+    });
+    expect(big.sites.map((s) => s.id)).toEqual(['big']);
+    // Steep everywhere: the slope cut would leave the village without a core.
+    const rugged = await runner.run(terrainStage, {
+      seed: 'rugged',
+      extent: { widthM: 8_000, heightM: 6_000 },
+      preset: 'hills',
+      relief: 1,
+      roughness: 1,
+      seaLevel: 0,
+      rivers: { major: 0, minor: 2 },
+      cellSizeM: 20,
+    });
+    const siting = await runner.run(sitingStage, {
+      seed: 'rugged',
+      terrain: rugged,
+      year: 1925,
+      settlements: [
+        { id: 'v', kind: 'village', population: 550, layout: { streetPattern: 'organic' }, features: [] },
+        { id: 'w', kind: 'village', population: 650, layout: { streetPattern: 'organic' }, features: [] },
+        { id: 'x', kind: 'village', population: 450, layout: { streetPattern: 'organic' }, features: [] },
+      ],
+      policy: { count: [3, 3], kinds: {} },
+    });
+    expect(siting.sites.length).toBe(3);
+    for (const site of siting.sites) {
+      const town = await runner.run(townStage, {
+        seed: 'rugged',
+        site,
+        terrain: rugged,
+        year: 1925,
+        blockSizeM: 70,
+      });
+      expect(town.blocks.length).toBeGreaterThan(0);
+      expect(town.streets.features.length).toBeGreaterThan(0);
+    }
+  });
+
   it('handles a tiny village without walls', async () => {
     const terrain = await terrainP;
     const siting = await runner.run(sitingStage, {

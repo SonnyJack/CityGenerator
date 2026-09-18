@@ -21,10 +21,11 @@ CI or by a reviewer.
 | 9     | Timeline, 3D, condition                 | Growth scrubber, extrusion view, decay/flood/fire overlays                                          |
 | 10    | Ecosystem                               | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs             |
 | 11    | Utilities                               | Water and gas mains, power lines, sewers, pipelines and canals from the works, by era               |
+| 12    | Tuning pass                             | Headless sweep over presets, eras, cultures and edge cases; the fixes it forced                     |
 
 Milestones: `v0.1` after Phase 1, `v0.2` after Phase 2, `v0.3` after Phase 3,
 `v0.5` after Phase 6, `v0.8` after Phase 8, `v1.0` after Phase 9 plus a tuning
-pass across all presets and eras.
+pass across all presets and eras (`pnpm sweep`, see Phase 12).
 
 ---
 
@@ -593,3 +594,34 @@ inspectable.
       region summary and statistics, a Networks panel toggle and stats line.
 - [ ] Deferred: aqueducts on arches for pre-industrial cities, district
       heating, telephone and telegraph lines, and utility failures as events.
+
+---
+
+## Phase 12 — Tuning pass (done)
+
+`pnpm sweep` generates every terrain preset at eight years with the cultures
+and biomes in rotation, plus edge cases (a 3 km region, the year 1100, the
+year 2100, a drowned coast, a dead-flat plain, a rugged upland, a 900 000
+metropolis in a 16 km region, a declining port after a flood, a 40 km
+region), then runs the queries the app and the assistant use (find,
+summary, directory, inspect, interiors, export, a tile) and reports
+failures, budget overruns and invariant breaches (rail gradients, wasteland,
+facility failures, settlements without blocks, no premises).
+
+- [x] Siting never loses an explicit settlement: three passes relax the
+      room-to-grow and separation rules for a settlement too big for its
+      region, and the last pass takes any land.
+- [x] A settlement on rugged ground keeps a built core: when the slope cut
+      leaves fewer patches than a core needs, the flattest patches within
+      the radius are built instead of everything turning to fields.
+- [x] Synthesised settlements may take an island half again their size
+      (ports do) but are dropped rather than sited on a sliver of coast;
+      explicit ones are always placed.
+- [x] Placement degrades one step further before reporting: half size,
+      searched farther out (small islands, cramped valleys); a default
+      facility outside its type's years (a mill town after the mills closed)
+      is simply not requested rather than reported as a failure.
+- [x] Facility failures in a region too small for a city's default works are
+      reported, not counted as a breach; every other run is clean.
+- [ ] Deferred: a browser-side sweep of every theme at every zoom for
+      rendering budgets; per-culture visual review of the generated names.

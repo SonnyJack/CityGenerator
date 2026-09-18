@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.13** (Phases 3–11 delivered; see §16)
+Status: **Draft v1.0-rc** (Phases 3–12 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -963,6 +963,9 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v1.0-rc** — Phase 12 tuning pass: the headless sweep and the two
+  robustness fixes it forced (siting relaxation passes; a built core on
+  rugged ground).
 - **v0.13** — Phase 11: utility networks (water, gas, power, sewers,
   pipelines, canals) as a region stage over the towns and facilities, with
   the shared raster router and per-network cost models (mains follow the

@@ -116,7 +116,8 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
     let seaCells = 0;
     for (let i = 0; i < n; i++) if (water[i] === WATER.sea) seaCells++;
     const regionCoastal = seaCells > n * 0.03;
-    const specs = input.settlements.length
+    const explicit = input.settlements.length > 0;
+    const specs = explicit
       ? input.settlements
       : synthesiseSpecs(rng.fork('specs'), input.policy, regionCoastal);
 
@@ -192,19 +193,29 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
       const wantsRiver = spec.kind === 'millTown';
       let best: { i: number; score: number } | null = null;
       let center: [number, number] | null = spec.site?.center ?? null;
-      if (!center) {
+      // Three passes for explicit settlements: the full constraints, then room-to-grow relaxed
+      // for a settlement too big for its region, then anywhere on land, so a settlement the
+      // spec names is never lost. Synthesised ones are dropped instead of sited badly.
+      for (let level = 0; level < (explicit ? 3 : 2) && !center; level++) {
+        const marginR =
+          level === 0 ? radiusM : level === 1 ? Math.min(radiusM, Math.min(halfW, halfH) * 0.4) : 0;
         for (const i of candidates) {
           const x = height.x(i % width);
           const y = height.y((i / width) | 0);
           // Hard constraints.
-          if (Math.abs(x) > halfW - radiusM * 0.6 || Math.abs(y) > halfH - radiusM * 0.6) continue;
-          if (wantsCoast && distToSea[i]! > radiusM * 0.9 + 300) continue;
+          if (Math.abs(x) > halfW - marginR * 0.6 || Math.abs(y) > halfH - marginR * 0.6) continue;
+          if (level === 0 && wantsCoast && distToSea[i]! > radiusM * 0.9 + 300) continue;
           // Room to grow: on the mainland (or an island several times the town's area) with
           // most of the ground around the centre dry.
           const comp = component[i]!;
           const areaM2 = componentArea[comp]! * cellSizeM * cellSizeM;
-          if (comp !== mainland && areaM2 < Math.PI * radiusM * radiusM * 4) continue;
-          if (landAround(i, radiusM * 0.7) < 0.6) continue;
+          // Islands: several times the town's area at first; a synthesised town may settle for
+          // an island half again its size (ports do), an explicit one for any land at the end.
+          const islandFactor = level === 0 ? 4 : explicit ? 0 : 1.5;
+          if (islandFactor && comp !== mainland && areaM2 < Math.PI * radiusM * radiusM * islandFactor)
+            continue;
+          if (level < 2 && landAround(i, marginR * 0.7) < (level === 0 ? 0.6 : explicit ? 0.4 : 0.5))
+            continue;
           let score = 1 - slope[i]! / 0.12;
           const dSea = distToSea[i]!;
           const dWater = distToWater[i]!;
@@ -220,7 +231,12 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
           let ok = true;
           for (const p of placed) {
             const d = Math.hypot(p.center[0] - x, p.center[1] - y);
-            const minD = (p.radiusM + radiusM) * 2.5 + 800;
+            const minD =
+              level === 0
+                ? (p.radiusM + radiusM) * 2.5 + 800
+                : level === 1
+                  ? (p.radiusM + radiusM) * 0.8 + 400
+                  : 300;
             if (d < minD) {
               ok = false;
               break;
@@ -231,9 +247,9 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
           score += candRng.range(0, 0.15);
           if (!best || score > best.score) best = { i, score };
         }
-        if (!best) continue; // nowhere to put it; reported through stats
-        center = [height.x(best.i % width), height.y((best.i / width) | 0)];
+        if (best) center = [height.x(best.i % width), height.y((best.i / width) | 0)];
       }
+      if (!center) continue; // no land at all; reported through stats
       const ci = Math.min(Math.max(Math.round(height.col(center[0])), 0), width - 1);
       const ri = Math.min(Math.max(Math.round(height.row(center[1])), 0), rows - 1);
       const idx = ri * width + ci;

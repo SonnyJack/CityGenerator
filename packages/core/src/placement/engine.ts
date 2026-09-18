@@ -304,12 +304,25 @@ export function placeFeatures(
       if (problems.length) fail(`pinned ${type.name} kept although ${problems[0]}`);
       chosen = { frame, front: frontOf(type, frame, ctx) };
     } else {
-      for (let attempt = 0; attempt < 3 && !chosen; attempt++) {
-        const shrink = attempt === 0 ? 1 : attempt === 1 ? 0.8 : 0.65;
+      // Degrade in steps: full size, shrunk, shrunk and relaxed, then half size searched
+      // farther out (small islands and cramped valleys), before reporting a failure.
+      for (let attempt = 0; attempt < 4 && !chosen; attempt++) {
+        const shrink = attempt === 0 ? 1 : attempt === 1 ? 0.8 : attempt === 2 ? 0.65 : 0.5;
         const L = realL * compression * shrink;
         const W = realW * compression * shrink;
-        const relaxed = attempt === 2;
-        const best = search(type, req, host, ctx, L, W, reqRng.fork(`attempt${attempt}`), options, relaxed);
+        const relaxed = attempt >= 2;
+        const best = search(
+          type,
+          req,
+          host,
+          ctx,
+          L,
+          W,
+          reqRng.fork(`attempt${attempt}`),
+          options,
+          relaxed,
+          attempt === 3 ? 1.7 : 1,
+        );
         if (best.frame) {
           chosen = { frame: best.frame, front: frontOf(type, best.frame, ctx) };
           outcome = attempt === 0 ? 'placed' : relaxed ? 'relaxed' : 'shrunk';
@@ -406,6 +419,7 @@ function search(
   rng: Rng,
   options: PlaceOptions,
   relaxed: boolean,
+  reach = 1,
 ): SearchResult {
   // Candidate centres: shore or river points for water-fronted types, else an
   // annulus around the host, or a grid over the region.
@@ -414,8 +428,9 @@ function search(
   else if (host && type.orientation === 'alignRiver') centres.push(...riverCandidates(host, ctx, W));
   else if (host) {
     const R = host.site.radiusM;
-    const [r0, r1] = type.radial ?? [0.4, 1.8];
-    const n = 320;
+    const [r0, r1raw] = type.radial ?? [0.4, 1.8];
+    const r1 = r1raw * reach;
+    const n = reach > 1 ? 480 : 320;
     const golden = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < n; i++) {
       const r = R * Math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * ((i + 0.5) / n));

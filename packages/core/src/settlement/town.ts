@@ -266,6 +266,17 @@ export const townStage = defineStage<TownInput, TownOutput>({
         transitions: [],
       });
     }
+    // Rugged ground: when the slope cut leaves (almost) no core, keep the flattest patches
+    // within the radius instead, so a settlement always has somewhere to stand.
+    {
+      const wanted = Math.max(3, Math.min(innerCount, 8));
+      if (patches.filter((p) => p.inner).length < wanted) {
+        const near = patches
+          .filter((p) => Math.hypot(p.centroid[0] - cx, p.centroid[1] - cy) <= R * 1.25)
+          .sort((a, b) => a.slope - b.slope);
+        for (const p of near.slice(0, wanted)) p.inner = true;
+      }
+    }
     // With growth rings the ring blocks take the land outside the core.
     if (growth.rings.length) {
       const keep = patches.filter((p) => p.inner);
