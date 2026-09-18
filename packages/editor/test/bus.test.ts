@@ -82,6 +82,14 @@ describe('CommandBus', () => {
     expect(b.document.spec.terrain.preset).toBe('bay');
   });
 
+  it('sets presentation state without history', () => {
+    const b = bus();
+    b.dispatch({ type: 'ui.set', theme: 'ink', layers: { contours: false } });
+    expect(b.document.ui?.theme).toBe('ink');
+    expect(b.document.ui?.layers.contours).toBe(false);
+    expect(b.canUndo).toBe(false);
+  });
+
   it('keeps viewport changes out of history', () => {
     const b = bus();
     b.dispatch({ type: 'viewport.set', viewport: { center: [0, 0], zoom: 10, bearing: 0, pitch: 0 } });

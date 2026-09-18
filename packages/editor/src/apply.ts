@@ -76,6 +76,14 @@ export function applyCommand(doc: MapDocument, command: Command, now: string): A
     case 'viewport.set':
       next.viewport = command.viewport;
       break;
+    case 'ui.set': {
+      const ui = next.ui ?? { theme: 'atlas', layers: {}, terrain3d: false };
+      if (command.theme !== undefined) ui.theme = command.theme;
+      if (command.layers) ui.layers = { ...ui.layers, ...command.layers };
+      if (command.terrain3d !== undefined) ui.terrain3d = command.terrain3d;
+      next.ui = ui;
+      break;
+    }
     default: {
       const exhaustive: never = command;
       throw new CommandError(`Unknown command ${JSON.stringify(exhaustive)}`);

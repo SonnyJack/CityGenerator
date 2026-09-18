@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { createDocument, parseDocument, serializeDocument, type MapDocument } from '@citygen/core';
 import { CommandBus, type Command } from '@citygen/editor';
+import { themeById } from '@citygen/themes';
 import { engine } from './engine/client.js';
 import { loadAutosave, saveAutosave, clearAutosave } from './persistence.js';
-import type { EngineStats } from './engine/api.js';
+import type { EngineStats, Thumbnail } from './engine/api.js';
 
 export interface AppState {
   document: MapDocument;
@@ -14,6 +15,8 @@ export interface AppState {
   error?: string;
   stats?: EngineStats;
   warnings: string[];
+  thumbnails: Thumbnail[];
+  thumbnailsFor?: string;
 
   dispatch(command: Command): void;
   undo(): void;
@@ -21,6 +24,7 @@ export interface AppState {
   newDocument(seed?: string): void;
   importJson(text: string): void;
   exportJson(): string;
+  refreshThumbnails(): void;
 }
 
 const now = () => new Date().toISOString();
@@ -28,14 +32,20 @@ const now = () => new Date().toISOString();
 const initial = createDocument({ now: now(), seed: 'arkham', name: 'Untitled region' });
 const bus = new CommandBus(initial, { now });
 
+/** The part of the document that changes what the engine produces. */
+function engineKey(doc: MapDocument): string {
+  return JSON.stringify([doc.spec, doc.authored, themeById(doc.ui?.theme).sketch]);
+}
+
 export const useApp = create<AppState>((set, get) => {
   let generation = 0;
+  let lastKey = '';
 
   async function regenerate(doc: MapDocument) {
     const run = ++generation;
     set({ status: 'generating', error: undefined });
     try {
-      const { version, stats } = await engine().setDocument(doc);
+      const { version, stats } = await engine().setDocument(doc, { sketch: themeById(doc.ui?.theme).sketch });
       if (run !== generation) return; // superseded
       set({ tileVersion: version, stats, status: 'idle' });
     } catch (e) {
@@ -44,22 +54,22 @@ export const useApp = create<AppState>((set, get) => {
     }
   }
 
-  function sync(doc: MapDocument, regen: boolean) {
+  function sync(doc: MapDocument) {
     set({ document: doc, canUndo: bus.canUndo, canRedo: bus.canRedo });
     void saveAutosave(doc);
-    if (regen) void regenerate(doc);
+    const key = engineKey(doc);
+    if (key !== lastKey) {
+      lastKey = key;
+      void regenerate(doc);
+    }
   }
 
-  bus.subscribe((doc, event) => {
-    // Presentation-only commands do not touch the engine.
-    const regen = event.command?.type !== 'viewport.set';
-    sync(doc, regen);
-  });
+  bus.subscribe((doc) => sync(doc));
 
   // Restore the autosaved document, if any, then start the engine.
   void loadAutosave().then((saved) => {
     if (saved) bus.load(saved);
-    else void regenerate(bus.document);
+    else sync(bus.document);
   });
 
   return {
@@ -69,6 +79,7 @@ export const useApp = create<AppState>((set, get) => {
     tileVersion: 0,
     status: 'idle',
     warnings: [],
+    thumbnails: [],
 
     dispatch(command) {
       try {
@@ -93,11 +104,25 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     exportJson: () => serializeDocument(get().document),
+    refreshThumbnails() {
+      const doc = get().document;
+      // Sibling seeds derive from the current seed, so the key includes it.
+      const key = JSON.stringify(doc.spec);
+      if (get().thumbnailsFor === key) return;
+      const seeds = Array.from({ length: 6 }, (_, i) => `${doc.spec.seed}-${i + 1}`);
+      set({ thumbnailsFor: key, thumbnails: [] });
+      void engine()
+        .thumbnails(doc, seeds, 96, 72)
+        .then((thumbnails) => {
+          if (get().thumbnailsFor === key) set({ thumbnails });
+        })
+        .catch(() => set({ thumbnailsFor: undefined }));
+    },
   };
 });
 
 /** Seeds are user-facing words, not engine randomness, so the app may use the platform RNG here. */
-function randomSeed(): string {
+export function randomSeed(): string {
   const words = [
     'arkham',
     'innsmouth',

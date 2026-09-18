@@ -15,6 +15,8 @@ export function installTestApi() {
     fixtureHash: () => engine().fixtureHash(),
     status: () => useApp.getState().status,
     tileVersion: () => useApp.getState().tileVersion,
+    stats: () => useApp.getState().stats,
+    thumbnails: () => useApp.getState().thumbnails.length,
   };
 }
 
@@ -29,6 +31,8 @@ declare global {
       fixtureHash(): Promise<string>;
       status(): string;
       tileVersion(): number;
+      stats(): unknown;
+      thumbnails(): number;
     };
   }
 }

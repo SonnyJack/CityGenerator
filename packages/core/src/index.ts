@@ -2,3 +2,5 @@ export * from './random/index.js';
 export * from './document/index.js';
 export * from './pipeline/index.js';
 export * from './geometry/index.js';
+export * from './raster/index.js';
+export * from './terrain/index.js';

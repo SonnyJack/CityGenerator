@@ -31,6 +31,12 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('annotation.add'), annotation: annotationSchema }),
   z.object({ type: z.literal('annotation.remove'), ids: z.array(z.string()).min(1) }),
   z.object({
+    type: z.literal('ui.set'),
+    theme: z.string().optional(),
+    layers: z.record(z.string(), z.boolean()).optional(),
+    terrain3d: z.boolean().optional(),
+  }),
+  z.object({
     type: z.literal('viewport.set'),
     viewport: z.object({
       center: z.tuple([z.number(), z.number()]),
@@ -45,4 +51,4 @@ export type Command = z.infer<typeof commandSchema>;
 export type CommandType = Command['type'];
 
 /** Commands that do not belong in undo history (pure presentation state). */
-export const TRANSIENT_COMMANDS: ReadonlySet<CommandType> = new Set<CommandType>(['viewport.set']);
+export const TRANSIENT_COMMANDS: ReadonlySet<CommandType> = new Set<CommandType>(['viewport.set', 'ui.set']);

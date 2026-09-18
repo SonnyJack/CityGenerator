@@ -18,13 +18,14 @@ export interface TileLayerInput {
   features: FeatureCollection<Geometry, Record<string, unknown>>;
   /** Minimum zoom at which this layer is emitted. */
   minZoom?: number;
-  /** Maximum zoom for which geojson-vt precomputes; higher zooms are drilled on demand. */
-  maxZoom?: number;
+  /** Zoom band [min, max] in which this entry is emitted; several entries may share a name. */
+  zoomRange?: [number, number];
 }
 
 interface IndexedLayer {
   name: string;
   minZoom: number;
+  maxZoom: number;
   index: GeoJSONVT;
 }
 
@@ -38,10 +39,11 @@ export class TileSource {
     this.version = version;
     this.layers = layers.map((layer) => ({
       name: layer.name,
-      minZoom: layer.minZoom ?? 0,
+      minZoom: layer.zoomRange?.[0] ?? layer.minZoom ?? 0,
+      maxZoom: layer.zoomRange?.[1] ?? 24,
       index: new GeoJSONVT(withStringIds(collectionToLonLat(layer.features)), {
         extent: TILE_EXTENT,
-        maxZoom: layer.maxZoom ?? 20,
+        maxZoom: 20,
         indexMaxZoom: 6,
         indexMaxPoints: 100_000,
         tolerance: 3,
@@ -55,9 +57,11 @@ export class TileSource {
   getTile(z: number, x: number, y: number): Uint8Array | null {
     const tiles: Record<string, LegacyTile> = {};
     for (const layer of this.layers) {
-      if (z < layer.minZoom) continue;
+      if (z < layer.minZoom || z > layer.maxZoom) continue;
       const tile = layer.index.getTile(z, x, y);
-      if (tile && tile.features.length > 0) tiles[layer.name] = tile;
+      if (!tile || tile.features.length === 0) continue;
+      const existing = tiles[layer.name];
+      tiles[layer.name] = existing ? { features: [...existing.features, ...tile.features] } : tile;
     }
     if (Object.keys(tiles).length === 0) return null;
     return fromGeojsonVt(tiles, { version: 2, extent: TILE_EXTENT });

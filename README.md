@@ -24,9 +24,11 @@ and extended with:
 
 ## Status
 
-Phase 0 (foundation) is complete: the monorepo, CI, GitHub Pages deployment,
-document format, deterministic engine skeleton and an empty editor that renders
-the region through MapLibre. Terrain generation is next (Phase 1).
+Phases 0 and 1 are complete: the monorepo, CI and GitHub Pages deployment,
+the document format and deterministic engine, and terrain generation with
+hydrology, land cover, contours, hillshade and 3-D terrain rendered through
+MapLibre in atlas and ink themes, with a generate panel and a variations strip.
+Settlements and the classic town are next (Phase 2).
 
 ## Development
 

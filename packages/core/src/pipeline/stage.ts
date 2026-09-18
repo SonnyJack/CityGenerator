@@ -16,6 +16,8 @@ export class CancelledError extends Error {
 }
 
 export interface StageContext {
+  /** Memo key of this run; outputs may carry it so downstream stages can key on it cheaply. */
+  key: string;
   /** Named random stream for this stage, derived from the seed and stage id. */
   rng: Rng;
   /** Throws CancelledError if the run has been aborted. */
@@ -32,6 +34,11 @@ export interface StageDef<I, O> {
   version: number;
   /** Which part of the input decides the random stream (defaults to the whole input hash). */
   seedOf?: (input: I) => string;
+  /**
+   * Cheap memo key for large inputs (e.g. the key of an upstream stage's output plus a
+   * small parameter hash). Defaults to a content hash of the whole input.
+   */
+  keyOf?: (input: I) => string;
   run: (input: I, ctx: StageContext) => O | Promise<O>;
 }
 
@@ -68,7 +75,7 @@ export class StageRunner {
 
   /** Memo key for a stage and input; exposed for tests and diagnostics. */
   keyFor<I, O>(stage: StageDef<I, O>, input: I): string {
-    return `${stage.id}@${stage.version}:${contentHash(input)}`;
+    return `${stage.id}@${stage.version}:${stage.keyOf ? stage.keyOf(input) : contentHash(input)}`;
   }
 
   async run<I, O>(stage: StageDef<I, O>, input: I, options: RunOptions = {}): Promise<O> {
@@ -86,6 +93,7 @@ export class StageRunner {
     const signal = options.signal;
     const seed = stage.seedOf ? stage.seedOf(input) : key;
     const ctx: StageContext = {
+      key,
       rng: new Rng(`${seed}/${stage.id}`),
       checkpoint: () => {
         if (signal?.aborted) throw new CancelledError();

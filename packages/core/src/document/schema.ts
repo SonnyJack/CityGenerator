@@ -179,6 +179,7 @@ export const regionSpecSchema = z.object({
       relief: z.number().min(0).max(1).default(0.4),
       roughness: z.number().min(0).max(1).default(0.5),
       seaLevel: z.number().default(0),
+      erosion: z.number().min(0).max(1).default(0.5),
       rivers: z
         .object({ major: z.number().int().min(0).default(1), minor: z.number().int().min(0).default(3) })
         .default({
@@ -189,7 +190,14 @@ export const regionSpecSchema = z.object({
         .object({ dataUrl: z.string(), minM: z.number(), maxM: z.number(), cellSizeM: z.number().positive() })
         .optional(),
     })
-    .default({ preset: 'coast', relief: 0.4, roughness: 0.5, seaLevel: 0, rivers: { major: 1, minor: 3 } }),
+    .default({
+      preset: 'coast',
+      relief: 0.4,
+      roughness: 0.5,
+      seaLevel: 0,
+      erosion: 0.5,
+      rivers: { major: 1, minor: 3 },
+    }),
   settlements: z.array(settlementSpecSchema).default([]),
   settlementPolicy: z
     .object({
@@ -287,6 +295,7 @@ export const mapDocumentSchema = z.object({
     .object({
       theme: z.string().default('atlas'),
       layers: z.record(z.string(), z.boolean()).default({}),
+      terrain3d: z.boolean().default(false),
     })
     .optional(),
 });
