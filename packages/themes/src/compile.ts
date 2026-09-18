@@ -46,7 +46,23 @@ export type LayerGroup =
   | 'stations'
   | 'facilities'
   | 'labels'
-  | 'pois';
+  | 'pois'
+  | 'events'
+  | 'age'
+  | 'buildings3d';
+
+/** Colour stops for the age overlay: [built year, colour]. Shared with the legend. */
+export const AGE_STOPS: [number, string][] = [
+  [1100, '#4a2c17'],
+  [1650, '#8c5a2b'],
+  [1780, '#c9a227'],
+  [1850, '#c0392b'],
+  [1890, '#e67e22'],
+  [1925, '#7f8c8d'],
+  [1955, '#2980b9'],
+  [1985, '#16a085'],
+  [2020, '#8e44ad'],
+];
 
 const LANDCOVER_KINDS: LandcoverKind[] = [
   'snow',
@@ -259,6 +275,7 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     source: options.sourceId,
     'source-layer': 'buildings',
     minzoom: 13,
+    filter: ['!=', ['get', 'state'], 'ruin'],
     layout: { visibility: visible('buildings') },
     paint: {
       'fill-color': buildingColour(theme),
@@ -281,6 +298,109 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
       },
     });
   }
+  // Condition: derelict buildings are muted, ruins are an outline only.
+  layers.push({
+    id: 'buildings-derelict',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'buildings',
+    minzoom: 13,
+    filter: ['==', ['get', 'state'], 'derelict'],
+    layout: { visibility: visible('buildings') },
+    paint: { 'fill-color': p.inkMuted, 'fill-opacity': 0.45 },
+  });
+  layers.push({
+    id: 'buildings-ruin',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'buildings',
+    minzoom: 13,
+    filter: ['==', ['get', 'state'], 'ruin'],
+    layout: { visibility: visible('buildings'), 'line-join': 'round' },
+    paint: {
+      'line-color': t.buildingOutline,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.6, 17, 1.2],
+      'line-dasharray': [2, 1.5],
+    },
+  });
+  // Age overlay: buildings tinted by the year they were built.
+  layers.push({
+    id: 'buildings-age',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'buildings',
+    minzoom: 12,
+    filter: ['has', 'built'],
+    layout: { visibility: optIn('age') },
+    paint: {
+      'fill-color': [
+        'interpolate',
+        ['linear'],
+        ['get', 'built'],
+        ...AGE_STOPS.flat(),
+      ] as unknown as ExpressionSpecification,
+      'fill-opacity': 0.85,
+    },
+  });
+  // Disasters: floods drown the ground, fires scorch it, storms cross-hatch it.
+  layers.push({
+    id: 'events-flood',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'events',
+    filter: ['==', ['get', 'kind'], 'flood'],
+    layout: { visibility: visible('events') },
+    paint: { 'fill-color': p.water, 'fill-opacity': 0.55, 'fill-outline-color': p.waterLine },
+  });
+  layers.push({
+    id: 'events-fire',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'events',
+    filter: ['==', ['get', 'kind'], 'fire'],
+    layout: { visibility: visible('events') },
+    paint: {
+      'fill-color': '#7a2e12',
+      'fill-opacity': [
+        'interpolate',
+        ['linear'],
+        ['get', 'since'],
+        0,
+        0.45,
+        5,
+        0.05,
+      ] as unknown as ExpressionSpecification,
+    },
+  });
+  layers.push({
+    id: 'events-storm',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'events',
+    filter: ['==', ['get', 'kind'], 'storm'],
+    layout: { visibility: visible('events') },
+    paint: { 'line-color': p.inkMuted, 'line-width': 2, 'line-dasharray': [3, 2], 'line-opacity': 0.8 },
+  });
+  // Optional 3D: extrude buildings by their floors (ruins stay low).
+  layers.push({
+    id: 'buildings-3d',
+    type: 'fill-extrusion',
+    source: options.sourceId,
+    'source-layer': 'buildings',
+    minzoom: 13,
+    filter: ['!=', ['get', 'state'], 'ruin'],
+    layout: { visibility: optIn('buildings3d') },
+    paint: {
+      'fill-extrusion-color': buildingColour(theme) as never,
+      'fill-extrusion-height': [
+        '*',
+        ['coalesce', ['get', 'floors'], 2],
+        3.2,
+      ] as unknown as ExpressionSpecification,
+      'fill-extrusion-base': 0,
+      'fill-extrusion-opacity': 0.92,
+    },
+  });
   // Points of interest: named non-residential buildings get a dot at high zoom.
   layers.push({
     id: 'pois',

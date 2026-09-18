@@ -445,16 +445,57 @@ messages in the drawer without crashing or changing the document (unit and
 e2e tests); a scripted conversation in the browser sets the year, renames
 the port through the engine, adds a GM note and undoes from a tool card.
 
-## Phase 9 — Timeline, 3D and condition
+## Phase 9 — Timeline, 3D and condition (done, items deferred)
 
-- [ ] Buildings and networks carry built/demolished years; the year scrubber
-      shows a coherent history of one seed.
-- [ ] Extrusion 3D view with terrain; glTF export of a frame.
-- [ ] Condition brush and year-based decay; flood (raise sea level), fire and
-      storm overlays; abandonment for shrinking settlements.
+- [x] One seed, one history. The spec carries an anchor year (the year its
+      populations describe; `spec.anchorYear`, document version 3) and each
+      settlement a growth curve anchored there, or explicit growth points.
+      Past ring boundaries, the old town's final extent, walls, gates and
+      arteries come from that history rather than from the year, so the
+      year slider only adds or removes what was built by then: core patches
+      and ring blocks carry a built year from the growth curve, grid cells
+      and blocks have stable ids and per-cell randomness, artery cuts are
+      bit-identical whatever the newest ring's extent, and modern zoning
+      uses a society fixed at the anchor year.
+- [x] Buildings carry `built` and `demolished` years. Each lot has a
+      history: first built with its block (over the following 25 years),
+      rebuilt when the zoning changed (over the following 45 years) and
+      after fires; the building standing at the year is the current
+      episode, with the year it will be replaced. Streets carry built years
+      too; the ring road moves out with the newest ring.
+- [x] Condition (0–1) from ward, age, decline, disasters and condition
+      strokes, with states sound, worn, derelict and ruin; derelict
+      buildings are muted and ruins outline-only in every theme; a building
+      age overlay with a legend; the inspector and directory carry the
+      values.
+- [x] Decline and abandonment: when the population falls below its peak
+      (explicit growth points, or a lower anchor population than an earlier
+      point), the outermost blocks empty first, dated by the year the decline
+      reached them, and their buildings decay to ruins over forty years.
+- [x] Disasters on the timeline (`spec.events`): fires destroy the buildings
+      they reach (by severity) and the lots rebuild in the zoning of the
+      time; storms damage and heal over 25 years; floods reach ground below
+      a level for their duration. Overlays in every theme, an events panel
+      (add at the map centre in the current year), and assistant tools.
+- [x] Timeline player (play from/to with the engine keeping pace) and a
+      "make this the design year" action.
+- [x] 3D: buildings extruded by their floors on the 3D terrain (a layer
+      toggle); glTF binary export of any frame with a terrain mesh from the
+      height grid, buildings extruded on the ground, facilities, water and
+      per-kind materials.
+- [ ] Deferred: rail and facility opening and closing years beyond the era
+      variants they already have; explicit growth points in the settlements
+      panel (they are settable through the spec and the assistant); a
+      textured glTF.
 
-Acceptance: scrubbing 1850 → 2020 on one seed shows growth without flicker of
-unrelated areas; a flooded harbour district renders correctly in all themes.
+Acceptance: a unit test generates one seed at 1850, 1890, 1925, 1955 and
+2020 and checks that every earlier block, street and surviving building is
+present later with the same outline and built year (only the ring road moves
+and ring arteries lengthen); the browser test does the same for a 700 m
+frame of the city between 1890 and 1955 through the export path. A flood
+around the harbour renders in all seven themes and damages the buildings it
+reaches; 3D buildings render; the glTF export of the harbour frame carries a
+terrain mesh and buildings.
 
 ## Phase 10 — Ecosystem (ongoing)
 

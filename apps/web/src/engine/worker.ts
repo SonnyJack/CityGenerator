@@ -14,6 +14,7 @@ import {
   townNamesStage,
   StreetIndex,
   culturePack,
+  radiusAt,
   pointInRing as inRing,
   type TownNamesOutput,
   type BuildingProps,
@@ -26,7 +27,8 @@ import {
   LANDCOVER,
   pointInRing,
   distToPolyline,
-  fieldEdits,
+  societyEdits,
+  conditionEdits,
   reseedSalt,
   terrainEdits,
   zoneEdits,
@@ -40,8 +42,10 @@ import {
   type TramOutput,
 } from '@citygen/core';
 import { biomeTerrain, eraForYear, eraParams } from '@citygen/features';
+import { eraAt } from '@citygen/core';
 import {
   BlockTiler,
+  eventLayers,
   TileSource,
   createDemSampler,
   demTilePng,
@@ -62,7 +66,7 @@ import type {
   SettlementSummary,
   Thumbnail,
 } from './api.js';
-import type { ExportModel } from '@citygen/export';
+import type { ExportModel, Frame } from '@citygen/export';
 import type { Feature, Geometry, LineString, Point, Polygon } from 'geojson';
 
 /**
@@ -148,6 +152,7 @@ const api: EngineApi = {
         seed,
         terrain,
         year: doc.spec.year,
+        anchorYear: doc.spec.anchorYear,
         settlements: doc.spec.settlements,
         policy: doc.spec.settlementPolicy,
       },
@@ -249,7 +254,7 @@ const api: EngineApi = {
           ),
         },
       };
-    const edits = fieldEdits(doc);
+    const edits = societyEdits(doc);
     const society = await runner.run(
       societyStage,
       {
@@ -267,6 +272,33 @@ const api: EngineApi = {
       },
       { signal },
     );
+    // Zoning of growth rings uses the society as it stood at the anchor year, so moving the year
+    // slider does not re-zone what is already built. It is the same run as `society` when the
+    // year is the anchor year.
+    const zoningSociety =
+      doc.spec.year === doc.spec.anchorYear
+        ? society
+        : await runner.run(
+            societyStage,
+            {
+              seed,
+              terrain,
+              sites: sites.map((s) => ({
+                ...s,
+                population: s.anchorPopulation,
+                radiusM: radiusAt(s.history, s.history.anchorYear),
+              })),
+              year: doc.spec.anchorYear,
+              wealth: doc.spec.society.wealth,
+              density: doc.spec.society.density,
+              inequality: doc.spec.society.inequality,
+              ...(edits.length ? { edits } : {}),
+              ...(rail.nuisance.length || facilities.nuisance.length
+                ? { nuisance: [...rail.nuisance, ...facilities.nuisance] }
+                : {}),
+            },
+            { signal },
+          );
     // Rail yards and facilities take town land.
     const reserved = [
       ...facilities.reserved,
@@ -281,7 +313,8 @@ const api: EngineApi = {
     const zones = zoneEdits(doc);
     const towns: TownOutput[] = [];
     for (const site of sites) {
-      const blockSizeM = site.spec.layout.blockSizeM ?? era.blockSizeM.core;
+      // The old town was laid out in the era of its founding; its block size does not follow the slider.
+      const blockSizeM = site.spec.layout.blockSizeM ?? eraAt(eras, site.founded).blockSizeM.core;
       // Settlement salts exclude the region salt, which is already in `seed`.
       const salt = reseedSalt(
         doc.overrides.filter((o) => o.op !== 'reseed' || o.target !== 'region'),
@@ -297,7 +330,8 @@ const api: EngineApi = {
             year: doc.spec.year,
             blockSizeM,
             eras,
-            society,
+            society: zoningSociety,
+            ...(doc.spec.events.length ? { events: doc.spec.events } : {}),
             ...(salt ? { salt } : {}),
             ...(zones.length ? { zoneEdits: zones } : {}),
             ...(reserved.length ? { reserved } : {}),
@@ -368,6 +402,11 @@ const api: EngineApi = {
     version += 1;
     const blocks = towns.flatMap((t) => t.blocks);
     // Authored geometry wins over generated buildings; overrides hide or re-roll them.
+    const conditionStrokes = conditionEdits(doc).map((e) => ({
+      points: e.points,
+      radiusM: e.radiusM,
+      delta: e.delta,
+    }));
     const tiler = new BlockTiler(blocks, doc.spec.year, {
       minZoom: 13,
       authored: doc.authored.features.filter((f) =>
@@ -385,6 +424,7 @@ const api: EngineApi = {
         pack: culturePack(doc.spec.culture),
         address: (x, y) => streetIndex.address(x, y),
         ...(Object.keys(renames).length ? { renames } : {}),
+        ...(conditionStrokes.length ? { conditionEdits: conditionStrokes } : {}),
         ...(doc.spec.cultureMix
           ? { cultureMix: doc.spec.cultureMix.map((m) => ({ culture: m.culture, weight: m.weight })) }
           : {}),
@@ -405,6 +445,7 @@ const api: EngineApi = {
         ...facilityLayers(facilities),
         ...railLayers(rail, trams, roads, facilities.spurs),
         ...societyLayers(society),
+        ...eventLayers(doc.spec.events, doc.spec.year),
       ],
       version,
       [tiler],
@@ -453,7 +494,13 @@ const api: EngineApi = {
         coreRadiusM: t.stats.coreRadiusM,
         ways: townNames[i]?.stats.ways ?? 0,
         districts: townNames[i]?.stats.districts ?? 0,
+        founded: sites[i]!.founded,
+        peakPopulation: t.stats.peakPopulation,
+        peakYear: t.stats.peakYear,
+        abandonedBlocks: t.stats.abandonedBlocks,
+        coreEndYear: t.stats.coreEndYear,
       })),
+      anchorYear: doc.spec.anchorYear,
       era: { id: era.id, name: era.name, year: era.year },
       roads: roads.stats,
       rail: {
@@ -783,6 +830,7 @@ const api: EngineApi = {
         })),
       ),
       settlements: siting.sites.map((s) => ({ id: s.id, name: s.name })),
+      heights: heightGrid(terrain, frame),
     } as unknown as ExportModel;
   },
 
@@ -1048,6 +1096,21 @@ const api: EngineApi = {
     return null;
   },
 };
+
+/** Terrain heights sampled over a frame at a resolution that keeps the mesh under ~65k vertices. */
+function heightGrid(terrain: TerrainOutput, frame: Frame) {
+  const w = frame.maxX - frame.minX;
+  const h = frame.maxY - frame.minY;
+  const cellM = Math.max(terrain.height.cellSizeM, Math.sqrt((w * h) / 60_000));
+  const cols = Math.max(2, Math.floor(w / cellM) + 1);
+  const rows = Math.max(2, Math.floor(h / cellM) + 1);
+  const data = new Array<number>(cols * rows);
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      data[r * cols + c] =
+        Math.round(terrain.height.sample(frame.minX + c * cellM, frame.minY + r * cellM) * 10) / 10;
+  return { cols, rows, cellM, data, seaLevelM: terrain.seaLevel };
+}
 
 function centroidOfGeometry(g: Geometry): [number, number] {
   let sx = 0;

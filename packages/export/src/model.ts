@@ -43,6 +43,8 @@ export interface ExportModel {
   districts: FeatureCollection<Point, Props>;
   authored: AnyFc;
   annotations: AnyFc;
+  /** Terrain heights over the frame (for 3D export); absent when the engine has none. */
+  heights?: { cols: number; rows: number; cellM: number; data: number[]; seaLevelM: number };
 }
 
 function bboxOf(g: Geometry): Frame {

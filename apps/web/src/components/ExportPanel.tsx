@@ -8,6 +8,8 @@ import {
   downloadText,
   exportDirectoryCsv,
   exportFoundry,
+  exportGlb,
+  downloadBytes,
   exportGeoJsonText,
   exportPng,
   exportSvg,
@@ -197,6 +199,21 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
             }
           >
             Universal VTT (.dd2vtt)
+          </button>
+          <button
+            className={btn}
+            disabled={!!busy}
+            onClick={() =>
+              run('gltf', async (r) => {
+                const out = await exportGlb(r);
+                downloadBytes(out.glb, `${base()}.glb`, 'model/gltf-binary');
+                setReport(
+                  `glTF: ${out.meshes.map((m) => `${m.name} ${m.triangles.toLocaleString()} triangles`).join(', ')} (${(out.glb.byteLength / 1e6).toFixed(1)} MB). Metres, y up.`,
+                );
+              })
+            }
+          >
+            3D model (.glb)
           </button>
           <button
             className={btn}

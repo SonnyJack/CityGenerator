@@ -3,6 +3,7 @@ import { defineStage } from '../pipeline/stage.js';
 import type { SettlementKind, SettlementSpec } from '../document/schema.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { Rng } from '../random/rng.js';
+import { populationAt, radiusAt, radiusForPopulation, type SettlementHistory } from './history.js';
 
 /**
  * Region stage R3: where settlements go. Explicit settlement specs are honoured
@@ -17,9 +18,13 @@ export interface SettlementSite {
   name?: string;
   population: number;
   center: [number, number];
-  /** Radius of the built-up area, metres. */
+  /** Radius of the built-up area at the current year, metres. */
   radiusM: number;
   founded: number;
+  /** The settlement's growth history; `population` and `radiusM` are its values at the current year. */
+  history: SettlementHistory;
+  /** Population at the anchor year (what the spec says). */
+  anchorPopulation: number;
   /** Original spec (explicit or synthesised). */
   spec: SettlementSpec;
   /** True when the site touches the sea within a short distance. */
@@ -32,6 +37,8 @@ export interface SitingInput {
   seed: string;
   terrain: TerrainOutput;
   year: number;
+  /** Year the spec populations describe; defaults to `year`. */
+  anchorYear?: number;
   settlements: SettlementSpec[];
   policy: { count: [number, number]; kinds: Partial<Record<SettlementKind, number>> };
 }
@@ -58,19 +65,7 @@ export const DEFAULT_POPULATION: Record<SettlementKind, number> = {
   industrialSatellite: 6_000,
 };
 
-/** Persons per km² of built-up area by year (dense cores in early eras, sprawl later). */
-export function urbanDensity(year: number): number {
-  if (year < 1800) return 13_000;
-  if (year < 1900) return 10_000;
-  if (year < 1950) return 7_000;
-  if (year < 1990) return 4_500;
-  return 3_500;
-}
-
-export function radiusForPopulation(population: number, year: number): number {
-  const areaM2 = (population / urbanDensity(year)) * 1e6;
-  return Math.max(90, Math.sqrt(areaM2 / Math.PI));
-}
+export { urbanDensity, radiusForPopulation } from './history.js';
 
 const DEFAULT_KIND_WEIGHTS: Partial<Record<SettlementKind, number>> = {
   village: 6,
@@ -110,9 +105,10 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
   version: 2,
   seedOf: (i) => i.seed,
   keyOf: (i) =>
-    `${i.terrain.key}|${i.year}|${JSON.stringify(i.settlements)}|${JSON.stringify(i.policy)}|${i.seed}`,
+    `${i.terrain.key}|${i.year}|${i.anchorYear ?? ''}|${JSON.stringify(i.settlements)}|${JSON.stringify(i.policy)}|${i.seed}`,
   run(input, ctx) {
     const { terrain, year } = input;
+    const anchorYear = input.anchorYear ?? year;
     const { height, water, slope, distToSea, distToWater } = terrain;
     const { width, height: rows, cellSizeM } = height;
     const n = width * rows;
@@ -190,7 +186,8 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
     const ordered = [...specs].sort((a, b) => b.population - a.population || (a.id < b.id ? -1 : 1));
     const placed: SettlementSite[] = [];
     for (const spec of ordered) {
-      const radiusM = radiusForPopulation(spec.population, year);
+      // Placement uses the anchor-year footprint so the site does not move when the year does.
+      const radiusM = radiusForPopulation(spec.population, anchorYear);
       const wantsCoast = spec.kind === 'portTown' || spec.kind === 'fishingVillage' || spec.kind === 'resort';
       const wantsRiver = spec.kind === 'millTown';
       let best: { i: number; score: number } | null = null;
@@ -240,19 +237,29 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
       const ci = Math.min(Math.max(Math.round(height.col(center[0])), 0), width - 1);
       const ri = Math.min(Math.max(Math.round(height.row(center[1])), 0), rows - 1);
       const idx = ri * width + ci;
+      const founded =
+        spec.founded ??
+        Math.min(
+          anchorYear,
+          spec.kind === 'city' || spec.kind === 'town' || spec.kind === 'portTown' ? 1250 : 1500,
+        );
+      const history: SettlementHistory = {
+        founded,
+        anchorYear,
+        anchorPopulation: spec.population,
+        ...(spec.growth?.length ? { points: spec.growth } : {}),
+      };
+      const populationNow = Math.max(1, populationAt(history, Math.max(year, founded)));
       placed.push({
         id: spec.id,
         kind: spec.kind,
         name: spec.name,
-        population: spec.population,
+        population: populationNow,
         center,
-        radiusM,
-        founded:
-          spec.founded ??
-          Math.min(
-            year,
-            spec.kind === 'city' || spec.kind === 'town' || spec.kind === 'portTown' ? 1250 : 1500,
-          ),
+        radiusM: year >= founded ? radiusAt(history, year) : radiusForPopulation(populationNow, year),
+        founded,
+        history,
+        anchorPopulation: spec.population,
         spec,
         coastal: distToSea[idx]! < radiusM + 300,
         riverside: distToWater[idx]! < radiusM && distToSea[idx]! > radiusM,

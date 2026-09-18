@@ -437,6 +437,37 @@ export async function executeTool(name: string, rawInput: unknown, host: ToolHos
         run({ type: 'settlement.remove', id: i.id });
         return ok({ removed: i.id }, `Removed settlement ${i.id}`);
       }
+      case 'add_event': {
+        const i = input as ToolInput<'add_event'>;
+        const id = host.newId(i.kind);
+        run({
+          type: 'spec.patch',
+          ops: [
+            {
+              op: 'add',
+              path: '/events/-',
+              value: {
+                id,
+                kind: i.kind,
+                year: i.year,
+                center: [i.x, i.y],
+                radiusM: i.radiusM,
+                magnitude: i.magnitude ?? 0.7,
+                durationYears: i.durationYears ?? 1,
+                ...(i.levelM != null ? { levelM: i.levelM } : {}),
+              },
+            },
+          ],
+        });
+        return ok({ id }, `Added a ${i.kind} in ${i.year}`);
+      }
+      case 'remove_event': {
+        const i = input as ToolInput<'remove_event'>;
+        const idx = doc().spec.events.findIndex((e) => e.id === i.id);
+        if (idx < 0) return fail(`no event ${i.id}`);
+        run({ type: 'spec.patch', ops: [{ op: 'remove', path: `/events/${idx}` }] });
+        return ok({ removed: i.id }, `Removed event ${i.id}`);
+      }
       case 'undo':
         return host.undo() ? ok({ undone: true }, 'Undid the last command') : fail('nothing to undo');
       case 'redo':

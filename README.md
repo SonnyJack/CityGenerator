@@ -72,7 +72,15 @@ search and map snapshots, and edits through the same commands as the
 editor: year, spec, facilities, drawing, brushes, renames, notes and
 regeneration. Every tool call is a card with its own undo, usage and cost
 are shown, and fifty scripted requests run in CI against recorded
-responses. Timeline, 3D and condition are next (Phase 9).
+responses.
+
+Phase 9 gives every region one history: populations are anchored to a design
+year, and the year slider moves along that history instead of re-rolling it,
+so buildings keep their built years, lots rebuild when zoning changes, towns
+that decline empty from the edges, and fires, storms and floods leave their
+marks. Buildings carry a condition from sound to ruin, a timeline player
+plays the years, buildings extrude in 3D, and any frame exports as a glTF
+model. The ecosystem phase is next.
 
 ## Development
 

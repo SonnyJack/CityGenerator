@@ -26,7 +26,17 @@ export type ToolId =
   'navigate' | 'select' | 'line' | 'polygon' | 'rectangle' | 'point' | 'brush' | 'annotate';
 
 export type BrushKind =
-  'raise' | 'lower' | 'smooth' | 'flatten' | 'water' | 'wealth' | 'density' | 'zone' | 'erase' | 'reroll';
+  | 'raise'
+  | 'lower'
+  | 'smooth'
+  | 'flatten'
+  | 'water'
+  | 'wealth'
+  | 'density'
+  | 'condition'
+  | 'zone'
+  | 'erase'
+  | 'reroll';
 
 export interface ToolOptions {
   /** Layer for line/polygon/point tools. */
@@ -692,7 +702,7 @@ export class ToolController {
     }
     const id = this.host.newId('brush');
     let props: Record<string, unknown>;
-    if (o.brush === 'wealth' || o.brush === 'density') {
+    if (o.brush === 'wealth' || o.brush === 'density' || o.brush === 'condition') {
       props = {
         layer: 'fieldEdit',
         origin: 'authored',

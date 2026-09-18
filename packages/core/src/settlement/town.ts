@@ -20,6 +20,8 @@ import type { EraParams } from './eras.js';
 import type { SocietyOutput } from '../society/stage.js';
 import { generateRings, growthRings, modernCoreZone, modernZone } from './rings.js';
 import { distToPolyline, type ZoneEdit } from '../document/authored.js';
+import type { RegionEvent } from '../document/schema.js';
+import { peakUntil, populationAt, radiusAt, yearForRadius } from './history.js';
 import type { Ring } from '../raster/contours.js';
 
 /**
@@ -47,6 +49,21 @@ export interface TownInput {
   zoneEdits?: ZoneEdit[];
   /** Land taken by facilities and rail yards: patches inside take the ward and get no buildings. */
   reserved?: { id: string; ring: Ring; ward: WardId }[];
+  /** Disasters on the timeline; those before the year mark the blocks they touched. */
+  events?: RegionEvent[];
+}
+
+/** A change of zoning on a block: lots are rebuilt in the new ward over the following decades. */
+export interface WardTransition {
+  year: number;
+  ward: WardId;
+}
+
+/** A disaster that touched a block. */
+export interface BlockDisaster {
+  kind: 'fire' | 'storm' | 'flood';
+  year: number;
+  magnitude: number;
 }
 
 export interface BlockRecipe {
@@ -59,6 +76,15 @@ export interface BlockRecipe {
   seed: string;
   /** Rough elevation at the block, metres. */
   elevationM: number;
+  /** Year the block was laid out (lots build over the following decades). */
+  builtYear?: number;
+  /** Ward the block was first built as; `ward` is its zoning now. */
+  originalWard?: WardId;
+  /** Zoning changes since, oldest first. */
+  transitions?: WardTransition[];
+  /** Year the block emptied when the settlement shrank. */
+  abandonedYear?: number;
+  disasters?: BlockDisaster[];
 }
 
 export interface TownOutput {
@@ -68,11 +94,19 @@ export interface TownOutput {
   radiusM: number;
   patches: FeatureCollection<
     Polygon,
-    { settlement: string; ward: WardId; inner: boolean; ring: number; why: string }
+    {
+      settlement: string;
+      ward: WardId;
+      inner: boolean;
+      ring: number;
+      why: string;
+      built?: number;
+      abandoned?: number;
+    }
   >;
   streets: FeatureCollection<
     LineString,
-    { settlement: string; class: 'artery' | 'street' | 'road' | 'collector' | 'motorway' }
+    { settlement: string; class: 'artery' | 'street' | 'road' | 'collector' | 'motorway'; built?: number }
   >;
   walls: FeatureCollection<LineString, { settlement: string; kind: 'wall' }>;
   gates: FeatureCollection<Point, { settlement: string; kind: 'gate' | 'tower' }>;
@@ -84,6 +118,13 @@ export interface TownOutput {
     streetsKm: number;
     rings: number;
     coreRadiusM: number;
+    /** Population at the year, the peak so far and the blocks left empty by decline. */
+    population: number;
+    peakPopulation: number;
+    peakYear: number;
+    abandonedBlocks: number;
+    /** Year the organic core reached its final extent. */
+    coreEndYear: number;
   };
 }
 
@@ -100,6 +141,10 @@ interface Patch {
   elevation: number;
   /** Explanation of the zone choice for the inspector. */
   why: string;
+  /** Year the patch was built up, from the growth curve. */
+  builtYear: number;
+  originalWard: WardId | null;
+  transitions: WardTransition[];
 }
 
 const ARTERY_HALF_WIDTH = 4;
@@ -110,16 +155,24 @@ export const townStage = defineStage<TownInput, TownOutput>({
   version: 1,
   seedOf: (i) => `${i.seed}/${i.site.id}${i.salt ? `/${i.salt}` : ''}`,
   keyOf: (i) =>
-    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}|${i.salt ?? ''}|${JSON.stringify(i.zoneEdits ?? [])}|${JSON.stringify(i.reserved?.map((r) => [r.id, r.ward, r.ring]) ?? [])}`,
+    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}|${i.salt ?? ''}|${JSON.stringify(i.zoneEdits ?? [])}|${JSON.stringify(i.reserved?.map((r) => [r.id, r.ward, r.ring]) ?? [])}|${JSON.stringify(i.events ?? [])}`,
   run(input, ctx) {
     const { site, terrain, year } = input;
     const rng = ctx.rng;
     // Growth history: the organic core covers the pre-grid eras; later eras add rings.
+    const history = site.history;
     const growth = input.eras?.length
       ? growthRings(site, year, input.eras)
-      : { coreRadius: site.radiusM, rings: [] };
+      : {
+          coreRadius: radiusAt(history, Math.max(year, history.anchorYear)),
+          rings: [],
+          coreEndYear: Math.max(year, history.anchorYear),
+        };
     const R = growth.coreRadius;
-    const outerR = growth.rings.length ? R * 1.08 : R * 1.7;
+    // The farm belt is laid out once; ring blocks replace it when the first grid era arrives.
+    const outerR = R * 1.7;
+    const populationNow = site.population;
+    const peak = peakUntil(history, year);
     const [cx, cy] = site.center;
     const { height, water, slope } = terrain;
 
@@ -208,6 +261,9 @@ export const townStage = defineStage<TownInput, TownOutput>({
         slope: s,
         elevation: height.data[idx]!,
         why: '',
+        builtYear: d <= R ? yearForRadius(history, d, history.founded, growth.coreEndYear) : history.founded,
+        originalWard: null,
+        transitions: [],
       });
     }
     // With growth rings the ring blocks take the land outside the core.
@@ -227,9 +283,12 @@ export const townStage = defineStage<TownInput, TownOutput>({
     ctx.checkpoint();
 
     const inner = patches.filter((p) => p.inner);
+    // The layout is the town's final one; what stands at the year is what was built by then.
+    // Walls, gates and arteries follow the final plan (walls often ran ahead of growth), so the
+    // street skeleton is the same at every year; only what stands inside changes.
     const innerSet = new Set(inner.map((p) => cells.indexOf(p.cell)));
     const walled =
-      (year <= 1700 || site.spec.layout.walls === true) && site.population >= 800 && inner.length >= 6;
+      (year <= 1700 || site.spec.layout.walls === true) && site.anchorPopulation >= 800 && inner.length >= 6;
 
     // --- 3. Wall, gates, towers ----------------------------------------------
     let wallRing: Ring = [];
@@ -319,7 +378,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
 
     // --- 5. Wards ----------------------------------------------------------
     const plaza = centrePatch;
-    if (plaza && site.population >= 1000) {
+    if (plaza && site.anchorPopulation >= 1000) {
       plaza.ward = 'plaza';
       plaza.why = 'plaza: the market square at the heart of the old town';
     }
@@ -355,7 +414,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
         waterfront: p.waterfront,
       };
     }
-    if (walled && site.population >= 2000) {
+    if (walled && site.anchorPopulation >= 2000) {
       castle = pickBest(inner, (p) => (p.ward ? -Infinity : WARDS.castle.score(contextOf(p))));
       if (castle) {
         castle.ward = 'castle';
@@ -364,7 +423,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
     }
     for (const wardId of ['cathedral', 'market', 'military', 'park'] as WardId[]) {
       const profile = WARDS[wardId];
-      const count = profile.count ? profile.count(inner.length, site.population) : 0;
+      const count = profile.count ? profile.count(inner.length, site.anchorPopulation) : 0;
       for (let k = 0; k < count; k++) {
         const best = pickBest(inner, (p) => (p.ward ? -Infinity : profile.score(contextOf(p))));
         if (best) {
@@ -380,7 +439,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       const weights = FILL_WARDS.map((w) =>
         Math.max(0.01, WARDS[w].fillWeight * Math.exp(WARDS[w].score(c))),
       );
-      p.ward = fillRng.weighted(FILL_WARDS, weights);
+      p.ward = fillRng.fork(`patch:${p.index}`).weighted(FILL_WARDS, weights);
       p.why = FILL_WARDS.map((w) => [w, WARDS[w].score(c)] as const)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
@@ -402,16 +461,34 @@ export const townStage = defineStage<TownInput, TownOutput>({
           .filter((e) => e.year <= year)
           .pop()
       : undefined;
-    if (currentEra && currentEra.year >= 1890) {
+    for (const p of inner) p.originalWard = p.ward;
+    if (input.eras?.length) {
+      // Zoning changes are part of the history, future ones included, so a building knows the year
+      // it will be replaced whatever year the map shows; the ward in force is the last one so far.
+      const modernEras = [...input.eras].sort((a, b) => a.year - b.year).filter((e) => e.year >= 1890);
       for (const p of inner) {
         const c = contextOf(p);
-        const z = modernCoreZone(p.ward!, currentEra, c.centreDist, c.onArtery);
-        if (z !== p.ward) {
-          p.why = `${z}: old town reassigned in ${currentEra.name} (was ${p.ward})`;
-          p.ward = z;
+        let ward = p.originalWard!;
+        for (const era of modernEras) {
+          const z = modernCoreZone(p.originalWard!, era, c.centreDist, c.onArtery);
+          if (z !== ward) {
+            p.transitions.push({ year: era.year, ward: z });
+            ward = z;
+          }
+        }
+        const now = p.transitions.filter((t) => t.year <= year).pop();
+        if (now && now.ward !== p.ward) {
+          p.why = `${now.ward}: old town reassigned in ${currentEra?.name ?? now.year} (was ${p.ward})`;
+          p.ward = now.ward;
         }
       }
     }
+    // Patches the growth curve has not reached yet are still fields.
+    for (const p of inner)
+      if (p.builtYear > year) {
+        p.why = `farm: not built until ${p.builtYear} (${p.ward})`;
+        p.ward = 'farm';
+      }
     ctx.checkpoint();
 
     // --- 6. Outputs ----------------------------------------------------------
@@ -420,16 +497,28 @@ export const townStage = defineStage<TownInput, TownOutput>({
       type: 'Feature',
       id: `${id}-patch-${p.index}`,
       geometry: { type: 'Polygon', coordinates: [[...p.ring, p.ring[0]!]] },
-      properties: { settlement: id, ward: p.ward ?? 'common', inner: p.inner, ring: 0, why: p.why },
+      properties: {
+        settlement: id,
+        ward: p.ward ?? 'common',
+        inner: p.inner,
+        ring: 0,
+        why: p.why,
+        ...(p.inner ? { built: p.builtYear } : {}),
+      },
     }));
     const streetFeatures: TownOutput['streets']['features'] = [];
     let streetsKm = 0;
-    const pushLine = (pts: Ring, cls: 'artery' | 'street' | 'road' | 'collector' | 'motorway', k: number) => {
+    const pushLine = (
+      pts: Ring,
+      cls: 'artery' | 'street' | 'road' | 'collector' | 'motorway',
+      k: number | string,
+      built = history.founded,
+    ) => {
       streetFeatures.push({
         type: 'Feature',
         id: `${id}-${cls}-${k}`,
         geometry: { type: 'LineString', coordinates: pts },
-        properties: { settlement: id, class: cls },
+        properties: { settlement: id, class: cls, built },
       });
       for (let i = 1; i < pts.length; i++)
         streetsKm += Math.hypot(pts[i]![0] - pts[i - 1]![0], pts[i]![1] - pts[i - 1]![1]) / 1000;
@@ -438,16 +527,15 @@ export const townStage = defineStage<TownInput, TownOutput>({
     roads.forEach((r, k) => pushLine(r, 'road', k));
     // Minor streets: every inner patch edge not already an artery.
     const seenEdges = new Set<string>();
-    let sk = 0;
     for (const p of inner) {
-      if (p.ward === 'plaza') continue;
+      if (p.ward === 'plaza' || p.builtYear > year) continue;
       for (let i = 0; i < p.ring.length; i++) {
         const a = p.ring[i]!;
         const b = p.ring[(i + 1) % p.ring.length]!;
         const ek = graph.edgeKey(a, b);
         if (seenEdges.has(ek) || arteryEdges.has(ek)) continue;
         seenEdges.add(ek);
-        pushLine([a, b], 'street', sk++);
+        pushLine([a, b], 'street', `${p.index}-${i}`, p.builtYear);
       }
     }
     const wallFeatures: TownOutput['walls']['features'] = wallRing.length
@@ -488,6 +576,9 @@ export const townStage = defineStage<TownInput, TownOutput>({
         areaM2: area(ring),
         seed: `${input.seed}${input.salt ? `/${input.salt}` : ''}/settlement:${id}/block:${p.index}`,
         elevationM: p.elevation,
+        builtYear: p.builtYear,
+        originalWard: p.originalWard ?? p.ward,
+        ...(p.transitions.length ? { transitions: p.transitions } : {}),
       });
     }
     // --- 7. Growth rings ------------------------------------------------------
@@ -504,7 +595,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       });
       ringCount = rings.rings.length;
       const zoneRng = rng.fork('zones');
-      rings.blocks.forEach((b, k) => {
+      for (const b of rings.blocks) {
         const c = centroid(b.ring);
         const f = input.society?.sample(c[0], c[1]);
         const { zone, why } = modernZone(
@@ -512,25 +603,86 @@ export const townStage = defineStage<TownInput, TownOutput>({
           f?.wealthClass ?? 'modest',
           f?.densityClass ?? 'medium',
           b,
-          zoneRng,
+          zoneRng.fork(b.key),
         );
         patchFeatures.push({
           type: 'Feature',
-          id: `${id}-ring-${k}`,
+          id: `${id}-ring-${b.key}`,
           geometry: { type: 'Polygon', coordinates: [[...b.ring, b.ring[0]!]] },
-          properties: { settlement: id, ward: zone, inner: false, ring: b.ringIndex + 1, why },
+          properties: {
+            settlement: id,
+            ward: zone,
+            inner: false,
+            ring: b.ringIndex + 1,
+            why,
+            built: b.builtYear,
+          },
         });
         blocks.push({
-          id: `${id}-r${k}`,
+          id: `${id}-r${b.key}`,
           settlementId: id,
           ring: b.ring,
           ward: zone,
           areaM2: area(b.ring),
-          seed: `${input.seed}${input.salt ? `/${input.salt}` : ''}/settlement:${id}/ring:${k}`,
+          seed: `${input.seed}${input.salt ? `/${input.salt}` : ''}/settlement:${id}/ring:${b.key}`,
           elevationM: height.sample(c[0], c[1]),
+          builtYear: b.builtYear,
+          originalWard: zone,
         });
+      }
+      rings.streets.forEach((st) => {
+        const mid = st.points[Math.floor(st.points.length / 2)]!;
+        const d = Math.hypot(mid[0] - cx, mid[1] - cy);
+        const ring = growth.rings.find((r) => d >= r.rIn && d <= r.rOut) ?? growth.rings[0]!;
+        const built =
+          st.cls === 'artery' ? growth.coreEndYear : yearForRadius(history, d, ring.fromYear, ring.toYear);
+        pushLine(st.points, st.cls, st.key, built);
       });
-      rings.streets.forEach((st, k) => pushLine(st.points, st.cls, 1000 + k));
+    }
+    // Decline: when the population falls below its peak the outermost blocks empty first.
+    let abandonedBlocks = 0;
+    if (blocks.length && populationNow < peak.population * 0.97) {
+      const jitter = rng.fork('abandon');
+      const ranked = blocks
+        .map((b) => {
+          const c = centroid(b.ring);
+          return { b, d: Math.hypot(c[0] - cx, c[1] - cy) + jitter.fork(b.id).range(0, 0.15) * R };
+        })
+        .sort((a, b) => b.d - a.d);
+      const fraction = (t: number) => {
+        const pk = peakUntil(history, t).population;
+        return pk > 0 ? 1 - populationAt(history, t) / pk : 0;
+      };
+      const n = ranked.length;
+      ranked.forEach(({ b }, rank) => {
+        const share = (rank + 1) / n;
+        for (let t = peak.year; t <= year; t += 5) {
+          if (share <= fraction(t)) {
+            b.abandonedYear = t;
+            abandonedBlocks++;
+            break;
+          }
+        }
+      });
+      const abandonedById = new Map(
+        blocks.filter((b) => b.abandonedYear).map((b) => [b.id, b.abandonedYear!]),
+      );
+      for (const f of patchFeatures) {
+        const bid = String(f.id).replace(`${id}-patch-`, `${id}-b`).replace(`${id}-ring-`, `${id}-r`);
+        const ay = abandonedById.get(bid);
+        if (ay) f.properties.abandoned = ay;
+      }
+    }
+    // Disasters: fires rebuild, storms and floods damage the blocks they reached.
+    // Disasters are on the timeline whatever the year shows: a lot knows the fire that will take it.
+    for (const e of input.events ?? []) {
+      for (const b of blocks) {
+        if ((b.builtYear ?? history.founded) >= e.year) continue;
+        const c = centroid(b.ring);
+        if (Math.hypot(c[0] - e.center[0], c[1] - e.center[1]) > e.radiusM) continue;
+        if (e.kind === 'flood' && e.levelM !== undefined && b.elevationM > e.levelM) continue;
+        (b.disasters ??= []).push({ kind: e.kind, year: e.year, magnitude: e.magnitude });
+      }
     }
     // Reserved land: facilities and yards take their patches; those blocks draw nothing.
     if (input.reserved?.length) {
@@ -590,6 +742,11 @@ export const townStage = defineStage<TownInput, TownOutput>({
         streetsKm,
         rings: ringCount,
         coreRadiusM: R,
+        population: populationNow,
+        peakPopulation: peak.population,
+        peakYear: peak.year,
+        abandonedBlocks,
+        coreEndYear: growth.coreEndYear,
       },
     };
   },

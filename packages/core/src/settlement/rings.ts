@@ -3,7 +3,8 @@ import type { Ring } from '../raster/contours.js';
 import type { Rng } from '../random/rng.js';
 import type { TerrainOutput } from '../terrain/stage.js';
 import type { SocietyOutput, WealthClass, DensityClass } from '../society/stage.js';
-import { radiusForPopulation, type SettlementSite } from './siting.js';
+import type { SettlementSite } from './siting.js';
+import { populationAt, radiusAt, radiusForPopulation, yearForRadius } from './history.js';
 import type { EraParams } from './eras.js';
 import type { WardId } from './wards.js';
 
@@ -18,70 +19,73 @@ export interface GrowthRing {
   era: EraParams;
   rIn: number;
   rOut: number;
+  /** Years the ring was under construction: the era's start to the next boundary. */
+  fromYear: number;
+  toYear: number;
 }
 
 export interface RingBlock {
   ring: Ring;
   /** Ring index (0 = first ring outside the core). */
   ringIndex: number;
+  /** Stable cell key within the ring (grid indices and piece), the same at every year. */
+  key: string;
   era: EraParams;
   onArtery: boolean;
   waterfront: boolean;
+  /** Year the block was laid out, from the settlement's growth curve. */
+  builtYear: number;
 }
 
 export interface RingsResult {
   rings: GrowthRing[];
   blocks: RingBlock[];
   /** Street polylines with their class. */
-  streets: { points: Ring; cls: 'artery' | 'collector' | 'street' | 'motorway' }[];
+  streets: { points: Ring; cls: 'artery' | 'collector' | 'street' | 'motorway'; key: string }[];
   coreRadius: number;
 }
 
-/** Population of the settlement at year t: slow early growth, fast late growth. */
-export function populationAt(site: SettlementSite, year: number, t: number): number {
-  if (t >= year || year <= site.founded) return site.population;
-  if (t <= site.founded) return Math.max(50, site.population * 0.08);
-  const s = (t - site.founded) / (year - site.founded);
-  return Math.max(50, site.population * (0.08 + 0.92 * s * s));
-}
-
-/** Ring boundaries for the settlement's history; the core is everything up to the first non-organic era. */
+/**
+ * Ring boundaries for the settlement's history. Past boundaries come from the
+ * anchored growth curve, so they are the same at every year; only the newest
+ * ring grows with the year. The core is everything up to the first non-organic
+ * era after the founding.
+ */
 export function growthRings(
   site: SettlementSite,
   year: number,
   eras: readonly EraParams[],
-): { coreRadius: number; rings: GrowthRing[] } {
+): { coreRadius: number; rings: GrowthRing[]; coreEndYear: number } {
+  const h = site.history;
   const sorted = [...eras].sort((a, b) => a.year - b.year);
-  const boundaries: { era: EraParams; r: number }[] = [];
+  const boundaries: { era: EraParams; r: number; year: number }[] = [];
   for (const era of sorted) {
-    if (era.year <= site.founded || era.year > year) continue;
-    boundaries.push({ era, r: radiusForPopulation(populationAt(site, year, era.year), era.year) });
+    if (era.year <= h.founded || era.year > year) continue;
+    boundaries.push({ era, r: radiusForPopulation(populationAt(h, era.year), era.year), year: era.year });
   }
-  // The current year closes the last ring at the settlement's full radius, in the current era's pattern.
+  // The current year closes the last ring at the settlement's radius, in the current era's pattern.
   const current = sorted.filter((e) => e.year <= year).pop() ?? sorted[0]!;
-  boundaries.push({ era: current, r: site.radiusM });
-  let coreRadius = site.radiusM;
+  boundaries.push({ era: current, r: radiusAt(h, year), year });
+  // The core's final extent is fixed by the first grid era after the founding (or the anchor when
+  // the settlement stays organic), so the old town never re-tessellates as the year moves.
+  const firstGrid = sorted.find((e) => e.year > h.founded && e.ringPattern !== 'organic');
+  const coreEndYear = firstGrid ? firstGrid.year : Math.max(h.anchorYear, year);
+  const coreRadius = Math.max(
+    radiusForPopulation(populationAt(h, coreEndYear), coreEndYear) * (firstGrid ? 1 : 1),
+    radiusForPopulation(30, coreEndYear),
+  );
   const rings: GrowthRing[] = [];
-  let organic = true;
-  let prevR = 0;
+  let prevR = coreRadius;
+  let prevYear = coreEndYear;
   for (const b of boundaries) {
-    if (organic && b.era.ringPattern === 'organic') {
-      coreRadius = b.r;
-      prevR = b.r;
-      continue;
-    }
-    if (organic) {
-      organic = false;
-      coreRadius = Math.max(prevR, site.radiusM * 0.18);
-      prevR = coreRadius;
-    }
+    if (b.era.ringPattern === 'organic' || b.year <= coreEndYear) continue;
     if (b.r > prevR + 40) {
-      rings.push({ era: b.era, rIn: prevR, rOut: b.r });
+      rings.push({ era: b.era, rIn: prevR, rOut: b.r, fromYear: prevYear, toYear: b.year });
       prevR = b.r;
     }
+    prevYear = b.year;
   }
-  if (organic) coreRadius = site.radiusM;
-  return { coreRadius, rings };
+  return { coreRadius, rings, coreEndYear };
 }
 
 interface RingGenContext {
@@ -105,7 +109,7 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   const R = rings[rings.length - 1]!.rOut;
 
   // Radial arteries: from gates (or evenly spaced angles) out to the edge.
-  const arteryCount = Math.min(8, Math.max(3, Math.round(2 + Math.sqrt(site.population) / 40)));
+  const arteryCount = Math.min(8, Math.max(3, Math.round(2 + Math.sqrt(site.anchorPopulation) / 40)));
   const angles: number[] = [];
   const base = rng.range(0, Math.PI * 2);
   for (let i = 0; i < arteryCount; i++) {
@@ -117,7 +121,7 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     if (gate) a = gate.a;
     angles.push(a);
   }
-  const arteryLines: { a: Pt; b: Pt }[] = [];
+  const arteryLines: { a: Pt; b: Pt; far: Pt }[] = [];
   for (const a of angles) {
     const dir: Pt = [Math.cos(a), Math.sin(a)];
     const start: Pt = [cx + dir[0] * coreRadius * 0.98, cy + dir[1] * coreRadius * 0.98];
@@ -131,8 +135,10 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
       }
     }
     if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 60) continue;
-    arteryLines.push({ a: start, b: end });
-    streets.push({ points: [start, end], cls: 'artery' });
+    // Cuts use a far point on the same line so the split arithmetic is bit-identical whatever the
+    // artery's current length (the ring's outer edge moves with the year; the cuts must not).
+    arteryLines.push({ a: start, b: end, far: [start[0] + dir[0] * 50_000, start[1] + dir[1] * 50_000] });
+    streets.push({ points: [start, end], cls: 'artery', key: `artery-${arteryLines.length - 1}` });
   }
 
   // Grid orientation: along the first artery, jittered per ring for variety.
@@ -145,7 +151,7 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     const ek = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
     if (edgeKeys.has(ek)) return;
     edgeKeys.add(ek);
-    streets.push({ points: [a, b], cls });
+    streets.push({ points: [a, b], cls, key: ek });
   };
 
   rings.forEach((ring, ringIndex) => {
@@ -155,8 +161,11 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
       pattern === 'suburban' ? 1.25 : pattern === 'culDeSac' ? 1.6 : pattern === 'towers' ? 2 : 1;
     const bw = era.blockSizeM.ring * 0.62 * sizeMul;
     const bh = era.blockSizeM.ring * (pattern === 'streetcar' ? 1.5 : 1) * sizeMul;
+    const ringRng = rng.fork(`ring:${ringIndex}`);
     const theta =
-      theta0 + (pattern === 'grid' || pattern === 'streetcar' ? 0 : rng.range(-0.2, 0.2)) + ringIndex * 0.02;
+      theta0 +
+      (pattern === 'grid' || pattern === 'streetcar' ? 0 : ringRng.range(-0.2, 0.2)) +
+      ringIndex * 0.02;
     const ux = Math.cos(theta);
     const uy = Math.sin(theta);
     const vx = -uy;
@@ -165,9 +174,10 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     const halfWidth = era.streetWidthM.local / 2;
     const iMax = Math.ceil(ring.rOut / bw) + 1;
     const jMax = Math.ceil(ring.rOut / bh) + 1;
-    const ringRng = rng.fork(`ring:${ringIndex}`);
     for (let i = -iMax; i < iMax; i++) {
       for (let j = -jMax; j < jMax; j++) {
+        // Per-cell randomness: a cell draws the same numbers whatever the ring's current extent.
+        const cellRng = ringRng.fork(`cell:${i},${j}`);
         const u0 = i * bw;
         const v0 = j * bh;
         const corners: Pt[] = [
@@ -181,7 +191,7 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
         if (d < ring.rIn || d > ring.rOut) continue;
         // Suburban patterns thin out toward the edge, leaving gaps and greens.
         const edgeT = (d - ring.rIn) / Math.max(1, ring.rOut - ring.rIn);
-        if ((pattern === 'suburban' || pattern === 'culDeSac') && ringRng.chance(0.08 + edgeT * 0.25))
+        if ((pattern === 'suburban' || pattern === 'culDeSac') && cellRng.chance(0.08 + edgeT * 0.25))
           continue;
         if (!ctx.isLand(c[0], c[1])) continue;
         if (ctx.slopeAt(c[0], c[1]) > 0.28) continue;
@@ -204,17 +214,27 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
               continue;
             }
             onArtery = true;
-            const { left, right } = splitByLine(piece, line.a, line.b);
+            const { left, right } = splitByLine(piece, line.a, line.far);
             for (const part of [left, right])
               if (part.length >= 3 && area(part) > bw * bh * 0.08) next.push(part);
           }
           pieces = next;
         }
-        for (const piece of pieces) {
+        pieces.forEach((piece, pieceIndex) => {
           const shrunk = inset(ccw(open(piece)), halfWidth);
-          if (shrunk.length < 3 || area(shrunk) < 150) continue;
-          blocks.push({ ring: shrunk, ringIndex, era, onArtery, waterfront });
-        }
+          if (shrunk.length < 3 || area(shrunk) < 150) return;
+          const pc = centroid(shrunk);
+          const dist = Math.hypot(pc[0] - cx, pc[1] - cy);
+          blocks.push({
+            ring: shrunk,
+            ringIndex,
+            key: `${ringIndex}-${i}_${j}-${pieceIndex}`,
+            era,
+            onArtery,
+            waterfront,
+            builtYear: yearForRadius(site.history, dist, ring.fromYear, ring.toYear),
+          });
+        });
         // Streets along the cell edges (the artery cuts are drawn as arteries already).
         const collectorI = i % 3 === 0;
         const collectorJ = j % 3 === 0;
@@ -233,10 +253,10 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
         const p: Pt = [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr];
         if (ctx.isLand(p[0], p[1])) pts.push(p);
         else if (pts.length >= 2) {
-          streets.push({ points: pts.splice(0), cls: 'motorway' });
+          streets.push({ points: pts.splice(0), cls: 'motorway', key: `motorway-${ringIndex}-${k}` });
         } else pts.length = 0;
       }
-      if (pts.length >= 2) streets.push({ points: pts, cls: 'motorway' });
+      if (pts.length >= 2) streets.push({ points: pts, cls: 'motorway', key: `motorway-${ringIndex}-end` });
     }
   });
   return { rings, blocks, streets, coreRadius };

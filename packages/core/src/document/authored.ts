@@ -21,7 +21,7 @@ export interface TerrainEdit {
 
 export interface FieldEdit {
   id: string;
-  field: 'wealth' | 'density';
+  field: 'wealth' | 'density' | 'condition';
   points: Ring;
   radiusM: number;
   /** Change in [-1, 1] at the stroke centre, falling off to the edge. */
@@ -64,13 +64,23 @@ export function terrainEdits(doc: MapDocument): TerrainEdit[] {
   return out;
 }
 
+/** Wealth and density strokes (consumed by the society stage). */
+export function societyEdits(doc: MapDocument): FieldEdit[] {
+  return fieldEdits(doc).filter((e) => e.field !== 'condition');
+}
+
+/** Condition strokes (consumed by block generation). */
+export function conditionEdits(doc: MapDocument): FieldEdit[] {
+  return fieldEdits(doc).filter((e) => e.field === 'condition');
+}
+
 export function fieldEdits(doc: MapDocument): FieldEdit[] {
   const out: FieldEdit[] = [];
   for (const f of doc.authored.features) {
     if (f.properties.layer !== 'fieldEdit') continue;
     const field = f.properties.field;
     const points = lineOrPolygonPoints(f);
-    if (!points || (field !== 'wealth' && field !== 'density')) continue;
+    if (!points || (field !== 'wealth' && field !== 'density' && field !== 'condition')) continue;
     out.push({
       id: f.id,
       field,

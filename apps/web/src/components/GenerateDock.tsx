@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CULTURE_PACKS, biomeIdSchema, terrainPresetSchema } from '@citygen/core';
 import { biomes } from '@citygen/features';
-import { DENSITY_CLASS_NAMES, WEALTH_CLASS_NAMES, themeById, themes, type LayerGroup } from '@citygen/themes';
+import {
+  AGE_STOPS,
+  DENSITY_CLASS_NAMES,
+  WEALTH_CLASS_NAMES,
+  themeById,
+  themes,
+  type LayerGroup,
+} from '@citygen/themes';
 import { eraForYear } from '@citygen/features';
 import { randomSeed, useApp } from '../store.js';
+import { EventsPanel } from './EventsPanel.js';
 import { SettlementsPanel } from './SettlementsPanel.js';
 
 const PRESET_LABELS: Record<string, string> = {
@@ -37,9 +45,74 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'authored', label: 'Your features' },
   { id: 'edits', label: 'Brush strokes' },
   { id: 'annotations', label: 'Annotations' },
+  { id: 'events', label: 'Disasters' },
 ];
 
 /** A slider that dispatches on release (and on keyboard steps) rather than every pixel. */
+/** Play the timeline: step the year forward while the engine keeps up. */
+function TimelinePlayer() {
+  const year = useApp((s) => s.document.spec.year);
+  const status = useApp((s) => s.status);
+  const dispatch = useApp((s) => s.dispatch);
+  const [playing, setPlaying] = useState(false);
+  const [from, setFrom] = useState(1850);
+  const [to, setTo] = useState(2020);
+  const timer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!playing || status !== 'idle') return;
+    timer.current = window.setTimeout(() => {
+      if (year >= to) setPlaying(false);
+      else dispatch({ type: 'year.set', year: Math.min(to, year + 5) });
+    }, 250);
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    };
+  }, [playing, status, year, to, dispatch]);
+  return (
+    <div className="flex items-center gap-2 text-xs" data-testid="timeline-player">
+      <button
+        className="rounded border border-stone-300 bg-white px-2 py-0.5 hover:bg-stone-100"
+        onClick={() => {
+          if (playing) setPlaying(false);
+          else {
+            if (year >= to) dispatch({ type: 'year.set', year: from });
+            setPlaying(true);
+          }
+        }}
+      >
+        {playing ? 'Pause' : 'Play'}
+      </button>
+      <label className="flex items-center gap-1">
+        <span className="text-stone-600">from</span>
+        <input
+          aria-label="Play from"
+          type="number"
+          className="w-16 rounded border border-stone-300 px-1"
+          value={from}
+          min={1100}
+          max={2100}
+          step={5}
+          onChange={(e) => setFrom(Number(e.target.value))}
+        />
+      </label>
+      <label className="flex items-center gap-1">
+        <span className="text-stone-600">to</span>
+        <input
+          aria-label="Play to"
+          type="number"
+          className="w-16 rounded border border-stone-300 px-1"
+          value={to}
+          min={1100}
+          max={2100}
+          step={5}
+          onChange={(e) => setTo(Number(e.target.value))}
+        />
+      </label>
+      <span className="text-stone-500">{playing ? `${year}…` : ''}</span>
+    </div>
+  );
+}
+
 function Slider({
   label,
   value,
@@ -269,19 +342,34 @@ export function GenerateDock() {
         />
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Year</h2>
+      <section className="space-y-2" data-testid="timeline">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Timeline</h2>
         <Slider
           label={`Year · ${eraForYear(doc.spec.year).name}`}
           value={doc.spec.year}
           min={1100}
-          max={2020}
+          max={2100}
           step={5}
           onCommit={(v) => dispatch({ type: 'year.set', year: Math.round(v) })}
         />
+        <TimelinePlayer />
+        <p className="text-[11px] text-stone-500">
+          Populations are as of {doc.spec.anchorYear}; the slider moves along that history.{' '}
+          {doc.spec.anchorYear !== doc.spec.year && (
+            <button
+              className="underline"
+              onClick={() => patch('/anchorYear', doc.spec.year)}
+              title="Treat the settlement populations as this year's"
+            >
+              Make {doc.spec.year} the design year
+            </button>
+          )}
+        </p>
       </section>
 
       <SettlementsPanel />
+
+      <EventsPanel />
 
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Society</h2>
@@ -491,6 +579,34 @@ export function GenerateDock() {
           />
           3D terrain (drag with right mouse to tilt)
         </label>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-label="3D buildings"
+            checked={ui.layers.buildings3d === true}
+            onChange={(e) => dispatch({ type: 'ui.set', layers: { buildings3d: e.target.checked } })}
+          />
+          3D buildings (extruded by floors)
+        </label>
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            aria-label="Age overlay"
+            checked={ui.layers.age === true}
+            onChange={(e) => dispatch({ type: 'ui.set', layers: { age: e.target.checked } })}
+          />
+          Building age overlay
+        </label>
+        {ui.layers.age === true && (
+          <ul className="flex flex-wrap gap-1 text-[10px]" data-testid="legend-age">
+            {AGE_STOPS.map(([year, colour]) => (
+              <li key={year} className="flex items-center gap-1">
+                <span className="inline-block h-3 w-3 rounded-sm" style={{ background: colour }} />
+                {year}
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="grid grid-cols-2 gap-x-2 gap-y-1">
           {LAYER_GROUPS.map((g) => (
             <label key={g.id} className="flex items-center gap-1 text-xs">

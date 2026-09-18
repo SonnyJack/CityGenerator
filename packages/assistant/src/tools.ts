@@ -146,6 +146,24 @@ export const TOOL_SCHEMAS = {
     culture: nullableString,
   }),
   remove_settlement: z.object({ id: z.string() }),
+  add_event: z.object({
+    kind: z.enum(['fire', 'storm', 'flood']),
+    year: z.number().int().min(1100).max(2100),
+    x: xy,
+    y: xy,
+    radiusM: z.number().positive().max(20_000),
+    magnitude: z.number().min(0).max(1).nullable().optional().describe('Severity 0–1 (default 0.7).'),
+    levelM: z.number().nullable().optional().describe('Floods: water level in metres above the datum.'),
+    durationYears: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .nullable()
+      .optional()
+      .describe('Floods: years the water stays.'),
+  }),
+  remove_event: z.object({ id: z.string() }),
   undo: z.object({}),
   redo: z.object({}),
 } as const;
@@ -187,6 +205,9 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   name_features: 'Rename settlements, facilities, streets or buildings by id.',
   add_settlement: 'Add a settlement at a point; the engine lays it out.',
   remove_settlement: 'Remove a settlement by id.',
+  add_event:
+    'Put a disaster on the timeline: a fire (burnt buildings rebuild over the following years), a storm (damage that heals) or a flood (low ground under water for a while). Centre, radius and year.',
+  remove_event: 'Remove a disaster by id.',
   undo: 'Undo the last command.',
   redo: 'Redo the last undone command.',
 };

@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.8** (Phases 3–8 delivered; see §16)
+Status: **Draft v0.9** (Phases 3–9 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -963,6 +963,16 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.9** — Phase 9 delivered: the timeline, condition, disasters and 3D.
+  Decision: the spec's populations are as of an anchor year (`anchorYear`);
+  each settlement follows one growth curve through it, so the year slider
+  never rescales the past. Implementation notes: the old town is laid out
+  at its final extent and filtered by built year; ring boundaries for past
+  eras come from the curve; grid cells use per-cell randomness and stable
+  ids; artery cuts use a fixed far point so splits are bit-identical; ring
+  zoning samples a society computed at the anchor year; lots keep a list of
+  building episodes (first build, zoning changes, fires) and show the one
+  standing at the year.
 - **v0.8** — Phase 8 delivered: the assistant package, tools, drawer and
   evaluation set. Implementation notes: tool schemas come from zod and are
   made strict (all properties required, optionals nullable, numeric

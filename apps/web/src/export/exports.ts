@@ -5,6 +5,7 @@ import {
   buildWalls,
   directoryCsv,
   exportGeoJson,
+  exportGltf,
   foundryScene,
   renderSvg,
   universalVtt,
@@ -232,6 +233,25 @@ export async function exportFoundry(
     segments: walls.segments.length,
     mode: walls.mode,
   };
+}
+
+/** glTF binary of the frame: terrain, extruded buildings and water. */
+export async function exportGlb(
+  req: ExportRequest,
+  options: { exaggeration?: number } = {},
+): Promise<{ glb: Uint8Array; meshes: { name: string; triangles: number; vertices: number }[] }> {
+  const model = await frameModel(req.frame);
+  return exportGltf(model, model.heights ?? null, options);
+}
+
+export function downloadBytes(bytes: Uint8Array, filename: string, type = 'application/octet-stream'): void {
+  const blob = new Blob([bytes as BlobPart], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export async function exportDirectoryCsv(settlement: string | null): Promise<string> {

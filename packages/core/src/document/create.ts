@@ -18,11 +18,12 @@ export function createDocument(options: CreateDocumentOptions): MapDocument {
     seed,
     extent: { widthM: options.widthM ?? 20_000, heightM: options.heightM ?? 20_000 },
     year: options.year ?? 1925,
+    anchorYear: options.year ?? 1925,
     ...options.spec,
   };
   return mapDocumentSchema.parse({
     format: 'citygen',
-    version: 2,
+    version: 3,
     meta: {
       name: options.name ?? 'Untitled region',
       created: options.now,

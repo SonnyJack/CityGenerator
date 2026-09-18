@@ -49,6 +49,12 @@ export function summaryText(summary: RegionSummary): string {
         : ''
     }; overrides: ${summary.overrides}.`,
     a ? `Annotations:\n${a}` : 'Annotations: none.',
+    summary.anchorYear !== undefined
+      ? `Populations are as of ${summary.anchorYear} (the design year); the year slider moves along one history.`
+      : '',
+    summary.events?.length
+      ? `Disasters:\n${summary.events.map((e) => `${e.id}: ${e.kind} in ${e.year} at ${Math.round(e.center[0])}, ${Math.round(e.center[1])} r ${e.radiusM} m`).join('\n')}`
+      : '',
     summary.warnings.length ? `Engine warnings: ${summary.warnings.join('; ')}` : '',
   ]
     .filter(Boolean)

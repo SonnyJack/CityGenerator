@@ -375,5 +375,5 @@ describe('roads', () => {
   });
 });
 
-const TOWN_GOLDEN = '6de81b7034546969ef548b76a9835673';
-const MODERN_GOLDEN = 'a98753a5474d0c5cc7f14e31e8b005d7';
+const TOWN_GOLDEN = 'ff1366004d93e22a9e8b04b52bac7ca4';
+const MODERN_GOLDEN = 'bd68da70b05355d8bd411b24df180589';

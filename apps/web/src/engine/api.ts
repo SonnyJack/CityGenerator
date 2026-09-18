@@ -179,7 +179,13 @@ export interface EngineStats {
     coreRadiusM: number;
     ways: number;
     districts: number;
+    founded: number;
+    peakPopulation: number;
+    peakYear: number;
+    abandonedBlocks: number;
+    coreEndYear: number;
   }[];
+  anchorYear: number;
   era: { id: string; name: string; year: number };
   regionName: string;
   riverNames: string[];

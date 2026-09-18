@@ -8,6 +8,7 @@ import { DOCUMENT_VERSION } from './schema.js';
  *  1 — pre-release draft: `{ format, version: 1, spec: CitySpec }` with a flat
  *      spec (`seed`, `extent`, `era`, `name`), no authored geometry.
  *  2 — MapDocument: meta + RegionSpec + authored + overrides + annotations.
+ *  3 — Timeline: `spec.anchorYear` (populations are as of this year) and `spec.events`.
  */
 
 export type Migration = (doc: Record<string, unknown>) => Record<string, unknown>;
@@ -39,6 +40,18 @@ export const migrations: Record<number, Migration> = {
       authored: { type: 'FeatureCollection', features: [] },
       overrides: [],
       annotations: [],
+    };
+  },
+  2: (doc) => {
+    const spec = (doc.spec ?? {}) as Record<string, unknown>;
+    return {
+      ...doc,
+      version: 3,
+      spec: {
+        ...spec,
+        anchorYear: typeof spec.anchorYear === 'number' ? spec.anchorYear : (spec.year ?? 1925),
+        events: Array.isArray(spec.events) ? spec.events : [],
+      },
     };
   },
 };

@@ -19,6 +19,8 @@ export interface BlockOptions {
   cultureMix?: { culture: string; weight: number }[];
   /** User or assistant renames by building id. */
   renames?: Record<string, string>;
+  /** Condition strokes from the editor (field 'condition'). */
+  conditionEdits?: { points: Pt[]; radiusM: number; delta: number }[];
 }
 
 export interface BuildingProps {
@@ -39,6 +41,13 @@ export interface BuildingProps {
   address?: string;
   street?: string;
   number?: number;
+  /** Timeline (when the block carries a built year). */
+  built?: number;
+  /** Year the building is (or will be) replaced. */
+  demolished?: number;
+  condition?: number;
+  state?: BuildingState;
+  abandoned?: number;
 }
 
 /**
@@ -52,15 +61,91 @@ export interface BlockModel {
   buildings: Feature<Polygon, BuildingProps>[];
 }
 
+/** Condition a building of this ward keeps when well looked after. */
+const WARD_CONDITION: Partial<Record<WardId, number>> = {
+  patriciate: 0.85,
+  gardenSuburb: 0.85,
+  cbd: 0.8,
+  culDeSac: 0.8,
+  merchant: 0.75,
+  streetcarSuburb: 0.75,
+  suburb: 0.75,
+  market: 0.7,
+  rowhouse: 0.7,
+  cathedral: 0.8,
+  castle: 0.6,
+  craftsmen: 0.65,
+  apartment: 0.65,
+  warehouse: 0.55,
+  towerEstate: 0.5,
+  tenement: 0.45,
+  slum: 0.35,
+};
+
+export type BuildingState = 'sound' | 'worn' | 'derelict' | 'ruin';
+
+export function buildingState(condition: number): BuildingState {
+  return condition >= 0.6 ? 'sound' : condition >= 0.3 ? 'worn' : condition >= 0.12 ? 'derelict' : 'ruin';
+}
+
+/** One building generation on a lot. */
+interface Episode {
+  built: number;
+  ward: WardId;
+  demolished?: number;
+  /** Set when a fire took the previous building; the lot stays empty until `built`. */
+  afterFire?: boolean;
+}
+
+/**
+ * The history of a lot: first built with the block, rebuilt after each zoning
+ * change (over the following decades) and after fires. Deterministic per lot.
+ */
+function lotEpisodes(block: BlockRecipe, parcelRng: Rng): Episode[] {
+  const original = block.originalWard ?? block.ward;
+  const built0 = (block.builtYear ?? -Infinity) + parcelRng.int(0, 25);
+  const episodes: Episode[] = [{ built: built0, ward: original }];
+  for (const t of block.transitions ?? []) {
+    const rebuilt = t.year + parcelRng.int(0, 45);
+    const last = episodes[episodes.length - 1]!;
+    if (rebuilt > last.built) episodes.push({ built: rebuilt, ward: t.ward });
+    else last.ward = t.ward;
+  }
+  for (const d of block.disasters ?? []) {
+    if (d.kind !== 'fire' || !parcelRng.chance(d.magnitude)) continue;
+    const standing = episodes.filter((e) => e.built <= d.year).pop();
+    if (!standing) continue;
+    standing.demolished = d.year;
+    const ward = episodes.filter((e) => e.built <= d.year).pop()!.ward;
+    // Rebuilt in the zoning of the time (a later transition may already apply).
+    const later = (block.transitions ?? []).filter((t) => t.year <= d.year).pop();
+    episodes.push({ built: d.year + parcelRng.int(1, 12), ward: later?.ward ?? ward, afterFire: true });
+    // Drop episodes that would have started between the fire and the rebuild.
+    for (let i = episodes.length - 2; i >= 0; i--)
+      if (episodes[i]!.built > d.year && episodes[i]!.built < episodes[episodes.length - 1]!.built)
+        episodes.splice(i, 1);
+  }
+  episodes.sort((a, b) => a.built - b.built);
+  for (let i = 0; i < episodes.length - 1; i++) {
+    const e = episodes[i]!;
+    const next = episodes[i + 1]!;
+    if (e.demolished === undefined || e.demolished > next.built) e.demolished = next.built;
+  }
+  return episodes;
+}
+
 export function generateBlock(block: BlockRecipe, year: number, options: BlockOptions = {}): BlockModel {
   const rng = new Rng(block.seed);
-  const profile = WARDS[block.ward];
+  const original = block.originalWard ?? block.ward;
+  const profile = WARDS[original];
   const parcels: BlockModel['parcels'] = [];
   const buildings: BlockModel['buildings'] = [];
   const ring = open(block.ring);
   const model = { id: block.id, parcels, buildings };
   if (ring.length < 3) return model;
+  const timeline = block.builtYear !== undefined;
   const finish = (): BlockModel => {
+    if (timeline) conditionOf(model, block, year, options);
     if (options.pack) describeBuildings(model, year, options);
     return model;
   };
@@ -69,14 +154,14 @@ export function generateBlock(block: BlockRecipe, year: number, options: BlockOp
   if (block.ward === 'cathedral' || block.ward === 'castle') {
     const footprint = inset(ring, profile.setbackM);
     if (footprint.length >= 3) {
-      buildings.push(
-        buildingFeature(
-          block,
-          footprint,
-          block.ward === 'castle' ? 'keep' : 'cathedral',
-          rng.int(profile.floors[0], profile.floors[1]),
-        ),
+      const b = buildingFeature(
+        block,
+        footprint,
+        block.ward === 'castle' ? 'keep' : 'cathedral',
+        rng.int(profile.floors[0], profile.floors[1]),
       );
+      if (timeline) b.properties.built = block.builtYear!;
+      buildings.push(b);
     }
     parcels.push(parcelFeature(block, ring));
     return finish();
@@ -94,15 +179,93 @@ export function generateBlock(block: BlockRecipe, year: number, options: BlockOp
     parcels.push(parcelFeature(block, lot, i));
     if (buildRng.chance(profile.emptyChance)) return;
     if (profile.courtyards && !touchesStreet(lot) && buildRng.chance(0.8)) return;
-    const footprint = inset(lot, profile.setbackM + buildRng.range(0, 0.6));
+    const setback = profile.setbackM + buildRng.range(0, 0.6);
+    const floorJitter = rng.range(0, 1);
+    // The building standing at the year, from the lot's history.
+    let ward: WardId = block.ward;
+    let built: number | undefined;
+    let demolished: number | undefined;
+    if (timeline) {
+      const episodes = lotEpisodes(block, rng.fork(`parcel:${i}`));
+      const now = episodes
+        .filter((e) => e.built <= year && (e.demolished === undefined || e.demolished > year))
+        .pop();
+      if (!now) return; // not built yet, or burnt and not yet rebuilt
+      ward = now.ward;
+      built = now.built;
+      demolished = now.demolished;
+    }
+    const wardProfile = WARDS[ward];
+    const footprint = inset(lot, timeline ? wardProfile.setbackM + (setback - profile.setbackM) : setback);
     if (footprint.length < 3 || area(footprint) < 25) return;
     const floors = Math.max(
       1,
-      Math.round(rng.range(profile.floors[0], profile.floors[1]) + (year > 1850 ? 0.5 : 0)),
+      Math.round(
+        wardProfile.floors[0] +
+          floorJitter * (wardProfile.floors[1] - wardProfile.floors[0]) +
+          ((built ?? year) > 1850 ? 0.5 : 0),
+      ),
     );
-    buildings.push(buildingFeature(block, footprint, kindFor(block.ward, area(footprint)), floors, i));
+    const b = buildingFeature(block, footprint, kindFor(ward, area(footprint)), floors, i);
+    b.properties.ward = ward;
+    if (built !== undefined) b.properties.built = built;
+    if (demolished !== undefined && Number.isFinite(demolished)) b.properties.demolished = demolished;
+    buildings.push(b);
   });
   return finish();
+}
+
+/** Condition from ward, age, material, decline, disasters and condition strokes. */
+function conditionOf(model: BlockModel, block: BlockRecipe, year: number, options: BlockOptions): void {
+  for (const b of model.buildings) {
+    const p = b.properties;
+    const built = typeof p.built === 'number' ? p.built : (block.builtYear ?? year);
+    let c = WARD_CONDITION[p.ward] ?? 0.65;
+    const age = Math.max(0, year - built);
+    c -= Math.min(0.45, age / 250);
+    if (block.abandonedYear !== undefined && year >= block.abandonedYear) {
+      c -= 0.9 * Math.min(1, (year - block.abandonedYear) / 40);
+      p.abandoned = block.abandonedYear;
+    }
+    for (const d of block.disasters ?? []) {
+      if (d.kind === 'fire' || built > d.year) continue;
+      const since = year - d.year;
+      if (since < 0) continue;
+      c -= d.magnitude * 0.5 * Math.max(0, 1 - since / 25);
+    }
+    if (options.conditionEdits?.length) {
+      const ring = b.geometry.coordinates[0]!;
+      const n = ring.length - 1 || 1;
+      let cx = 0;
+      let cy = 0;
+      for (let i = 0; i < n; i++) {
+        cx += ring[i]![0]!;
+        cy += ring[i]![1]!;
+      }
+      cx /= n;
+      cy /= n;
+      for (const e of options.conditionEdits) {
+        let best = Infinity;
+        for (let i = 0; i < e.points.length; i++) {
+          const a = e.points[i]!;
+          const bp = e.points[Math.min(i + 1, e.points.length - 1)]!;
+          best = Math.min(best, distToSegment(cx, cy, a, bp));
+        }
+        if (best <= e.radiusM) c += e.delta * (1 - best / e.radiusM);
+      }
+    }
+    c = Math.max(0, Math.min(1, c));
+    p.condition = Math.round(c * 100) / 100;
+    p.state = buildingState(p.condition);
+  }
+}
+
+function distToSegment(x: number, y: number, a: Pt, b: Pt): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const l2 = dx * dx + dy * dy;
+  const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l2));
+  return Math.hypot(x - (a[0] + t * dx), y - (a[1] + t * dy));
 }
 
 /** Give every building a material, a use, a name and an address (deterministic per building). */

@@ -5,6 +5,7 @@ import { engine } from './engine/client.js';
 import {
   currentViewFrame,
   exportGeoJsonText,
+  exportGlb,
   exportPng,
   exportSvg,
   exportUniversalVtt,
@@ -34,6 +35,10 @@ export function installTestApi() {
     exportGeoJson: (req) => exportGeoJsonText(req as never),
     exportWalls: (req, max) => exportWalls(req as never, max),
     exportUvtt: (req) => exportUniversalVtt(req as never),
+    exportGlb: async (req) => {
+      const out = await exportGlb(req as never);
+      return { bytes: out.glb.byteLength, meshes: out.meshes };
+    },
     currentViewFrame: () => currentViewFrame(),
     generatedAt: (x, y, tol) => engine().generatedAt(x, y, tol),
     tool: () => useApp.getState().tool,
@@ -84,6 +89,9 @@ declare global {
       exportGeoJson(req: unknown): Promise<string>;
       exportWalls(req: unknown, max?: number): Promise<unknown>;
       exportUvtt(req: unknown): Promise<{ json: string; warnings: string[]; segments: number; mode: string }>;
+      exportGlb(
+        req: unknown,
+      ): Promise<{ bytes: number; meshes: { name: string; triangles: number; vertices: number }[] }>;
       currentViewFrame(): unknown;
       generatedAt(x: number, y: number, toleranceM: number): Promise<unknown>;
       tool(): string;

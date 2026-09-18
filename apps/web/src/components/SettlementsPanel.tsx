@@ -243,7 +243,10 @@ export function SettlementsPanel() {
           {stats.settlements.map((s) => (
             <li key={s.id}>
               {KIND_LABELS[s.kind as SettlementKind] ?? s.kind} · {s.population.toLocaleString()} · {s.blocks}{' '}
-              blocks{s.walled ? ' · walled' : ''}
+              blocks{s.walled ? ' · walled' : ''} · founded {s.founded}
+              {s.peakPopulation > s.population * 1.03
+                ? ` · peak ${s.peakPopulation.toLocaleString()} in ${s.peakYear}, ${s.abandonedBlocks} blocks abandoned`
+                : ''}
             </li>
           ))}
         </ul>

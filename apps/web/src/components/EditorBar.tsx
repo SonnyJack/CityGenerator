@@ -124,6 +124,7 @@ const BRUSHES: { id: BrushKind; label: string; unit: string; min: number; max: n
   { id: 'water', label: 'Carve water', unit: 'm', min: 0.5, max: 30, step: 0.5 },
   { id: 'wealth', label: 'Wealth ±', unit: '', min: -1, max: 1, step: 0.05 },
   { id: 'density', label: 'Density ±', unit: '', min: -1, max: 1, step: 0.05 },
+  { id: 'condition', label: 'Condition ± (repair / decay)', unit: '', min: -1, max: 1, step: 0.05 },
   { id: 'zone', label: 'Zone', unit: '', min: 0, max: 0, step: 0 },
   { id: 'erase', label: 'Erase authored', unit: '', min: 0, max: 0, step: 0 },
   { id: 'reroll', label: 'Re-roll blocks', unit: '', min: 0, max: 0, step: 0 },
@@ -409,6 +410,8 @@ function defaultAmount(brush: BrushKind): number {
     case 'wealth':
     case 'density':
       return 0.3;
+    case 'condition':
+      return -0.4;
     default:
       return 0;
   }

@@ -35,6 +35,8 @@ export interface RegionSummary {
   regionName: string;
   seed: string;
   year: number;
+  anchorYear?: number;
+  events?: { id: string; kind: string; year: number; center: [number, number]; radiusM: number }[];
   era: string;
   culture: string;
   biome: string;

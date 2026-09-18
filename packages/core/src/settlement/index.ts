@@ -1,7 +1,5 @@
 export {
   sitingStage,
-  radiusForPopulation,
-  urbanDensity,
   DEFAULT_POPULATION,
   type SettlementSite,
   type SitingInput,
@@ -29,10 +27,10 @@ export { eraAt, eraInterpolated, type EraParams, type RingPattern } from './eras
 export {
   growthRings,
   generateRings,
-  populationAt,
   modernZone,
   modernCoreZone,
   type GrowthRing,
   type RingBlock,
   type RingsResult,
 } from './rings.js';
+export * from './history.js';

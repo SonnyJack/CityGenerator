@@ -10,7 +10,7 @@ import { customFeatureTypeSchema } from '../placement/custom.js';
  * are never stored here. See docs/DESIGN.md §5.
  */
 
-export const DOCUMENT_VERSION = 2 as const;
+export const DOCUMENT_VERSION = 3 as const;
 
 // ---------------------------------------------------------------------------
 // Geometry (GeoJSON, planar metres, origin at the region centre)
@@ -136,6 +136,21 @@ export const featureRequestSchema = z.object({
 });
 export type FeatureRequest = z.infer<typeof featureRequestSchema>;
 
+export const eventSchema = z.object({
+  id: z.string(),
+  kind: z.enum(['fire', 'storm', 'flood']),
+  year: z.number().int().min(1100).max(2100),
+  center: z.tuple([z.number(), z.number()]),
+  radiusM: z.number().positive().max(20_000),
+  /** Severity 0–1: share of buildings destroyed (fire) or damaged (storm, flood). */
+  magnitude: z.number().min(0).max(1).default(0.7),
+  /** Floods: water level in metres above the datum; ground below it is under water. */
+  levelM: z.number().optional(),
+  /** Floods: years the water stays. */
+  durationYears: z.number().int().min(1).max(200).default(1),
+});
+export type RegionEvent = z.infer<typeof eventSchema>;
+
 export const settlementSpecSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
@@ -163,6 +178,14 @@ export const regionSpecSchema = z.object({
     heightM: z.number().positive().max(200_000),
   }),
   year: z.number().int().min(1100).max(2100),
+  /**
+   * The year the settlement populations describe. The year slider moves the
+   * region along one history anchored here: earlier years show the towns
+   * smaller, later years larger, without re-rolling what already stands.
+   */
+  anchorYear: z.number().int().min(1100).max(2100).default(1925),
+  /** Disasters on the timeline: fires rebuild, storms damage, floods drown low ground for a while. */
+  events: z.array(eventSchema).default([]),
   biome: biomeIdSchema.default('temperateMaritime'),
   culture: z.string().default('newEngland'),
   cultureMix: z

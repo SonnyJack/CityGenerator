@@ -19,3 +19,13 @@ export {
 } from './vtt.js';
 export { renderSvg, type SvgOptions } from './svg.js';
 export { exportGeoJson, directoryCsv } from './geojson.js';
+export {
+  exportGltf,
+  buildMeshes,
+  toGlb,
+  parseGlb,
+  triangulate,
+  type GltfOptions,
+  type GltfResult,
+  type HeightGrid,
+} from './gltf.js';

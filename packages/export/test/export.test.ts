@@ -289,3 +289,52 @@ describe('svg and geojson', () => {
     expect(csv).toContain('"Smith, J",residential,');
   });
 });
+
+describe('gltf', () => {
+  it('writes a valid GLB with terrain, water and extruded buildings on the ground', async () => {
+    const { exportGltf, parseGlb, triangulate } = await import('../src/index.js');
+    const m = model(
+      fc([
+        rect(100, 100, 40, 30, { floors: 3, ward: 'merchant', state: 'sound' }),
+        rect(200, 200, 30, 30, { floors: 2, ward: 'cbd', state: 'sound' }),
+        rect(300, 100, 20, 20, { floors: 2, ward: 'slum', state: 'ruin' }),
+      ]),
+    );
+    const grid = {
+      cols: 5,
+      rows: 5,
+      cellM: (m.frame.maxX - m.frame.minX) / 4,
+      data: Array.from({ length: 25 }, (_, i) => 5 + (i % 5) * 2),
+      seaLevelM: 0,
+    };
+    const out = exportGltf(m, grid);
+    expect(out.meshes.map((m) => m.name)).toEqual(
+      expect.arrayContaining(['terrain', 'water', 'building', 'cbd', 'ruin']),
+    );
+    const terrain = out.meshes.find((m) => m.name === 'terrain')!;
+    expect(terrain.triangles).toBe(4 * 4 * 2);
+    const { json, bin } = parseGlb(out.glb);
+    expect((json.asset as { version: string }).version).toBe('2.0');
+    const accessors = json.accessors as { count: number; min?: number[]; max?: number[] }[];
+    const views = json.bufferViews as { byteOffset: number; byteLength: number }[];
+    expect(views.every((v) => v.byteOffset % 4 === 0 && v.byteOffset + v.byteLength <= bin.byteLength)).toBe(
+      true,
+    );
+    expect((json.meshes as unknown[]).length).toBe(out.meshes.length);
+    // Buildings stand on the terrain: their lowest vertex is at or below ground and the roof above it.
+    const buildingIndex = out.meshes.findIndex((m) => m.name === 'building');
+    const posAccessor = accessors[buildingIndex * 3]!;
+    expect(posAccessor.min![1]).toBeLessThanOrEqual(15);
+    expect(posAccessor.max![1]).toBeGreaterThan(posAccessor.min![1] + 3);
+    expect(out.glb.byteLength % 4).toBe(0);
+    expect(
+      triangulate([
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [5, 3],
+        [0, 10],
+      ]),
+    ).toHaveLength(9);
+  });
+});

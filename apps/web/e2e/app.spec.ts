@@ -826,3 +826,208 @@ test('the assistant reads the engine: settlement summaries, area descriptions an
     expect(tools[2]!.content.some((c) => c.type === 'image')).toBe(true);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9: timeline, 3D and condition.
+
+type Built = {
+  layer: string;
+  built?: number;
+  demolished?: number;
+  state?: string;
+  __id?: string;
+  block?: string;
+};
+
+test('scrubbing the year keeps what already stands and adds new growth around it', async ({ page }) => {
+  test.setTimeout(180_000);
+  await ready(page);
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats & { anchorYear: number };
+  expect(stats.anchorYear).toBe(1925);
+  const [cx, cy] = stats.settlements[0]!.center;
+  const frame = { minX: cx - 350, minY: cy - 350, maxX: cx + 350, maxY: cy + 350 };
+  const req = { frame, pxPerM: 1, player: false, gridM: 1.5, pixelsPerGrid: 100, name: 'scrub' };
+  const buildingsAt = async (year: number) => {
+    const v = await page.evaluate(() => window.__citygen.tileVersion());
+    await page.evaluate((y) => window.__citygen.dispatch({ type: 'year.set', year: y }), year);
+    await waitForRegen(page, v);
+    const geo = JSON.parse(await page.evaluate((r) => window.__citygen.exportGeoJson(r), req)) as {
+      features: { id?: string; geometry: unknown; properties: Built }[];
+    };
+    return new Map(
+      geo.features
+        .filter((f) => f.properties.layer === 'buildings')
+        .map((f) => [
+          String(f.id ?? f.properties.__id),
+          { geometry: JSON.stringify(f.geometry), props: f.properties },
+        ]),
+    );
+  };
+  const at1890 = await buildingsAt(1890);
+  const at1955 = await buildingsAt(1955);
+  const patchesAt1955 = (
+    JSON.parse(await page.evaluate((r) => window.__citygen.exportGeoJson(r), req)) as {
+      features: { id?: string; properties: { layer: string; ward?: string; __id?: string } }[];
+    }
+  ).features
+    .filter((f) => f.properties.layer === 'patches')
+    .map((f) => ({ id: f.id ?? f.properties.__id, ward: f.properties.ward }));
+  expect(at1890.size).toBeGreaterThan(50);
+  expect(at1955.size).toBeGreaterThan(at1890.size * 0.9);
+  // Every building standing in 1890 that has not been replaced by 1955 is still there, unchanged.
+  let survivors = 0;
+  // Blocks taken by a facility or rail yard between the two years lose their buildings (the land is
+  // reserved), which is a change of that place, not a re-roll of the rest.
+  const reserved = new Set(['port', 'industrial', 'institution', 'campus', 'cemetery', 'airfield', 'yard']);
+  const reservedBlocks = new Set(
+    patchesAt1955
+      .filter((p) => reserved.has(String(p.ward)))
+      .map((p) => String(p.id).replace('-patch-', '-b')),
+  );
+  for (const [id, b] of at1890) {
+    expect(b.props.built).toBeLessThanOrEqual(1890);
+    if ((b.props.demolished ?? Infinity) <= 1955) continue;
+    if (reservedBlocks.has(String(b.props.block))) continue;
+    const later = at1955.get(id);
+    expect(later, `building ${id} vanished between 1890 and 1955`).toBeDefined();
+    expect(later!.geometry).toBe(b.geometry);
+    expect(later!.props.built).toBe(b.props.built);
+    survivors++;
+  }
+  // The old town rebuilds heavily after its 1890 and 1955 re-zonings, so only a share survives unchanged.
+  expect(survivors).toBeGreaterThan(Math.max(100, at1890.size * 0.15));
+  // Something was built in between, and everything shown was built by then.
+  expect([...at1955.values()].some((b) => (b.props.built ?? 0) > 1890)).toBe(true);
+  for (const b of at1955.values()) expect(b.props.built).toBeLessThanOrEqual(1955);
+  await expect(page.getByTestId('timeline')).toContainText('as of 1925');
+});
+
+test('a flooded harbour district renders in every theme, buildings extrude in 3D and export as glTF', async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await ready(page);
+  const webglMissing = await page.getByText('needs WebGL').isVisible();
+  test.skip(webglMissing, 'WebGL is not available in this browser build');
+  await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 60_000 });
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats & {
+    facilities: { list: { type: string; center: [number, number] }[] };
+  };
+  const port = stats.facilities.list.find((f) => f.type === 'port') ?? {
+    center: stats.settlements[0]!.center,
+  };
+  const [px, py] = port.center;
+  // A flood in the current year around the harbour, lasting ten years.
+  const v = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.evaluate(
+    ([x, y]) =>
+      window.__citygen.dispatch({
+        type: 'spec.patch',
+        ops: [
+          {
+            op: 'add',
+            path: '/events/-',
+            value: {
+              id: 'e2e-flood',
+              kind: 'flood',
+              year: 1925,
+              center: [x, y],
+              radiusM: 600,
+              magnitude: 0.8,
+              levelM: 4,
+              durationYears: 10,
+            },
+          },
+        ],
+      }),
+    [px, py],
+  );
+  await waitForRegen(page, v);
+  await expect(page.getByTestId('events-list')).toContainText('Flood of 1925');
+  await page.evaluate(
+    ([x, y]) => window.__citygenMap!.jumpTo({ center: [x! / 111319.490793, y! / 111319.490793], zoom: 14.5 }),
+    [px, py],
+  );
+  for (const theme of ['atlas', 'ink', 'period1920s', 'sanborn', 'blueprint', 'dark', 'print']) {
+    await page.getByLabel('Theme').selectOption(theme);
+    await page.waitForFunction(
+      () => {
+        const map = window.__citygenMap!;
+        return (
+          map.isStyleLoaded() &&
+          map.areTilesLoaded() &&
+          map.queryRenderedFeatures({ layers: ['events-flood'] }).length > 0
+        );
+      },
+      undefined,
+      { timeout: 60_000 },
+    );
+  }
+  // Buildings inside the flood are damaged.
+  const damaged = JSON.parse(
+    await page.evaluate(
+      ([x, y]) =>
+        window.__citygen.exportGeoJson({
+          frame: { minX: x! - 300, minY: y! - 300, maxX: x! + 300, maxY: y! + 300 },
+          pxPerM: 1,
+          player: false,
+          gridM: 1.5,
+          pixelsPerGrid: 100,
+          name: 'flood',
+        }),
+      [px, py],
+    ),
+  ) as { features: { properties: Built & { condition?: number } }[] };
+  const inside = damaged.features.filter((f) => f.properties.layer === 'buildings');
+  expect(inside.length).toBeGreaterThan(0);
+  expect(inside.filter((f) => (f.properties.condition ?? 1) < 0.6).length).toBeGreaterThan(0);
+  // 3D buildings.
+  await page.getByLabel('Theme').selectOption('atlas');
+  await page.getByLabel('3D buildings').check();
+  await page.waitForFunction(
+    () => {
+      const map = window.__citygenMap!;
+      return (
+        map.isStyleLoaded() &&
+        map.areTilesLoaded() &&
+        map.queryRenderedFeatures({ layers: ['buildings-3d'] }).length > 20
+      );
+    },
+    undefined,
+    { timeout: 60_000 },
+  );
+  // glTF export of the harbour frame.
+  const glb = await page.evaluate(
+    ([x, y]) =>
+      window.__citygen.exportGlb({
+        frame: { minX: x! - 250, minY: y! - 250, maxX: x! + 250, maxY: y! + 250 },
+        pxPerM: 1,
+        player: false,
+        gridM: 1.5,
+        pixelsPerGrid: 100,
+        name: 'harbour',
+      }),
+    [px, py],
+  );
+  expect(glb.bytes).toBeGreaterThan(10_000);
+  expect(glb.meshes.map((m) => m.name)).toEqual(expect.arrayContaining(['terrain', 'building']));
+  expect(glb.meshes.find((m) => m.name === 'terrain')!.triangles).toBeGreaterThan(100);
+});
+
+test('the timeline plays forward and the condition brush is available', async ({ page }) => {
+  test.setTimeout(180_000);
+  await ready(page);
+  await page.getByLabel('Play from').fill('1900');
+  await page.getByLabel('Play to').fill('1910');
+  await page.getByRole('button', { name: 'Play' }).click();
+  await page.waitForFunction(
+    () =>
+      (window.__citygen.getDocument() as { spec: { year: number } }).spec.year === 1910 &&
+      window.__citygen.status() === 'idle',
+    undefined,
+    { timeout: 150_000 },
+  );
+  await expect(page.getByRole('button', { name: 'Play' })).toBeVisible();
+  await page.getByRole('button', { name: 'Brush' }).click();
+  await expect(page.getByRole('option', { name: 'Condition ± (repair / decay)' })).toBeAttached();
+});
