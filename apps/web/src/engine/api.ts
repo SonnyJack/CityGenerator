@@ -18,6 +18,23 @@ export interface EngineApi {
   thumbnails(doc: MapDocument, seeds: string[], width: number, height: number): Promise<Thumbnail[]>;
   /** Determinism fixture (see @citygen/core computeFixtureHash). */
   fixtureHash(): Promise<string>;
+  /** What is at a world position: terrain, society fields and the zone with its explanation. */
+  inspect(x: number, y: number): Promise<Inspection | null>;
+}
+
+export interface Inspection {
+  x: number;
+  y: number;
+  elevationM: number;
+  slope: number;
+  water: 'land' | 'sea' | 'lake' | 'river';
+  landcover: string;
+  wealth: number;
+  density: number;
+  wealthClass: string;
+  densityClass: string;
+  settlement?: { id: string; kind: string; name?: string; population: number };
+  patch?: { ward: string; inner: boolean; ring: number; why: string };
 }
 
 export interface Thumbnail {
@@ -56,7 +73,10 @@ export interface EngineStats {
     patches: number;
     walled: boolean;
     blocks: number;
+    rings: number;
+    coreRadiusM: number;
   }[];
+  era: { id: string; name: string; year: number };
   roads: { links: number; roadKm: number; bridges: number };
   blocks: number;
 }

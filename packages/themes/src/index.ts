@@ -10,5 +10,8 @@ export {
   type PatternSpec,
   type TownPaint,
   type WardKind,
+  type OverlayPalettes,
+  WEALTH_CLASS_NAMES,
+  DENSITY_CLASS_NAMES,
 } from './theme.js';
 export { compileStyle, type CompileOptions, type LayerGroup } from './compile.js';

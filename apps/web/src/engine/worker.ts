@@ -6,14 +6,20 @@ import {
   regionOutlineStage,
   roadsStage,
   sitingStage,
+  societyStage,
   terrainStage,
   townStage,
+  LANDCOVER,
+  pointInRing,
+  type LandcoverOutput,
   type MapDocument,
+  type SitingOutput,
+  type SocietyOutput,
   type TerrainInput,
   type TerrainOutput,
   type TownOutput,
 } from '@citygen/core';
-import { biomeTerrain, eraForYear } from '@citygen/features';
+import { biomeTerrain, eraForYear, eraParams } from '@citygen/features';
 import {
   BlockTiler,
   TileSource,
@@ -21,6 +27,7 @@ import {
   demTilePng,
   renderThumbnail,
   settlementLayers,
+  societyLayers,
   terrainLayers,
   type DemSampler,
 } from '@citygen/tiles';
@@ -37,6 +44,14 @@ let version = 0;
 let source: TileSource | null = null;
 let dem: { sampler: DemSampler; extent: { widthM: number; heightM: number } } | null = null;
 let controller: AbortController | null = null;
+/** Latest results kept for inspection queries. */
+let latest: {
+  terrain: TerrainOutput;
+  landcover: LandcoverOutput;
+  society: SocietyOutput;
+  siting: SitingOutput;
+  towns: TownOutput[];
+} | null = null;
 
 function terrainInput(doc: MapDocument, cellSizeM?: number): TerrainInput {
   const t = doc.spec.terrain;
@@ -93,13 +108,27 @@ const api: EngineApi = {
       { signal },
     );
     const era = eraForYear(doc.spec.year);
+    const society = await runner.run(
+      societyStage,
+      {
+        seed: doc.spec.seed,
+        terrain,
+        sites: siting.sites,
+        year: doc.spec.year,
+        wealth: doc.spec.society.wealth,
+        density: doc.spec.society.density,
+        inequality: doc.spec.society.inequality,
+      },
+      { signal },
+    );
+    const eras = eraParams();
     const towns: TownOutput[] = [];
     for (const site of siting.sites) {
       const blockSizeM = site.spec.layout.blockSizeM ?? era.blockSizeM.core;
       towns.push(
         await runner.run(
           townStage,
-          { seed: doc.spec.seed, site, terrain, year: doc.spec.year, blockSizeM },
+          { seed: doc.spec.seed, site, terrain, year: doc.spec.year, blockSizeM, eras, society },
           { signal },
         ),
       );
@@ -122,11 +151,13 @@ const api: EngineApi = {
         { name: 'graticule', features: outline.graticule, minZoom: 9 },
         ...terrainLayers(terrain, landcover, options.sketch ? { sketch: { seed: doc.spec.seed } } : {}),
         ...settlementLayers(towns, roads, siting),
+        ...societyLayers(society),
         { name: 'authored', features: doc.authored },
       ],
       version,
       [new BlockTiler(blocks, doc.spec.year, { minZoom: 13 })],
     );
+    latest = { terrain, landcover, society, siting, towns };
     dem = { sampler: createDemSampler(terrain, doc.spec.seed), extent: doc.spec.extent };
     const tilesMs = performance.now() - t2;
 
@@ -150,7 +181,10 @@ const api: EngineApi = {
         patches: t.stats.patches,
         walled: t.stats.walled,
         blocks: t.blocks.length,
+        rings: t.stats.rings,
+        coreRadiusM: t.stats.coreRadiusM,
       })),
+      era: { id: era.id, name: era.name, year: era.year },
       roads: roads.stats,
       blocks: blocks.length,
     };
@@ -186,6 +220,63 @@ const api: EngineApi = {
   },
 
   fixtureHash: () => computeFixtureHash(),
+
+  async inspect(x, y) {
+    if (!latest) return null;
+    const { terrain, landcover, society, siting, towns } = latest;
+    const { height } = terrain;
+    const col = Math.min(Math.max(Math.round(height.col(x)), 0), height.width - 1);
+    const row = Math.min(Math.max(Math.round(height.row(y)), 0), height.height - 1);
+    const i = row * height.width + col;
+    const waterNames = ['land', 'sea', 'lake', 'river'] as const;
+    const lcCol = Math.min(
+      Math.max(Math.round((x - landcover.raster.originX) / landcover.raster.cellSizeM), 0),
+      landcover.raster.width - 1,
+    );
+    const lcRow = Math.min(
+      Math.max(Math.round((y - landcover.raster.originY) / landcover.raster.cellSizeM), 0),
+      landcover.raster.height - 1,
+    );
+    const lcClass = landcover.classes[lcRow * landcover.raster.width + lcCol]!;
+    const lcName =
+      (Object.keys(LANDCOVER) as (keyof typeof LANDCOVER)[]).find((k) => LANDCOVER[k] === lcClass) ?? 'open';
+    const f = society.sample(x, y);
+    let settlement: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['settlement'];
+    let patch: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['patch'];
+    for (let t = 0; t < towns.length; t++) {
+      const town = towns[t]!;
+      if (Math.hypot(x - town.center[0], y - town.center[1]) > town.radiusM * 2) continue;
+      for (const p of town.patches.features) {
+        const ring = p.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+        if (pointInRing(x, y, ring)) {
+          const site = siting.sites[t]!;
+          settlement = { id: site.id, kind: site.kind, name: site.name, population: site.population };
+          patch = {
+            ward: p.properties.ward,
+            inner: p.properties.inner,
+            ring: p.properties.ring,
+            why: p.properties.why,
+          };
+          break;
+        }
+      }
+      if (patch) break;
+    }
+    return {
+      x,
+      y,
+      elevationM: height.data[i]!,
+      slope: terrain.slope[i]!,
+      water: waterNames[terrain.water[i]!] ?? 'land',
+      landcover: lcName,
+      wealth: f.wealth,
+      density: f.density,
+      wealthClass: f.wealthClass,
+      densityClass: f.densityClass,
+      settlement,
+      patch,
+    };
+  },
 };
 
 Comlink.expose(api);

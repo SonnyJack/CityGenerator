@@ -67,11 +67,21 @@ export interface TownPaint {
   settlementMarker: string;
 }
 
+/** Six-step overlay palettes for the wealth and density fields, lowest class first. */
+export interface OverlayPalettes {
+  wealth: [string, string, string, string, string, string];
+  density: [string, string, string, string, string, string];
+}
+
+export const WEALTH_CLASS_NAMES = ['slum', 'poor', 'modest', 'comfortable', 'affluent', 'elite'] as const;
+export const DENSITY_CLASS_NAMES = ['rural', 'suburban', 'low', 'medium', 'high', 'core'] as const;
+
 export interface Theme {
   id: string;
   name: string;
   palette: ThemePalette;
   town: TownPaint;
+  overlays: OverlayPalettes;
   landcover: Record<LandcoverKind, LandcoverPaint>;
   patterns: PatternSpec[];
   /** Hypsometric tint stops [elevation m, colour]; empty disables colour relief. */
@@ -134,6 +144,10 @@ export const atlas: Theme = {
       common: '#e9e5da',
     },
     settlementMarker: '#5f5045',
+  },
+  overlays: {
+    wealth: ['#7f2704', '#d94801', '#fd8d3c', '#fdd0a2', '#a1d99b', '#238b45'],
+    density: ['#f7fbff', '#c6dbef', '#6baed6', '#2171b5', '#08306b', '#3f007d'],
   },
   patterns: [],
   relief: [
@@ -257,6 +271,10 @@ export const ink: Theme = {
     plaza: '#f7f3ea',
     ward: {},
     settlementMarker: '#1a1a1a',
+  },
+  overlays: {
+    wealth: ['#1a1a1a', '#4a4a4a', '#7a7a7a', '#a9a9a9', '#cfcfcf', '#f0f0f0'],
+    density: ['#f0f0f0', '#cfcfcf', '#a9a9a9', '#7a7a7a', '#4a4a4a', '#1a1a1a'],
   },
   relief: [],
   hillshade: {

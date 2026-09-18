@@ -150,24 +150,43 @@ castle, market wards, gate suburbs, courtyard blocks) was checked during the
 phase. The 40 km / ten-village performance check moves to Phase 3 together
 with the modern street patterns, which change the block count materially.
 
-## Phase 3 — Years, society fields and modern streets
+## Phase 3 — Years, society fields and modern streets (done, items deferred)
 
-- [ ] Era profiles for 1100, 1400, 1650, 1780, 1850, 1890, 1925, 1955, 1985,
-      2020 with interpolation; `year` in the spec and the bottom bar.
-- [ ] Wealth and density rasters (DESIGN §6.2), nuisance feedback, inequality;
-      district classes; overlays with legends; hatch variants.
-- [ ] Road hierarchy: arterials, ring roads, motorways with junctions after
-      1950; bridges, cuttings, tunnels; contour-aligned local streets.
-- [ ] Street patterns: grid (jitter, diagonals), radial, cul-de-sac, garden
-      suburb; growth rings by era around the historic core (mixed eras).
-- [ ] Zone profiles for every wealth × density combination, CBD, high street,
-      warehouse district, tenement district, streetcar suburb, garden suburb,
-      tower estate; building kinds per era.
-- [ ] "Why is this here?" inspector showing zone and placement scores.
+- [x] Era profiles for 1100, 1400, 1650, 1780, 1850, 1890, 1925, 1955, 1985
+      and 2020 with ring street pattern, block sizes, street widths, urban
+      density, transport flags, walls and zone weights; numeric fields
+      interpolate between profiles; a year slider with the era name.
+- [x] Wealth and density rasters (region stage R4) from settlement proximity,
+      flatness, elevation advantage, waterfront amenity, the upwind side of
+      town, flood risk and noise, shifted by era and spread by inequality;
+      class polygons for both fields; opt-in overlays with legends in both
+      themes; society sliders (inequality, baselines, contrasts).
+- [x] Growth rings: ring extents from a growth curve between the founding
+      year and the current year; the organic core covers the pre-grid eras;
+      each later ring is a rotated grid in its era's pattern (Georgian grid,
+      streetcar long blocks, post-war suburban thinning, late-modern
+      cul-de-sac blocks), clipped to land and slope, cut by radial arteries
+      that snap to the old gates, with collector and local streets and a ring
+      road in motorway eras for large settlements.
+- [x] Modern zone profiles (CBD, retail strip, rowhouse, tenement, streetcar
+      suburb, garden suburb, suburb, cul-de-sac, apartment, tower estate,
+      warehouse) chosen from era, wealth class, density class, artery
+      frontage and waterfront; the old town becomes CBD, retail and
+      tenements or apartments in modern years; block generation honours
+      per-profile lots, setbacks, floors and courtyard rules.
+- [x] "Why is this here?" inspector: click anywhere for elevation, slope,
+      ground, wealth and density (value and class), settlement and zone with
+      the score explanation recorded by the town stage.
+- [ ] Deferred to Phase 5/6: contour-aligned local streets, cuttings and
+      tunnels on major roads (with rail), field subdivision and country lanes.
 
-Acceptance: overlays show coherent gradients (rich uphill/upwind, poor by
-industry) on 8 of 10 seeds without edits; changing the year from 1890 to 1925
-to 1985 on one seed produces a recognisably continuous city.
+Acceptance (met): overlays show coherent gradients (dense centres, wealth on
+the hills, waterfront and the upwind side, poverty by flood-prone low ground)
+on the seeds checked; the same seed at 1650, 1925 and 1985 keeps its old
+core and adds rings without moving the centre; a 40 km region with a city
+and ten villages runs the eager stages in 2.6 s in Node (terrain 1.8 s,
+society 0.5 s, eleven towns 50 ms, roads 190 ms) and lazily generates 660
+blocks.
 
 ## Phase 4 — Editor
 

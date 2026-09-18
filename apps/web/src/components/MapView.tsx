@@ -12,11 +12,12 @@ import {
 // bundler does not preserve. Let Vite bundle the worker (with its shared chunk) and
 // hand MapLibre the resulting URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
-import { metersToLonLat } from '@citygen/core';
+import { lonLatToMeters, metersToLonLat } from '@citygen/core';
 import { compileStyle, themeById, type LayerGroup } from '@citygen/themes';
 import { engine } from '../engine/client.js';
 import { useApp } from '../store.js';
 import { renderPattern } from './patterns.js';
+import { Inspector } from './Inspector.js';
 
 const SOURCE_ID = 'citygen';
 const DEM_SOURCE_ID = 'citygen-dem';
@@ -121,6 +122,10 @@ export function MapView() {
       if (/WebGL/i.test(String(e.error?.message))) setWebglError(String(e.error?.message));
     });
     map.on('style.load', () => ensurePatterns(map, useApp.getState().document.ui?.theme));
+    map.on('click', (e) => {
+      const [x, y] = lonLatToMeters([e.lngLat.lng, e.lngLat.lat]);
+      useApp.getState().inspect(x, y);
+    });
     map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
     map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
     window.__citygenMap = map;
@@ -186,6 +191,7 @@ export function MapView() {
   return (
     <div className="relative h-full w-full" data-testid="map">
       <div ref={container} className="h-full w-full" />
+      <Inspector />
       {webglError && (
         <div className="absolute inset-0 flex items-center justify-center bg-stone-100 p-6 text-center text-sm text-stone-700">
           <div>

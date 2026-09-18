@@ -27,7 +27,9 @@ export type LayerGroup =
   | 'authored'
   | 'settlements'
   | 'buildings'
-  | 'parcels';
+  | 'parcels'
+  | 'wealth'
+  | 'density';
 
 const LANDCOVER_KINDS: LandcoverKind[] = [
   'snow',
@@ -58,6 +60,8 @@ function metresToPixels(widthProperty: string, min = 0.6): ExpressionSpecificati
 export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecification {
   const p = theme.palette;
   const visible = (group: LayerGroup) => (options.layers?.[group] === false ? 'none' : 'visible');
+  /** Overlays are opt-in: hidden unless the group is explicitly enabled. */
+  const optIn = (group: LayerGroup) => (options.layers?.[group] === true ? 'visible' : 'none');
   const layers: LayerSpecification[] = [];
 
   layers.push({ id: 'background', type: 'background', paint: { 'background-color': p.background } });
@@ -343,6 +347,37 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
       'circle-stroke-width': 1.5,
     },
   });
+
+  // --- Society overlays (opt-in) --------------------------------------------
+  for (const field of ['wealth', 'density'] as const) {
+    const colours = theme.overlays[field];
+    layers.push({
+      id: `overlay-${field}`,
+      type: 'fill',
+      source: options.sourceId,
+      'source-layer': field,
+      layout: { visibility: optIn(field) },
+      paint: {
+        'fill-color': [
+          'match',
+          ['get', 'level'],
+          0,
+          colours[0],
+          1,
+          colours[1],
+          2,
+          colours[2],
+          3,
+          colours[3],
+          4,
+          colours[4],
+          colours[5],
+        ] as unknown as ExpressionSpecification,
+        'fill-opacity': 0.55,
+        'fill-antialias': false,
+      },
+    });
+  }
 
   layers.push({
     id: 'graticule',

@@ -24,14 +24,16 @@ and extended with:
 
 ## Status
 
-Phases 0 to 2 are complete: the monorepo, CI and GitHub Pages deployment,
+Phases 0 to 3 are complete: the monorepo, CI and GitHub Pages deployment,
 the document format and deterministic engine, terrain with hydrology, land
 cover, contours, hillshade and 3-D terrain, and settlements: sited on the
 terrain, laid out as organic towns with walls, gates, plazas, wards and
 streets, with buildings generated lazily per block as you zoom in, and roads
-routed between them. Both an atlas and an ink theme render everything.
-Year-based eras, wealth and density fields and modern street patterns are
-next (Phase 3).
+routed between them. A year slider moves the region through ten era
+profiles: towns keep their organic core and grow rings of Georgian grids,
+streetcar blocks, post-war suburbs and cul-de-sacs, zoned from wealth and
+density fields that you can overlay and inspect. Both an atlas and an ink
+theme render everything. The full editor is next (Phase 4).
 
 ## Development
 

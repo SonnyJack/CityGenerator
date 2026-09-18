@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { biomeIdSchema, terrainPresetSchema } from '@citygen/core';
 import { biomes } from '@citygen/features';
-import { themes, type LayerGroup } from '@citygen/themes';
+import { DENSITY_CLASS_NAMES, WEALTH_CLASS_NAMES, themeById, themes, type LayerGroup } from '@citygen/themes';
+import { eraForYear } from '@citygen/features';
 import { randomSeed, useApp } from '../store.js';
 import { SettlementsPanel } from './SettlementsPanel.js';
 
@@ -218,7 +219,96 @@ export function GenerateDock() {
         />
       </section>
 
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Year</h2>
+        <Slider
+          label={`Year · ${eraForYear(doc.spec.year).name}`}
+          value={doc.spec.year}
+          min={1100}
+          max={2020}
+          step={5}
+          onCommit={(v) => dispatch({ type: 'year.set', year: Math.round(v) })}
+        />
+      </section>
+
       <SettlementsPanel />
+
+      <section className="space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Society</h2>
+        <Slider
+          label="Inequality"
+          value={doc.spec.society.inequality}
+          min={0}
+          max={1}
+          step={0.05}
+          onCommit={(v) => patch('/society/inequality', v)}
+        />
+        <Slider
+          label="Wealth baseline"
+          value={doc.spec.society.wealth.baseline}
+          min={0}
+          max={1}
+          step={0.05}
+          onCommit={(v) => patch('/society/wealth/baseline', v)}
+        />
+        <Slider
+          label="Wealth contrast"
+          value={doc.spec.society.wealth.gradient}
+          min={0}
+          max={1}
+          step={0.05}
+          onCommit={(v) => patch('/society/wealth/gradient', v)}
+        />
+        <Slider
+          label="Density baseline"
+          value={doc.spec.society.density.baseline}
+          min={0}
+          max={1}
+          step={0.05}
+          onCommit={(v) => patch('/society/density/baseline', v)}
+        />
+        <Slider
+          label="Density contrast"
+          value={doc.spec.society.density.gradient}
+          min={0}
+          max={1}
+          step={0.05}
+          onCommit={(v) => patch('/society/density/gradient', v)}
+        />
+        <div className="space-y-1">
+          {(['wealth', 'density'] as const).map((field) => {
+            const on = ui.layers[field] === true;
+            const names = field === 'wealth' ? WEALTH_CLASS_NAMES : DENSITY_CLASS_NAMES;
+            const colours = themeById(ui.theme).overlays[field];
+            return (
+              <div key={field}>
+                <label className="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    aria-label={`${field} overlay`}
+                    checked={on}
+                    onChange={(e) => dispatch({ type: 'ui.set', layers: { [field]: e.target.checked } })}
+                  />
+                  {field === 'wealth' ? 'Wealth overlay' : 'Density overlay'}
+                </label>
+                {on && (
+                  <ul className="mt-1 flex flex-wrap gap-1" data-testid={`legend-${field}`}>
+                    {names.map((n, i) => (
+                      <li key={n} className="flex items-center gap-1 text-[10px] text-stone-600">
+                        <span
+                          className="inline-block h-3 w-3 rounded-sm border border-stone-300"
+                          style={{ background: colours[i] }}
+                        />
+                        {n}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">View</h2>
@@ -281,6 +371,8 @@ export function GenerateDock() {
             <span className="font-mono">{stats.terrain.lakes}</span>
             <span>Contours</span>
             <span className="font-mono">every {stats.terrain.contourIntervalM} m</span>
+            <span>Era</span>
+            <span className="font-mono">{stats.era.name}</span>
             <span>Settlements</span>
             <span className="font-mono">{stats.settlements.length}</span>
             <span>Blocks</span>

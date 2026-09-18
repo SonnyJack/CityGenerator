@@ -5,3 +5,4 @@ export * from './geometry/index.js';
 export * from './raster/index.js';
 export * from './terrain/index.js';
 export * from './settlement/index.js';
+export * from './society/index.js';

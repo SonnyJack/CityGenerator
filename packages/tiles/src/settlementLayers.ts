@@ -1,8 +1,16 @@
 import type { FeatureCollection, Geometry } from 'geojson';
-import type { RoadsOutput, SitingOutput, TownOutput } from '@citygen/core';
+import type { RoadsOutput, SitingOutput, SocietyOutput, TownOutput } from '@citygen/core';
 import type { TileLayerInput } from './builder.js';
 
 type AnyFc = FeatureCollection<Geometry, Record<string, unknown>>;
+
+/** Eager vector layers for the society fields: class polygons for the wealth and density overlays. */
+export function societyLayers(society: SocietyOutput): TileLayerInput[] {
+  return [
+    { name: 'wealth', features: society.wealthPolygons as unknown as AnyFc, minZoom: 8 },
+    { name: 'density', features: society.densityPolygons as unknown as AnyFc, minZoom: 8 },
+  ];
+}
 
 /** Eager vector layers for settlements: patches, streets, walls, gates, regional roads, settlement points. */
 export function settlementLayers(

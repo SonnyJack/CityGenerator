@@ -4,7 +4,7 @@ import { CommandBus, type Command } from '@citygen/editor';
 import { themeById } from '@citygen/themes';
 import { engine } from './engine/client.js';
 import { loadAutosave, saveAutosave, clearAutosave } from './persistence.js';
-import type { EngineStats, Thumbnail } from './engine/api.js';
+import type { EngineStats, Inspection, Thumbnail } from './engine/api.js';
 
 export interface AppState {
   document: MapDocument;
@@ -17,6 +17,7 @@ export interface AppState {
   warnings: string[];
   thumbnails: Thumbnail[];
   thumbnailsFor?: string;
+  inspection?: Inspection;
 
   dispatch(command: Command): void;
   undo(): void;
@@ -25,6 +26,8 @@ export interface AppState {
   importJson(text: string): void;
   exportJson(): string;
   refreshThumbnails(): void;
+  inspect(x: number, y: number): void;
+  clearInspection(): void;
 }
 
 const now = () => new Date().toISOString();
@@ -104,6 +107,13 @@ export const useApp = create<AppState>((set, get) => {
       }
     },
     exportJson: () => serializeDocument(get().document),
+    inspect(x, y) {
+      void engine()
+        .inspect(x, y)
+        .then((inspection) => set({ inspection: inspection ?? undefined }))
+        .catch(() => set({ inspection: undefined }));
+    },
+    clearInspection: () => set({ inspection: undefined }),
     refreshThumbnails() {
       const doc = get().document;
       // Sibling seeds derive from the current seed, so the key includes it.

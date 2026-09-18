@@ -10,6 +10,8 @@ import {
   terrainStage,
   townStage,
   WATER,
+  societyStage,
+  type EraParams,
   type TerrainInput,
   type SettlementSpec,
 } from '../src/index.js';
@@ -187,6 +189,123 @@ describe('town stage', () => {
   });
 });
 
+describe('modern town with growth rings', () => {
+  it('adds grid rings with modern zones around the old core in 1925', async () => {
+    const terrain = await terrainP;
+    const eras: EraParams[] = [
+      {
+        id: 'e1400',
+        year: 1400,
+        name: 'Late medieval',
+        ringPattern: 'organic',
+        blockSizeM: { core: 60, ring: 90 },
+        streetWidthM: { arterial: 8, collector: 5, local: 3.5, lane: 2 },
+        densityPerKm2: 13000,
+        transport: { horse: true, tram: false, rail: false, car: false, motorway: false, container: false },
+        walls: true,
+      },
+      {
+        id: 'e1780',
+        year: 1780,
+        name: 'Georgian',
+        ringPattern: 'grid',
+        blockSizeM: { core: 80, ring: 120 },
+        streetWidthM: { arterial: 12, collector: 9, local: 7, lane: 3 },
+        densityPerKm2: 11000,
+        transport: { horse: true, tram: false, rail: false, car: false, motorway: false, container: false },
+        walls: false,
+      },
+      {
+        id: 'e1890',
+        year: 1890,
+        name: 'Gaslight',
+        ringPattern: 'streetcar',
+        blockSizeM: { core: 90, ring: 140 },
+        streetWidthM: { arterial: 18, collector: 12, local: 9, lane: 4 },
+        densityPerKm2: 10000,
+        transport: { horse: true, tram: true, rail: true, car: false, motorway: false, container: false },
+        walls: false,
+      },
+      {
+        id: 'e1925',
+        year: 1925,
+        name: 'Classic',
+        ringPattern: 'streetcar',
+        blockSizeM: { core: 100, ring: 160 },
+        streetWidthM: { arterial: 20, collector: 14, local: 10, lane: 4 },
+        densityPerKm2: 7000,
+        transport: { horse: false, tram: true, rail: true, car: true, motorway: false, container: false },
+        walls: false,
+      },
+    ];
+    const siting = await runner.run(sitingStage, {
+      seed: 'm',
+      terrain,
+      year: 1925,
+      settlements: specs,
+      policy: { count: [3, 8], kinds: {} },
+    });
+    const society = await runner.run(societyStage, {
+      seed: 'm',
+      terrain,
+      sites: siting.sites,
+      year: 1925,
+      wealth: { baseline: 0.5, gradient: 0.5, noise: 0.2 },
+      density: { baseline: 0.5, gradient: 0.5, noise: 0.2 },
+      inequality: 0.5,
+    });
+    const site = siting.sites.find((s) => s.id === 'arkham')!;
+    const t0 = performance.now();
+    const town = await runner.run(townStage, {
+      seed: 'm',
+      site,
+      terrain,
+      year: 1925,
+      blockSizeM: 90,
+      eras,
+      society,
+    });
+    expect(performance.now() - t0).toBeLessThan(6000);
+    expect(town.stats.rings).toBeGreaterThanOrEqual(1);
+    expect(town.stats.coreRadiusM).toBeLessThan(site.radiusM);
+    expect(town.stats.walled).toBe(false);
+    const wards = new Set(town.patches.features.map((p) => p.properties.ward));
+    expect(wards.has('cbd')).toBe(true);
+    expect(
+      [...wards].some((w) =>
+        ['rowhouse', 'tenement', 'streetcarSuburb', 'gardenSuburb', 'retailStrip', 'warehouse'].includes(w),
+      ),
+    ).toBe(true);
+    const ringPatches = town.patches.features.filter((p) => p.properties.ring > 0);
+    expect(ringPatches.length).toBeGreaterThan(20);
+    for (const p of ringPatches) {
+      expect(p.properties.why.length).toBeGreaterThan(5);
+      const c = p.geometry.coordinates[0]!;
+      const cx = c.reduce((a, q) => a + q[0]!, 0) / c.length;
+      const cy = c.reduce((a, q) => a + q[1]!, 0) / c.length;
+      expect(Math.hypot(cx - site.center[0], cy - site.center[1])).toBeGreaterThan(
+        town.stats.coreRadiusM * 0.8,
+      );
+    }
+    expect(town.streets.features.some((s) => s.properties.class === 'collector')).toBe(true);
+    expect(town.blocks.length).toBeGreaterThan(town.stats.inner);
+    // Ring blocks generate buildings too.
+    const ringBlock = town.blocks.find((b) => b.id.includes('-r'))!;
+    const model = generateBlock(ringBlock, 1925);
+    expect(model.buildings.length).toBeGreaterThan(0);
+    const again = await new StageRunner().run(townStage, {
+      seed: 'm',
+      site,
+      terrain,
+      year: 1925,
+      blockSizeM: 90,
+      eras,
+      society,
+    });
+    expect(contentHash({ p: again.patches, s: again.streets })).toBe(MODERN_GOLDEN);
+  });
+});
+
 describe('blocks', () => {
   it('subdivides blocks into lots with buildings inside them', async () => {
     const terrain = await terrainP;
@@ -256,4 +375,5 @@ describe('roads', () => {
   });
 });
 
-const TOWN_GOLDEN = '8390ac7aa9dbc88a1711e66a4f419d04';
+const TOWN_GOLDEN = 'b71340a9169d902bcb6ef02853969277';
+const MODERN_GOLDEN = '63d7050375950de6e423480cdc056e1a';

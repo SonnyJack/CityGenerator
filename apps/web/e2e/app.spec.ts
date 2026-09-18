@@ -61,13 +61,12 @@ test('documents round-trip through export and import', async ({ page }) => {
 
 test('undo and redo work through the toolbar', async ({ page }) => {
   await ready(page);
-  const year = page.getByLabel('Year');
-  await year.fill('1890');
-  await expect(year).toHaveValue('1890');
+  await page.getByLabel('Document name').fill('Renamed');
+  await expect(page.getByLabel('Document name')).toHaveValue('Renamed');
   await page.getByRole('button', { name: 'Undo' }).click();
-  await expect(year).toHaveValue('1925');
+  await expect(page.getByLabel('Document name')).not.toHaveValue('Renamed');
   await page.getByRole('button', { name: 'Redo' }).click();
-  await expect(year).toHaveValue('1890');
+  await expect(page.getByLabel('Document name')).toHaveValue('Renamed');
 });
 
 test('autosave restores the document after reload', async ({ page }) => {
@@ -219,4 +218,54 @@ test('buildings appear when zooming into a town', async ({ page }) => {
   expect(counts.buildings).toBeGreaterThan(20);
   expect(counts.streets).toBeGreaterThan(5);
   expect(counts.patches).toBeGreaterThan(3);
+});
+
+test('the year changes the era, growth rings and walls', async ({ page }) => {
+  await ready(page);
+  type Stats = { era: { name: string }; settlements: { rings: number; walled: boolean }[] };
+  const before = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.evaluate(() => window.__citygen.dispatch({ type: 'year.set', year: 1650 }));
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    before,
+    { timeout: 90_000 },
+  );
+  const medieval = (await page.evaluate(() => window.__citygen.stats())) as Stats;
+  expect(medieval.era.name).toBe('Early modern');
+  expect(medieval.settlements.every((s) => s.rings === 0)).toBe(true);
+  const v2 = await page.evaluate(() => window.__citygen.tileVersion());
+  await page.evaluate(() => window.__citygen.dispatch({ type: 'year.set', year: 1985 }));
+  await page.waitForFunction(
+    (v) => window.__citygen.tileVersion() > v && window.__citygen.status() === 'idle',
+    v2,
+    { timeout: 90_000 },
+  );
+  const modern = (await page.evaluate(() => window.__citygen.stats())) as Stats;
+  expect(modern.era.name).toBe('Late modern');
+  expect(modern.settlements.some((s) => s.rings > 0)).toBe(true);
+  await expect(page.getByTestId('terrain-stats')).toContainText('Late modern');
+});
+
+test('society overlays toggle with a legend and the inspector explains a zone', async ({ page }) => {
+  await ready(page);
+  await page.getByLabel('wealth overlay').check();
+  await expect(page.getByTestId('legend-wealth')).toContainText('affluent');
+  const doc = (await page.evaluate(() => window.__citygen.getDocument())) as {
+    ui?: { layers: Record<string, boolean> };
+  };
+  expect(doc.ui?.layers.wealth).toBe(true);
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as {
+    settlements: { center: [number, number]; radiusM: number }[];
+  };
+  const [x, y] = stats.settlements[0]!.center;
+  const info = (await page.evaluate(([px, py]) => window.__citygen.inspect(px, py), [x, y])) as {
+    settlement?: { id: string };
+    patch?: { ward: string; why: string };
+    wealthClass: string;
+    elevationM: number;
+  };
+  expect(info.settlement).toBeDefined();
+  expect(info.patch).toBeDefined();
+  expect(info.patch!.why.length).toBeGreaterThan(3);
+  expect(['slum', 'poor', 'modest', 'comfortable', 'affluent', 'elite']).toContain(info.wealthClass);
 });

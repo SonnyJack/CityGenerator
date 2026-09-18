@@ -55,7 +55,7 @@ export function generateBlock(block: BlockRecipe, year: number): BlockModel {
   lots.forEach((lot, i) => {
     parcels.push(parcelFeature(block, lot, i));
     if (buildRng.chance(profile.emptyChance)) return;
-    if (!touchesStreet(lot) && buildRng.chance(0.8)) return;
+    if (profile.courtyards && !touchesStreet(lot) && buildRng.chance(0.8)) return;
     const footprint = inset(lot, profile.setbackM + buildRng.range(0, 0.6));
     if (footprint.length < 3 || area(footprint) < 25) return;
     const floors = Math.max(
@@ -68,6 +68,8 @@ export function generateBlock(block: BlockRecipe, year: number): BlockModel {
 }
 
 function kindFor(ward: WardId, areaM2: number): string {
+  const profile = WARDS[ward];
+  if (profile.kind) return profile.kind;
   if (ward === 'patriciate') return areaM2 > 400 ? 'mansion' : 'townhouse';
   if (ward === 'merchant') return 'shophouse';
   if (ward === 'slum') return 'shack';

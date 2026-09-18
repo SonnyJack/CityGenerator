@@ -17,7 +17,19 @@ export type WardId =
   | 'park'
   | 'gate'
   | 'farm'
-  | 'common';
+  | 'common'
+  // Modern zones (Phase 3): chosen from era, wealth class and density class.
+  | 'cbd'
+  | 'retailStrip'
+  | 'rowhouse'
+  | 'tenement'
+  | 'streetcarSuburb'
+  | 'gardenSuburb'
+  | 'suburb'
+  | 'culDeSac'
+  | 'apartment'
+  | 'towerEstate'
+  | 'warehouse';
 
 export interface WardContext {
   /** Distance from the cell centroid to the plaza/centre, normalised by the town radius. */
@@ -54,9 +66,13 @@ export interface WardProfile {
   /** Fixed count when > 0 (special wards). */
   count?: (innerCells: number, population: number) => number;
   score: (c: WardContext) => number;
+  /** Building kind label for block generation. */
+  kind?: string;
+  /** Leave interior (non-street-facing) lots empty most of the time. */
+  courtyards?: boolean;
 }
 
-export const WARDS: Record<WardId, WardProfile> = {
+const MEDIEVAL_WARDS: Record<Exclude<WardId, keyof typeof MODERN_WARDS>, WardProfile> = {
   plaza: {
     id: 'plaza',
     lotAreaM2: 0,
@@ -68,6 +84,7 @@ export const WARDS: Record<WardId, WardProfile> = {
   },
   market: {
     id: 'market',
+    courtyards: true,
     lotAreaM2: 260,
     emptyChance: 0.05,
     setbackM: 0.6,
@@ -97,6 +114,7 @@ export const WARDS: Record<WardId, WardProfile> = {
   },
   merchant: {
     id: 'merchant',
+    courtyards: true,
     lotAreaM2: 420,
     emptyChance: 0.08,
     setbackM: 0.8,
@@ -120,6 +138,7 @@ export const WARDS: Record<WardId, WardProfile> = {
   },
   craftsmen: {
     id: 'craftsmen',
+    courtyards: true,
     lotAreaM2: 300,
     emptyChance: 0.06,
     setbackM: 0.6,
@@ -129,6 +148,7 @@ export const WARDS: Record<WardId, WardProfile> = {
   },
   slum: {
     id: 'slum',
+    courtyards: true,
     lotAreaM2: 150,
     emptyChance: 0.03,
     setbackM: 0.3,
@@ -185,5 +205,53 @@ export const WARDS: Record<WardId, WardProfile> = {
   },
 };
 
-/** Wards that appear as buildable blocks inside the town. */
+const modern = (
+  id: WardId,
+  lotAreaM2: number,
+  emptyChance: number,
+  setbackM: number,
+  floors: [number, number],
+  kind: string,
+  courtyards = false,
+): WardProfile => ({
+  id,
+  lotAreaM2,
+  emptyChance,
+  setbackM,
+  floors,
+  fillWeight: 0,
+  score: () => 0,
+  kind,
+  courtyards,
+});
+
+export const MODERN_WARDS: Record<
+  | 'cbd'
+  | 'retailStrip'
+  | 'rowhouse'
+  | 'tenement'
+  | 'streetcarSuburb'
+  | 'gardenSuburb'
+  | 'suburb'
+  | 'culDeSac'
+  | 'apartment'
+  | 'towerEstate'
+  | 'warehouse',
+  WardProfile
+> = {
+  cbd: modern('cbd', 520, 0.02, 0.5, [4, 8], 'office', true),
+  retailStrip: modern('retailStrip', 340, 0.05, 0.4, [2, 3], 'shop', true),
+  rowhouse: modern('rowhouse', 170, 0.04, 0.6, [2, 3], 'rowhouse', true),
+  tenement: modern('tenement', 260, 0.02, 0.4, [4, 6], 'tenement', true),
+  streetcarSuburb: modern('streetcarSuburb', 450, 0.08, 3, [1, 2], 'house'),
+  gardenSuburb: modern('gardenSuburb', 950, 0.15, 6, [2, 2], 'villa'),
+  suburb: modern('suburb', 700, 0.1, 5, [1, 2], 'house'),
+  culDeSac: modern('culDeSac', 800, 0.1, 5, [1, 2], 'house'),
+  apartment: modern('apartment', 1400, 0.1, 4, [4, 8], 'apartment'),
+  towerEstate: modern('towerEstate', 4000, 0.35, 14, [10, 18], 'tower'),
+  warehouse: modern('warehouse', 1200, 0.1, 1.5, [1, 2], 'warehouse'),
+};
+export const WARDS: Record<WardId, WardProfile> = { ...MEDIEVAL_WARDS, ...MODERN_WARDS };
+
+/** Wards that appear as buildable blocks inside the organic town. */
 export const FILL_WARDS: WardId[] = ['craftsmen', 'merchant', 'patriciate', 'slum'];

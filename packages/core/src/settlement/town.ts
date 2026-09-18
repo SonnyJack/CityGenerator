@@ -16,6 +16,9 @@ import { relax, unionBoundary, voronoi, type VoronoiCell } from '../geometry/vor
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { SettlementSite } from './siting.js';
 import { FILL_WARDS, WARDS, type WardContext, type WardId } from './wards.js';
+import type { EraParams } from './eras.js';
+import type { SocietyOutput } from '../society/stage.js';
+import { generateRings, growthRings, modernCoreZone, modernZone } from './rings.js';
 import type { Ring } from '../raster/contours.js';
 
 /**
@@ -31,8 +34,12 @@ export interface TownInput {
   site: SettlementSite;
   terrain: TerrainOutput;
   year: number;
-  /** Target block (patch) spacing in metres. */
+  /** Target block (patch) spacing in metres for the organic core. */
   blockSizeM: number;
+  /** Era table (oldest first) for growth rings; when omitted the whole town is organic. */
+  eras?: EraParams[];
+  /** Wealth and density fields for modern zoning; when omitted, ring blocks use a modest default. */
+  society?: SocietyOutput;
 }
 
 export interface BlockRecipe {
@@ -52,12 +59,25 @@ export interface TownOutput {
   id: string;
   center: Pt;
   radiusM: number;
-  patches: FeatureCollection<Polygon, { settlement: string; ward: WardId; inner: boolean }>;
-  streets: FeatureCollection<LineString, { settlement: string; class: 'artery' | 'street' | 'road' }>;
+  patches: FeatureCollection<
+    Polygon,
+    { settlement: string; ward: WardId; inner: boolean; ring: number; why: string }
+  >;
+  streets: FeatureCollection<
+    LineString,
+    { settlement: string; class: 'artery' | 'street' | 'road' | 'collector' | 'motorway' }
+  >;
   walls: FeatureCollection<LineString, { settlement: string; kind: 'wall' }>;
   gates: FeatureCollection<Point, { settlement: string; kind: 'gate' | 'tower' }>;
   blocks: BlockRecipe[];
-  stats: { patches: number; inner: number; walled: boolean; streetsKm: number };
+  stats: {
+    patches: number;
+    inner: number;
+    walled: boolean;
+    streetsKm: number;
+    rings: number;
+    coreRadiusM: number;
+  };
 }
 
 interface Patch {
@@ -71,6 +91,8 @@ interface Patch {
   waterfront: boolean;
   slope: number;
   elevation: number;
+  /** Explanation of the zone choice for the inspector. */
+  why: string;
 }
 
 const ARTERY_HALF_WIDTH = 4;
@@ -80,12 +102,17 @@ export const townStage = defineStage<TownInput, TownOutput>({
   id: 'town',
   version: 1,
   seedOf: (i) => `${i.seed}/${i.site.id}`,
-  keyOf: (i) => `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}`,
+  keyOf: (i) =>
+    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}`,
   run(input, ctx) {
     const { site, terrain, year } = input;
     const rng = ctx.rng;
-    const R = site.radiusM;
-    const outerR = R * 1.7;
+    // Growth history: the organic core covers the pre-grid eras; later eras add rings.
+    const growth = input.eras?.length
+      ? growthRings(site, year, input.eras)
+      : { coreRadius: site.radiusM, rings: [] };
+    const R = growth.coreRadius;
+    const outerR = growth.rings.length ? R * 1.08 : R * 1.7;
     const [cx, cy] = site.center;
     const { height, water, slope } = terrain;
 
@@ -173,6 +200,16 @@ export const townStage = defineStage<TownInput, TownOutput>({
         waterfront,
         slope: s,
         elevation: height.data[idx]!,
+        why: '',
+      });
+    }
+    // With growth rings the ring blocks take the land outside the core.
+    if (growth.rings.length) {
+      const keep = patches.filter((p) => p.inner);
+      patches.length = 0;
+      keep.forEach((p, i) => {
+        p.index = i;
+        patches.push(p);
       });
     }
     // Map original cell index → patch for adjacency.
@@ -310,14 +347,20 @@ export const townStage = defineStage<TownInput, TownOutput>({
     }
     if (walled && site.population >= 2000) {
       castle = pickBest(inner, (p) => (p.ward ? -Infinity : WARDS.castle.score(contextOf(p))));
-      if (castle) castle.ward = 'castle';
+      if (castle) {
+        castle.ward = 'castle';
+        castle.why = 'castle: most compact patch by the wall';
+      }
     }
     for (const wardId of ['cathedral', 'market', 'military', 'park'] as WardId[]) {
       const profile = WARDS[wardId];
       const count = profile.count ? profile.count(inner.length, site.population) : 0;
       for (let k = 0; k < count; k++) {
         const best = pickBest(inner, (p) => (p.ward ? -Infinity : profile.score(contextOf(p))));
-        if (best) best.ward = wardId;
+        if (best) {
+          best.ward = wardId;
+          best.why = `${wardId}: best location score ${profile.score(contextOf(best)).toFixed(2)}`;
+        }
       }
     }
     const fillRng = rng.fork('wards');
@@ -328,6 +371,11 @@ export const townStage = defineStage<TownInput, TownOutput>({
         Math.max(0.01, WARDS[w].fillWeight * Math.exp(WARDS[w].score(c))),
       );
       p.ward = fillRng.weighted(FILL_WARDS, weights);
+      p.why = FILL_WARDS.map((w) => [w, WARDS[w].score(c)] as const)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([w, v]) => `${w} ${v.toFixed(2)}`)
+        .join(' · ');
     }
     for (const p of patches) {
       if (p.inner) continue;
@@ -335,6 +383,24 @@ export const townStage = defineStage<TownInput, TownOutput>({
         (g) => Math.hypot(g[0] - p.centroid[0], g[1] - p.centroid[1]) < spacing * 1.6,
       );
       p.ward = near && p.slope < 0.2 ? 'gate' : 'farm';
+      p.why = p.ward === 'gate' ? 'gate: suburb outside a gate' : 'farm: fields outside the town';
+    }
+    // Modern years: the old town becomes the centre (DESIGN §6.3).
+    const currentEra = input.eras?.length
+      ? [...input.eras]
+          .sort((a, b) => a.year - b.year)
+          .filter((e) => e.year <= year)
+          .pop()
+      : undefined;
+    if (currentEra && currentEra.year >= 1890) {
+      for (const p of inner) {
+        const c = contextOf(p);
+        const z = modernCoreZone(p.ward!, currentEra, c.centreDist, c.onArtery);
+        if (z !== p.ward) {
+          p.why = `${z}: old town reassigned in ${currentEra.name} (was ${p.ward})`;
+          p.ward = z;
+        }
+      }
     }
     ctx.checkpoint();
 
@@ -344,11 +410,11 @@ export const townStage = defineStage<TownInput, TownOutput>({
       type: 'Feature',
       id: `${id}-patch-${p.index}`,
       geometry: { type: 'Polygon', coordinates: [[...p.ring, p.ring[0]!]] },
-      properties: { settlement: id, ward: p.ward ?? 'common', inner: p.inner },
+      properties: { settlement: id, ward: p.ward ?? 'common', inner: p.inner, ring: 0, why: p.why },
     }));
     const streetFeatures: TownOutput['streets']['features'] = [];
     let streetsKm = 0;
-    const pushLine = (pts: Ring, cls: 'artery' | 'street' | 'road', k: number) => {
+    const pushLine = (pts: Ring, cls: 'artery' | 'street' | 'road' | 'collector' | 'motorway', k: number) => {
       streetFeatures.push({
         type: 'Feature',
         id: `${id}-${cls}-${k}`,
@@ -414,17 +480,66 @@ export const townStage = defineStage<TownInput, TownOutput>({
         elevationM: p.elevation,
       });
     }
+    // --- 7. Growth rings ------------------------------------------------------
+    let ringCount = 0;
+    if (growth.rings.length) {
+      const rings = generateRings(growth.rings, R, {
+        site,
+        terrain,
+        rng: rng.fork('rings'),
+        isLand,
+        clipToLand: (ring, s) => clipToLand(ring, s, isLand, localCell),
+        slopeAt: slopeAt(height, slope),
+        gates,
+      });
+      ringCount = rings.rings.length;
+      const zoneRng = rng.fork('zones');
+      rings.blocks.forEach((b, k) => {
+        const c = centroid(b.ring);
+        const f = input.society?.sample(c[0], c[1]);
+        const { zone, why } = modernZone(
+          b.era,
+          f?.wealthClass ?? 'modest',
+          f?.densityClass ?? 'medium',
+          b,
+          zoneRng,
+        );
+        patchFeatures.push({
+          type: 'Feature',
+          id: `${id}-ring-${k}`,
+          geometry: { type: 'Polygon', coordinates: [[...b.ring, b.ring[0]!]] },
+          properties: { settlement: id, ward: zone, inner: false, ring: b.ringIndex + 1, why },
+        });
+        blocks.push({
+          id: `${id}-r${k}`,
+          settlementId: id,
+          ring: b.ring,
+          ward: zone,
+          areaM2: area(b.ring),
+          seed: `${input.seed}/settlement:${id}/ring:${k}`,
+          elevationM: height.sample(c[0], c[1]),
+        });
+      });
+      rings.streets.forEach((st, k) => pushLine(st.points, st.cls, 1000 + k));
+    }
     return {
       key: ctx.key,
       id,
       center: site.center,
-      radiusM: R,
+      radiusM: site.radiusM,
       patches: { type: 'FeatureCollection', features: patchFeatures },
       streets: { type: 'FeatureCollection', features: streetFeatures },
       walls: { type: 'FeatureCollection', features: wallFeatures },
       gates: { type: 'FeatureCollection', features: gateFeatures },
       blocks,
-      stats: { patches: patches.length, inner: inner.length, walled: wallRing.length > 0, streetsKm },
+      stats: {
+        patches: patchFeatures.length,
+        inner: inner.length,
+        walled: wallRing.length > 0,
+        streetsKm,
+        rings: ringCount,
+        coreRadiusM: R,
+      },
     };
   },
 });

@@ -29,6 +29,15 @@ describe('compileStyle', () => {
     }
   });
 
+  it('keeps society overlays hidden unless enabled', () => {
+    const off = compileStyle(atlas, options).layers.find((l) => l.id === 'overlay-wealth')!;
+    expect(off.layout?.visibility).toBe('none');
+    const on = compileStyle(atlas, { ...options, layers: { wealth: true } }).layers.find(
+      (l) => l.id === 'overlay-wealth',
+    )!;
+    expect(on.layout?.visibility).toBe('visible');
+  });
+
   it('honours layer visibility overrides', () => {
     const style = compileStyle(atlas, { ...options, layers: { hillshade: false, contours: false } });
     const hill = style.layers.find((l) => l.id === 'hillshade')!;

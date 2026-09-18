@@ -17,6 +17,7 @@ export function installTestApi() {
     tileVersion: () => useApp.getState().tileVersion,
     stats: () => useApp.getState().stats,
     thumbnails: () => useApp.getState().thumbnails.length,
+    inspect: (x, y) => engine().inspect(x, y),
   };
 }
 
@@ -33,6 +34,7 @@ declare global {
       tileVersion(): number;
       stats(): unknown;
       thumbnails(): number;
+      inspect(x: number, y: number): Promise<unknown>;
     };
   }
 }
