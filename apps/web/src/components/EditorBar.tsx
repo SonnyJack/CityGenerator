@@ -1,6 +1,7 @@
 import type { AuthoredLayer } from '@citygen/core';
 import type { BrushKind, ToolId } from '@citygen/editor';
 import { useApp } from '../store.js';
+import { useT } from '../i18n/index.js';
 
 const TOOLS: { id: ToolId; label: string; key: string; hint: string }[] = [
   { id: 'navigate', label: 'Pan', key: 'H', hint: 'Pan and zoom; click to inspect' },
@@ -132,6 +133,7 @@ const BRUSHES: { id: BrushKind; label: string; unit: string; min: number; max: n
 
 /** Floating tool strip with the active tool's options. */
 export function EditorBar() {
+  const t = useT();
   const tool = useApp((s) => s.tool);
   const setTool = useApp((s) => s.setTool);
   const o = useApp((s) => s.toolOptions);
@@ -177,18 +179,18 @@ export function EditorBar() {
       <div
         className="flex flex-wrap gap-1 rounded border border-stone-300 bg-white/95 p-1 shadow"
         role="toolbar"
-        aria-label="Tools"
+        aria-label={t('Tools')}
       >
-        {TOOLS.map((t) => (
+        {TOOLS.map((tl) => (
           <button
-            key={t.id}
-            className={`rounded px-2 py-1 text-xs ${tool === t.id ? 'bg-blue-600 text-white' : 'hover:bg-stone-100'}`}
-            title={`${t.hint} (${t.key})`}
-            aria-pressed={tool === t.id}
-            aria-label={`${t.label} tool`}
-            onClick={() => setTool(t.id)}
+            key={tl.id}
+            className={`rounded px-2 py-1 text-xs ${tool === tl.id ? 'bg-blue-600 text-white' : 'hover:bg-stone-100'}`}
+            title={`${t(tl.hint)} (${tl.key})`}
+            aria-pressed={tool === tl.id}
+            aria-label={t('{label} tool', { label: t(tl.label) })}
+            onClick={() => setTool(tl.id)}
           >
-            {t.label}
+            {t(tl.label)}
           </button>
         ))}
       </div>
@@ -199,16 +201,16 @@ export function EditorBar() {
         >
           {layerChoices && (
             <label className="flex items-center gap-1">
-              <span className="text-stone-600">Layer</span>
+              <span className="text-stone-600">{t('Layer')}</span>
               <select
-                aria-label="Layer"
+                aria-label={t('Layer')}
                 className={sel}
                 value={validLayer ? o.layer : layerChoices[0]!.id}
                 onChange={(e) => setLayer(e.target.value as AuthoredLayer)}
               >
                 {layerChoices.map((l) => (
                   <option key={l.id} value={l.id}>
-                    {l.label}
+                    {t(l.label)}
                   </option>
                 ))}
               </select>
@@ -216,9 +218,9 @@ export function EditorBar() {
           )}
           {layerChoices && kindsFor().length > 0 && (
             <label className="flex items-center gap-1">
-              <span className="text-stone-600">Kind</span>
+              <span className="text-stone-600">{t('Kind')}</span>
               <select
-                aria-label="Kind"
+                aria-label={t('Kind')}
                 className={sel}
                 value={o.kind}
                 onChange={(e) => setOptions({ kind: e.target.value })}
@@ -233,9 +235,9 @@ export function EditorBar() {
           )}
           {tool === 'line' && (
             <label className="flex items-center gap-1">
-              <span className="text-stone-600">Width</span>
+              <span className="text-stone-600">{t('Width')}</span>
               <input
-                aria-label="Width (m)"
+                aria-label={t('Width (m)')}
                 type="number"
                 min={1}
                 max={200}
@@ -250,9 +252,9 @@ export function EditorBar() {
           {tool === 'brush' && (
             <>
               <label className="flex items-center gap-1">
-                <span className="text-stone-600">Brush</span>
+                <span className="text-stone-600">{t('Brush')}</span>
                 <select
-                  aria-label="Brush"
+                  aria-label={t('Brush')}
                   className={sel}
                   value={o.brush}
                   onChange={(e) =>
@@ -264,15 +266,15 @@ export function EditorBar() {
                 >
                   {BRUSHES.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.label}
+                      {t(b.label)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="flex items-center gap-1">
-                <span className="text-stone-600">Radius</span>
+                <span className="text-stone-600">{t('Radius')}</span>
                 <input
-                  aria-label="Brush radius (m)"
+                  aria-label={t('Brush radius (m)')}
                   type="range"
                   min={10}
                   max={2000}
@@ -284,9 +286,9 @@ export function EditorBar() {
               </label>
               {brush.max > brush.min && (
                 <label className="flex items-center gap-1">
-                  <span className="text-stone-600">Amount</span>
+                  <span className="text-stone-600">{t('Amount')}</span>
                   <input
-                    aria-label="Brush amount"
+                    aria-label={t('Brush amount')}
                     type="number"
                     min={brush.min}
                     max={brush.max}
@@ -300,9 +302,9 @@ export function EditorBar() {
               )}
               {o.brush === 'zone' && (
                 <label className="flex items-center gap-1">
-                  <span className="text-stone-600">Ward</span>
+                  <span className="text-stone-600">{t('Ward')}</span>
                   <select
-                    aria-label="Zone ward"
+                    aria-label={t('Zone ward')}
                     className={sel}
                     value={o.zoneWard}
                     onChange={(e) => setOptions({ zoneWard: e.target.value })}
@@ -320,23 +322,23 @@ export function EditorBar() {
           {tool === 'annotate' && (
             <>
               <label className="flex items-center gap-1">
-                <span className="text-stone-600">Kind</span>
+                <span className="text-stone-600">{t('Kind')}</span>
                 <select
-                  aria-label="Annotation kind"
+                  aria-label={t('Annotation kind')}
                   className={sel}
                   value={o.annotation}
                   onChange={(e) => setOptions({ annotation: e.target.value as typeof o.annotation })}
                 >
-                  <option value="label">Label</option>
-                  <option value="marker">Marker</option>
-                  <option value="note">GM note</option>
-                  <option value="handoutFrame">Handout frame</option>
+                  <option value="label">{t('Label')}</option>
+                  <option value="marker">{t('Marker')}</option>
+                  <option value="note">{t('GM note')}</option>
+                  <option value="handoutFrame">{t('Handout frame')}</option>
                 </select>
               </label>
               <label className="flex items-center gap-1">
-                <span className="text-stone-600">Text</span>
+                <span className="text-stone-600">{t('Text')}</span>
                 <input
-                  aria-label="Annotation text"
+                  aria-label={t('Annotation text')}
                   className="w-40 rounded border border-stone-300 px-1 py-0.5"
                   value={o.text}
                   onChange={(e) => setOptions({ text: e.target.value })}
@@ -350,34 +352,37 @@ export function EditorBar() {
             tool === 'point' ||
             tool === 'select') && (
             <>
-              <label className="flex items-center gap-1" title="Snap to vertices of other authored features">
+              <label
+                className="flex items-center gap-1"
+                title={t('Snap to vertices of other authored features')}
+              >
                 <input
                   type="checkbox"
-                  aria-label="Snap to vertices"
+                  aria-label={t('Snap to vertices')}
                   checked={o.snapToVertices}
                   onChange={(e) => setOptions({ snapToVertices: e.target.checked })}
                 />
-                Vertices
+                {t('Vertices')}
               </label>
               <label
                 className="flex items-center gap-1"
-                title="Constrain segments to 15° steps (or hold Shift)"
+                title={t('Constrain segments to 15° steps (or hold Shift)')}
               >
                 <input
                   type="checkbox"
-                  aria-label="Snap angles"
+                  aria-label={t('Snap angles')}
                   checked={o.snapAngles}
                   onChange={(e) => setOptions({ snapAngles: e.target.checked })}
                 />
-                Angles
+                {t('Angles')}
               </label>
               <label
                 className="flex items-center gap-1"
-                title="Snap to a metre grid (0 = off); hold Alt to bypass snapping"
+                title={t('Snap to a metre grid (0 = off); hold Alt to bypass snapping')}
               >
-                <span className="text-stone-600">Grid</span>
+                <span className="text-stone-600">{t('Grid')}</span>
                 <input
-                  aria-label="Snap grid (m)"
+                  aria-label={t('Snap grid (m)')}
                   type="number"
                   min={0}
                   max={1000}
@@ -389,7 +394,7 @@ export function EditorBar() {
               </label>
             </>
           )}
-          <span className="text-stone-500">{active.hint}</span>
+          <span className="text-stone-500">{t(active.hint)}</span>
         </div>
       )}
     </div>

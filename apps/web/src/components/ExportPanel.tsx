@@ -18,9 +18,11 @@ import {
   slug,
   type ExportRequest,
 } from '../export/exports.js';
+import { useT } from '../i18n/index.js';
 
 /** Export dialog: pick a frame, a format and a scale; player mode hides GM notes. */
 export function ExportPanel({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const doc = useApp((s) => s.document);
   const exportJson = useApp((s) => s.exportJson);
   const [frameId, setFrameId] = useState<string>('view');
@@ -53,7 +55,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
     try {
       await fn(req);
     } catch (e) {
-      setReport(`Export failed: ${(e as Error).message}`);
+      setReport(t('Export failed: {message}', { message: (e as Error).message }));
     } finally {
       setBusy(null);
     }
@@ -75,33 +77,33 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-2 flex items-center justify-between">
-          <span className="font-semibold">Export</span>
+          <span className="font-semibold">{t('Export')}</span>
           <button
             className="rounded px-1 text-stone-500 hover:bg-stone-100"
-            aria-label="Close export"
+            aria-label={t('Close export')}
             onClick={onClose}
           >
             ×
           </button>
         </div>
         <div className="grid grid-cols-[7rem_1fr] items-center gap-x-2 gap-y-2 text-xs">
-          <span className="text-stone-600">Frame</span>
+          <span className="text-stone-600">{t('Frame')}</span>
           <select
-            aria-label="Export frame"
+            aria-label={t('Export frame')}
             className={sel}
             value={frameId}
             onChange={(e) => setFrameId(e.target.value)}
           >
-            <option value="view">Current view</option>
+            <option value="view">{t('Current view')}</option>
             {frames.map((f) => (
               <option key={f.id} value={f.id}>
                 Handout frame: {f.text || f.id}
               </option>
             ))}
           </select>
-          <span className="text-stone-600">Theme</span>
+          <span className="text-stone-600">{t('Theme')}</span>
           <select
-            aria-label="Export theme"
+            aria-label={t('Export theme')}
             className={sel}
             value={themeId}
             onChange={(e) => setThemeId(e.target.value)}
@@ -112,10 +114,10 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
-          <span className="text-stone-600">Scale</span>
+          <span className="text-stone-600">{t('Scale')}</span>
           <label className="flex items-center gap-2">
             <input
-              aria-label="Pixels per metre"
+              aria-label={t('Pixels per metre')}
               type="range"
               min={0.25}
               max={12}
@@ -131,9 +133,9 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               </span>
             )}
           </label>
-          <span className="text-stone-600">VTT grid</span>
+          <span className="text-stone-600">{t('VTT grid')}</span>
           <select
-            aria-label="VTT preset"
+            aria-label={t('VTT preset')}
             className={sel}
             value={preset}
             onChange={(e) => setPreset(e.target.value)}
@@ -144,15 +146,15 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
-          <span className="text-stone-600">Audience</span>
+          <span className="text-stone-600">{t('Audience')}</span>
           <label className="flex items-center gap-1">
             <input
               type="checkbox"
-              aria-label="Player export"
+              aria-label={t('Player export')}
               checked={player}
               onChange={(e) => setPlayer(e.target.checked)}
             />
-            Player handout (hides GM notes and overlays)
+            {t('Player handout (hides GM notes and overlays)')}
           </label>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-1 text-xs">
@@ -163,7 +165,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               run('png', async (r) => downloadDataUrl((await exportPng(r)).dataUrl, `${base()}.png`))
             }
           >
-            PNG image
+            {t('PNG image')}
           </button>
           <button
             className={btn}
@@ -172,7 +174,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               run('svg', async (r) => downloadText(await exportSvg(r), `${base()}.svg`, 'image/svg+xml'))
             }
           >
-            SVG drawing
+            {t('SVG drawing')}
           </button>
           <button
             className={btn}
@@ -183,7 +185,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               )
             }
           >
-            GeoJSON (metres)
+            {t('GeoJSON (metres)')}
           </button>
           <button
             className={btn}
@@ -198,7 +200,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               })
             }
           >
-            Universal VTT (.dd2vtt)
+            {t('Universal VTT (.dd2vtt)')}
           </button>
           <button
             className={btn}
@@ -213,7 +215,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               })
             }
           >
-            3D model (.glb)
+            {t('3D model (.glb)')}
           </button>
           <button
             className={btn}
@@ -230,7 +232,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               })
             }
           >
-            Foundry scene + background
+            {t('Foundry scene + background')}
           </button>
           <button
             className={btn}
@@ -245,7 +247,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               )
             }
           >
-            Directory CSV
+            {t('Directory CSV')}
           </button>
           <button
             className={btn}
@@ -254,7 +256,7 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
               downloadText(exportJson(), `${slug(doc.meta.name)}.citygen.json`, 'application/json')
             }
           >
-            Document (.citygen.json)
+            {t('Document (.citygen.json)')}
           </button>
         </div>
         {busy && <p className="mt-2 text-xs text-stone-500">Exporting {busy}…</p>}
@@ -264,8 +266,9 @@ export function ExportPanel({ onClose }: { onClose: () => void }) {
           </p>
         )}
         <p className="mt-2 text-[11px] text-stone-500">
-          Walls for virtual tabletops come from building outlines in the frame, merged along shared edges and
-          capped at 4 000 segments; larger frames fall back to solid blocks.
+          {t(
+            'Walls for virtual tabletops come from building outlines in the frame, merged along shared edges and capped at 4 000 segments; larger frames fall back to solid blocks.',
+          )}
         </p>
       </div>
     </div>

@@ -88,9 +88,11 @@ server that gives Claude Desktop, Claude Code or any MCP client the same
 tools as the in-app assistant; OpenStreetMap and heightmap import; culture
 packs and feature types as JSON plugins with an authoring guide; an
 installable, offline-capable app; and opening documents from a URL. Every
-generated building has floor plans (rooms, doors, windows, stairs, by use
-and era) for handouts and virtual tabletops, and a gallery of example
-regions, community packs and share links rounds it off.
+generated building, and every building inside a facility, has floor plans
+(rooms, doors, windows, stairs, by use and era) for handouts and virtual
+tabletops; a gallery of example regions, community pack registries and
+share links rounds it off, and the interface speaks English, French, German
+and Spanish.
 
 ## Development
 

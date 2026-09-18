@@ -3,6 +3,7 @@ import { DEFAULT_PRICES, type TranscriptItem } from '@citygen/assistant';
 import { useApp } from '../store.js';
 import { useAssistant } from '../assistant/store.js';
 import { forgetKey } from '../assistant/settings.js';
+import { useT } from '../i18n/index.js';
 
 const btn =
   'rounded border border-stone-300 bg-white px-2 py-0.5 text-xs hover:bg-stone-100 disabled:opacity-50';
@@ -12,6 +13,7 @@ const btn =
  * tool call with an inline undo, the session cost, and BYOK settings.
  */
 export function AssistantDrawer() {
+  const t = useT();
   const {
     session,
     tick,
@@ -58,22 +60,22 @@ export function AssistantDrawer() {
       data-testid="assistant"
     >
       <div className="flex items-center justify-between border-b border-stone-200 px-3 py-2">
-        <span className="font-semibold">Assistant</span>
+        <span className="font-semibold">{t('Assistant')}</span>
         <div className="flex items-center gap-1">
           <button className={btn} onClick={() => setShowSettings(!showSettings)} aria-pressed={showSettings}>
-            Settings
+            {t('Settings')}
           </button>
           <button
             className={btn}
             onClick={() => newSession()}
             disabled={busy}
-            title="Start a new conversation"
+            title={t('Start a new conversation')}
           >
-            New
+            {t('New')}
           </button>
           <button
             className="rounded px-1 text-stone-500 hover:bg-stone-100"
-            aria-label="Close assistant"
+            aria-label={t('Close assistant')}
             onClick={() => setOpen(false)}
           >
             ×
@@ -87,10 +89,10 @@ export function AssistantDrawer() {
           data-testid="assistant-settings"
         >
           <label className="block">
-            <span className="text-stone-600">Anthropic API key (bring your own)</span>
+            <span className="text-stone-600">{t('Anthropic API key (bring your own)')}</span>
             <input
               type="password"
-              aria-label="API key"
+              aria-label={t('API key')}
               className="mt-0.5 w-full rounded border border-stone-300 px-1 py-0.5 font-mono"
               value={settings.apiKey}
               placeholder="sk-ant-…"
@@ -103,13 +105,13 @@ export function AssistantDrawer() {
               checked={settings.remember}
               onChange={(e) => setSettings({ remember: e.target.checked })}
             />
-            Remember the key in this browser (localStorage). It is only ever sent to api.anthropic.com.
+            {t('Remember the key in this browser (localStorage). It is only ever sent to api.anthropic.com.')}
           </label>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1">
-              <span className="text-stone-600">Model</span>
+              <span className="text-stone-600">{t('Model')}</span>
               <select
-                aria-label="Assistant model"
+                aria-label={t('Assistant model')}
                 className="rounded border border-stone-300 bg-white px-1 py-0.5"
                 value={settings.model}
                 onChange={(e) => setSettings({ model: e.target.value })}
@@ -120,18 +122,18 @@ export function AssistantDrawer() {
               </select>
             </label>
             <label className="flex items-center gap-1">
-              <span className="text-stone-600">Effort</span>
+              <span className="text-stone-600">{t('Effort')}</span>
               <select
-                aria-label="Effort"
+                aria-label={t('Effort')}
                 className="rounded border border-stone-300 bg-white px-1 py-0.5"
                 value={settings.effort}
                 onChange={(e) => setSettings({ effort: e.target.value as never })}
               >
-                <option value="">default</option>
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-                <option value="max">max</option>
+                <option value="">{t('default')}</option>
+                <option value="low">{t('low')}</option>
+                <option value="medium">{t('medium')}</option>
+                <option value="high">{t('high')}</option>
+                <option value="max">{t('max')}</option>
               </select>
             </label>
             <label className="flex items-center gap-1 text-stone-600">
@@ -140,19 +142,19 @@ export function AssistantDrawer() {
                 checked={settings.thinking}
                 onChange={(e) => setSettings({ thinking: e.target.checked })}
               />
-              thinking
+              {t('thinking')}
             </label>
           </div>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1">
-              <span className="text-stone-600">Focus</span>
+              <span className="text-stone-600">{t('Focus')}</span>
               <select
-                aria-label="Assistant focus"
+                aria-label={t('Assistant focus')}
                 className="rounded border border-stone-300 bg-white px-1 py-0.5"
                 value={focus ?? ''}
                 onChange={(e) => setFocus(e.target.value || null)}
               >
-                <option value="">whole region</option>
+                <option value="">{t('whole region')}</option>
                 {(stats?.settlements ?? []).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name ?? s.id}
@@ -167,7 +169,7 @@ export function AssistantDrawer() {
                 setSettings({ apiKey: '', remember: false });
               }}
             >
-              Forget key
+              {t('Forget key')}
             </button>
           </div>
           {price && (
@@ -186,8 +188,9 @@ export function AssistantDrawer() {
       >
         {!session && (
           <p className="text-xs text-stone-500">
-            Ask for changes in plain words: “move the region to 1890”, “add a gasworks by the docks”, “why is
-            the north end poor?”, “rename the port Innsmouth Wharf”. Every change lands in the undo history.
+            {t(
+              'Ask for changes in plain words: “move the region to 1890”, “add a gasworks by the docks”, “why is the north end poor?”, “rename the port Innsmouth Wharf”. Every change lands in the undo history.',
+            )}
           </p>
         )}
         {transcript.map((item) => (
@@ -219,7 +222,7 @@ export function AssistantDrawer() {
       <div className="border-t border-stone-200 bg-white px-3 py-2">
         <div className="flex gap-1">
           <textarea
-            aria-label="Ask the assistant"
+            aria-label={t('Ask the assistant')}
             className="min-h-[3.5rem] flex-1 resize-y rounded border border-stone-300 px-2 py-1 text-sm"
             placeholder={
               settings.apiKey || useAssistant.getState().clientFactory
@@ -242,17 +245,17 @@ export function AssistantDrawer() {
               onClick={() => void submit()}
               disabled={busy || !text.trim()}
             >
-              Send
+              {t('Send')}
             </button>
             {busy ? (
               <button className={btn} onClick={cancel}>
-                Stop
+                {t('Stop')}
               </button>
             ) : (
               <button
                 className={btn}
                 disabled={flavourBusy}
-                title="Flavour text for the focused settlement on Claude Sonnet 5"
+                title={t('Flavour text for the focused settlement on Claude Sonnet 5')}
                 onClick={() => {
                   const s = stats?.settlements.find((x) => x.id === focus) ?? stats?.settlements[0];
                   if (!s) return;
@@ -267,7 +270,7 @@ export function AssistantDrawer() {
                   );
                 }}
               >
-                {flavourBusy ? '…' : 'Flavour'}
+                {flavourBusy ? '…' : t('Flavour')}
               </button>
             )}
           </div>
@@ -294,6 +297,7 @@ function TranscriptRow({
   historyLength: number;
   jumpTo: (n: number) => void;
 }) {
+  const t = useT();
   switch (item.kind) {
     case 'user':
       return (
@@ -306,7 +310,7 @@ function TranscriptRow({
         <div className="rounded bg-white px-2 py-1 whitespace-pre-wrap" data-testid="assistant-reply">
           {item.thinking && (
             <details className="mb-1 text-[11px] text-stone-500">
-              <summary>thinking</summary>
+              <summary>{t('thinking')}</summary>
               <div className="whitespace-pre-wrap">{item.thinking}</div>
             </details>
           )}
@@ -329,8 +333,12 @@ function TranscriptRow({
               {item.running ? '…' : o.summary}
             </span>
             {undoable && (
-              <button className={btn} onClick={() => jumpTo(o.historyBefore)} aria-label={`Undo ${o.name}`}>
-                Undo
+              <button
+                className={btn}
+                onClick={() => jumpTo(o.historyBefore)}
+                aria-label={t('Undo {name}', { name: o.name })}
+              >
+                {t('Undo')}
               </button>
             )}
           </div>

@@ -3,6 +3,8 @@
  * as names with area shares. The planner cuts the footprint to these shares;
  * a `front` room takes the street side and the door.
  */
+import { facilityProgramme } from './facility.js';
+
 export interface RoomSpec {
   name: string;
   share: number;
@@ -50,7 +52,9 @@ export function programmeFor(
   floors: number,
   areaM2: number,
   year: number,
+  label?: string,
 ): FloorProgramme {
+  if (use === 'facility') return facilityProgramme(kind, label, floor, areaM2, year);
   const upper = floor > 0;
   const living = (): FloorProgramme =>
     upper

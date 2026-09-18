@@ -3,6 +3,7 @@ import type { Interior } from '@citygen/core';
 import { interiorSvg, interiorVtt } from '@citygen/export';
 import { engine } from '../engine/client.js';
 import { downloadText } from '../export/exports.js';
+import { useT } from '../i18n/index.js';
 
 /**
  * Floor plans of the inspected building: a floor selector, the SVG plan, and
@@ -18,6 +19,7 @@ export function InteriorPanel({
   name: string;
   onClose: () => void;
 }) {
+  const t = useT();
   const [plan, setPlan] = useState<Interior | null>(null);
   const [floor, setFloor] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -66,14 +68,14 @@ export function InteriorPanel({
           <span className="font-semibold">Floor plans · {name}</span>
           <button
             className="rounded px-1 text-stone-500 hover:bg-stone-100"
-            aria-label="Close floor plans"
+            aria-label={t('Close floor plans')}
             onClick={onClose}
           >
             ×
           </button>
         </div>
         {error && <p className="text-xs text-red-700">{error}</p>}
-        {!plan && !error && <p className="text-xs text-stone-500">Drawing…</p>}
+        {!plan && !error && <p className="text-xs text-stone-500">{t('Drawing…')}</p>}
         {plan && current && (
           <>
             <div className="mb-2 flex flex-wrap items-center gap-1 text-xs">
@@ -115,10 +117,10 @@ export function InteriorPanel({
                   )
                 }
               >
-                SVG of this floor
+                {t('SVG of this floor')}
               </button>
               <button className={btn} onClick={() => void downloadVtt()}>
-                Universal VTT (.dd2vtt) with walls and doors
+                {t('Universal VTT (.dd2vtt) with walls and doors')}
               </button>
             </div>
           </>

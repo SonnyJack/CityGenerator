@@ -1,14 +1,18 @@
-[
-  {
-    "file": "lowlands.json",
-    "name": "Lowlands",
-    "kind": "culturePack",
-    "description": "Dutch-flavoured names, brick and grachten, an early grid; the guide\u2019s example pack."
-  },
-  {
-    "file": "cannery.json",
-    "name": "Cannery",
-    "kind": "featureType",
-    "description": "A shore-side cannery with a packing hall, quay, tank and chimney; the guide\u2019s example type."
-  }
-]
+{
+  "name": "Community packs",
+  "description": "Culture packs and feature types from the authoring guide.",
+  "packs": [
+    {
+      "file": "lowlands.json",
+      "name": "Lowlands",
+      "kind": "culturePack",
+      "description": "Dutch-flavoured names, brick and grachten, an early grid; the guide’s example pack."
+    },
+    {
+      "file": "cannery.json",
+      "name": "Cannery",
+      "kind": "featureType",
+      "description": "A shore-side cannery with a packing hall, quay, tank and chimney; the guide’s example type."
+    }
+  ]
+}

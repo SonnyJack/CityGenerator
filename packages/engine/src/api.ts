@@ -141,7 +141,7 @@ export interface Inspection {
     outcome: string;
     center: [number, number];
     rotation: number;
-    part?: { kind: string; name?: string };
+    part?: { id: string; kind: string; name?: string; floors?: number; interior: boolean };
   };
 }
 

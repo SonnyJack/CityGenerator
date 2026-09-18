@@ -537,5 +537,21 @@ terrain mesh and buildings.
       fishing port with a flood), a community pack index with the guide's
       example pack and type, and share links (`?doc=<url>`) that open any
       hosted document.
-- [ ] Still open: localisation; a hosted registry beyond the site's own
-      plugin index; interiors for facility parts.
+- [x] Facility interiors: the buildings inside facilities (warehouses,
+      halls, wards, cell blocks, gatehouses, terminals, hangars, brewhouses,
+      turbine halls…) have floor plans too, chosen by part name and kind,
+      with the front facing the middle of the facility; from the inspector,
+      `citygen interior` and the `floor_plan` tool (part ids come with each
+      facility in `find_features`).
+- [x] Pack registries: a hosted `index.json` of packs and example documents
+      (format in docs/FEATURES.md) that the Gallery lists next to the site's
+      own, remembered per browser; `citygen packs <url>` lists or adds from
+      one headlessly.
+- [x] Localisation: the interface in English, French, German and Spanish
+      (a picker in the toolbar, remembered per browser; the browser language
+      picks the default). Keys are the English strings, dictionaries are
+      checked for coverage in CI; generated content (names, room names, use
+      labels) stays in the document's own language.
+- [ ] Still open: more languages (contributions are one dictionary file
+      each); interiors for the generic `building` parts of custom feature
+      types beyond the office default.

@@ -86,3 +86,47 @@ describe('heightmap import', () => {
     expect(() => encodeHeightmap([1, 2], 2, 2)).toThrow();
   });
 });
+
+describe('pack registries', () => {
+  it('parses object and bare-array indexes and resolves files against the index URL', async () => {
+    const { parseRegistry, fetchRegistry } = await import('../src/index.js');
+    const base = 'https://packs.example/dir/index.json';
+    const full = parseRegistry(
+      JSON.stringify({
+        name: 'Example packs',
+        description: 'd',
+        packs: [
+          { file: 'lowlands.json', name: 'Lowlands', kind: 'culturePack', description: 'x', author: 'a' },
+          { url: 'https://other.example/cannery.json', name: 'Cannery', kind: 'featureType' },
+          { file: 'bad.json', name: 'No kind' },
+        ],
+        documents: [{ file: '../docs/arkham.citygen.json', name: 'Arkham', seed: 'arkham', year: 1925 }],
+      }),
+      base,
+    );
+    expect(full.name).toBe('Example packs');
+    expect(full.packs.map((p) => p.url)).toEqual([
+      'https://packs.example/dir/lowlands.json',
+      'https://other.example/cannery.json',
+    ]);
+    expect(full.packs[0]!.author).toBe('a');
+    expect(full.documents[0]!.url).toBe('https://packs.example/docs/arkham.citygen.json');
+    expect(full.documents[0]!.year).toBe(1925);
+    const packs = parseRegistry('[{"file":"a.json","name":"A","kind":"culturePack"}]', base);
+    expect(packs.name).toBe('packs.example');
+    expect(packs.packs).toHaveLength(1);
+    expect(packs.documents).toHaveLength(0);
+    const docs = parseRegistry('[{"file":"t.citygen.json","name":"T","seed":"t"}]', base, 'Gallery');
+    expect(docs.name).toBe('Gallery');
+    expect(docs.documents[0]!.seed).toBe('t');
+    expect(() => parseRegistry('42', base)).toThrow();
+    const fetched = await fetchRegistry(
+      base,
+      (async () => new Response('{"packs":[]}', { status: 200 })) as unknown as typeof fetch,
+    );
+    expect(fetched.packs).toEqual([]);
+    await expect(
+      fetchRegistry(base, (async () => new Response('', { status: 404 })) as unknown as typeof fetch),
+    ).rejects.toThrow('404');
+  });
+});

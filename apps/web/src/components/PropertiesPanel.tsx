@@ -1,7 +1,9 @@
 import { tools, useApp } from '../store.js';
+import { useT } from '../i18n/index.js';
 
 /** Selected authored features or annotation: attributes and transforms. */
 export function PropertiesPanel() {
+  const t = useT();
   const doc = useApp((s) => s.document);
   const selection = useApp((s) => s.selection);
   const selectedAnnotation = useApp((s) => s.selectedAnnotation);
@@ -20,11 +22,14 @@ export function PropertiesPanel() {
   if (annotation) {
     return (
       <aside className={panel} data-testid="properties">
-        <Header title={`Annotation · ${annotation.kind}`} onClose={() => selectAnnotation(undefined)} />
+        <Header
+          title={`${t('Annotation')} · ${annotation.kind}`}
+          onClose={() => selectAnnotation(undefined)}
+        />
         <label className="block">
-          <span className="text-stone-600">Text</span>
+          <span className="text-stone-600">{t('Text')}</span>
           <textarea
-            aria-label="Annotation text"
+            aria-label={t('Annotation text')}
             className="mt-0.5 w-full rounded border border-stone-300 px-1 py-0.5"
             rows={2}
             value={annotation.text}
@@ -41,14 +46,14 @@ export function PropertiesPanel() {
               dispatch({ type: 'annotation.update', id: annotation.id, patch: { gmOnly: e.target.checked } })
             }
           />
-          GM only (hidden on player handouts)
+          {t('GM only (hidden on player handouts)')}
         </label>
         <div className="mt-2 flex gap-1">
           <button
             className={btn}
             onClick={() => dispatch({ type: 'annotation.remove', ids: [annotation.id] })}
           >
-            Delete
+            {t('Delete')}
           </button>
         </div>
       </aside>
@@ -62,7 +67,7 @@ export function PropertiesPanel() {
       generatedHit.layer === 'buildings' ? 'building' : generatedHit.layer === 'streets' ? 'street' : 'block';
     return (
       <aside className={panel} data-testid="properties">
-        <Header title={`Generated ${what}`} onClose={clearInspection} />
+        <Header title={t('Generated {what}', { what: t(what) })} onClose={clearInspection} />
         <div className="text-stone-600">
           {typeof p.kind === 'string' && <span>{p.kind} · </span>}
           {typeof p.ward === 'string' && <span>{p.ward} · </span>}
@@ -70,15 +75,15 @@ export function PropertiesPanel() {
           <span className="font-mono">{generatedHit.id}</span>
         </div>
         <p className="mt-1 text-stone-500">
-          Frozen features become yours: they keep their shape across reseeds and year changes.
+          {t('Frozen features become yours: they keep their shape across reseeds and year changes.')}
         </p>
         <div className="mt-2 flex gap-1">
           <button className={btn} onClick={freeze} data-testid="freeze">
-            Freeze
+            {t('Freeze')}
           </button>
           {generatedHit.layer === 'buildings' && (
             <button className={btn} onClick={suppress} data-testid="suppress">
-              Remove
+              {t('Remove')}
             </button>
           )}
         </div>
@@ -113,27 +118,27 @@ export function PropertiesPanel() {
       <div className="grid grid-cols-[4rem_1fr] items-center gap-x-2 gap-y-1">
         {one && (
           <>
-            <span className="text-stone-600">Name</span>
+            <span className="text-stone-600">{t('Name')}</span>
             <input
-              aria-label="Feature name"
+              aria-label={t('Feature name')}
               className={input}
               value={one.properties.name ?? ''}
               onChange={(e) => setProps({ name: e.target.value || undefined })}
             />
           </>
         )}
-        <span className="text-stone-600">Kind</span>
+        <span className="text-stone-600">{t('Kind')}</span>
         <input
-          aria-label="Feature kind"
+          aria-label={t('Feature kind')}
           className={input}
           value={one ? (one.properties.kind ?? '') : commonValue(features.map((f) => f.properties.kind))}
           onChange={(e) => setProps({ kind: e.target.value || undefined })}
         />
         {hasWidth && (
           <>
-            <span className="text-stone-600">Width</span>
+            <span className="text-stone-600">{t('Width')}</span>
             <input
-              aria-label="Feature width (m)"
+              aria-label={t('Feature width (m)')}
               type="number"
               min={1}
               className={input}
@@ -147,9 +152,9 @@ export function PropertiesPanel() {
         )}
         {isStroke && (
           <>
-            <span className="text-stone-600">Radius</span>
+            <span className="text-stone-600">{t('Radius')}</span>
             <input
-              aria-label="Stroke radius (m)"
+              aria-label={t('Stroke radius (m)')}
               type="number"
               min={5}
               className={input}
@@ -161,9 +166,9 @@ export function PropertiesPanel() {
             />
             {layer === 'terrainEdit' && (
               <>
-                <span className="text-stone-600">Amount</span>
+                <span className="text-stone-600">{t('Amount')}</span>
                 <input
-                  aria-label="Stroke amount"
+                  aria-label={t('Stroke amount')}
                   type="number"
                   className={input}
                   value={numberOr(
@@ -176,9 +181,9 @@ export function PropertiesPanel() {
             )}
             {layer === 'fieldEdit' && (
               <>
-                <span className="text-stone-600">Delta</span>
+                <span className="text-stone-600">{t('Delta')}</span>
                 <input
-                  aria-label="Stroke delta"
+                  aria-label={t('Stroke delta')}
                   type="number"
                   min={-1}
                   max={1}
@@ -198,9 +203,9 @@ export function PropertiesPanel() {
         )}
         {one && layer === 'building' && (
           <>
-            <span className="text-stone-600">Floors</span>
+            <span className="text-stone-600">{t('Floors')}</span>
             <input
-              aria-label="Floors"
+              aria-label={t('Floors')}
               type="number"
               min={1}
               max={120}
@@ -211,44 +216,56 @@ export function PropertiesPanel() {
           </>
         )}
       </div>
-      <div className="mt-2 flex flex-wrap gap-1" aria-label="Transforms">
+      <div className="mt-2 flex flex-wrap gap-1" aria-label={t('Transforms')}>
         <button
           className={btn}
-          title="Rotate 15° anticlockwise"
+          title={t('Rotate 15° anticlockwise')}
           onClick={() => tools.transformSelection('rotate', Math.PI / 12)}
         >
           ↺ 15°
         </button>
         <button
           className={btn}
-          title="Rotate 15° clockwise"
+          title={t('Rotate 15° clockwise')}
           onClick={() => tools.transformSelection('rotate', -Math.PI / 12)}
         >
           ↻ 15°
         </button>
-        <button className={btn} title="Scale up 10 %" onClick={() => tools.transformSelection('scale', 1.1)}>
+        <button
+          className={btn}
+          title={t('Scale up 10 %')}
+          onClick={() => tools.transformSelection('scale', 1.1)}
+        >
           +10 %
         </button>
         <button
           className={btn}
-          title="Scale down 10 %"
+          title={t('Scale down 10 %')}
           onClick={() => tools.transformSelection('scale', 1 / 1.1)}
         >
           −10 %
         </button>
-        <button className={btn} title="Mirror left–right" onClick={() => tools.transformSelection('mirrorX')}>
-          Mirror ↔
-        </button>
-        <button className={btn} title="Mirror top–bottom" onClick={() => tools.transformSelection('mirrorY')}>
-          Mirror ↕
+        <button
+          className={btn}
+          title={t('Mirror left–right')}
+          onClick={() => tools.transformSelection('mirrorX')}
+        >
+          {t('Mirror ↔')}
         </button>
         <button
           className={btn}
-          title="Delete (Del)"
+          title={t('Mirror top–bottom')}
+          onClick={() => tools.transformSelection('mirrorY')}
+        >
+          {t('Mirror ↕')}
+        </button>
+        <button
+          className={btn}
+          title={t('Delete (Del)')}
           onClick={() => tools.deleteSelection()}
           data-testid="delete-selection"
         >
-          Delete
+          {t('Delete')}
         </button>
       </div>
       {one?.properties.origin === 'frozen' && (
@@ -258,20 +275,22 @@ export function PropertiesPanel() {
         </p>
       )}
       <p className="mt-1 text-stone-500">
-        Arrow keys nudge by a pixel (Shift: ten). Double-click a segment to add a vertex; drag a handle to
-        move it.
+        {t(
+          'Arrow keys nudge by a pixel (Shift: ten). Double-click a segment to add a vertex; drag a handle to move it.',
+        )}
       </p>
     </aside>
   );
 }
 
 function Header({ title, onClose }: { title: string; onClose: () => void }) {
+  const t = useT();
   return (
     <div className="mb-1 flex items-center justify-between">
       <span className="font-semibold">{title}</span>
       <button
         className="rounded px-1 text-stone-500 hover:bg-stone-100"
-        aria-label="Close properties"
+        aria-label={t('Close properties')}
         onClick={onClose}
       >
         ×

@@ -228,7 +228,10 @@ export function buildCli(out: (line: string) => void = (l) => process.stdout.wri
   program
     .command('interior <doc>')
     .description('Floor plans of a building: rooms as text, an SVG per floor, or a Universal VTT scene')
-    .requiredOption('--building <id>', 'building id (see `directory`)')
+    .requiredOption(
+      '--building <id>',
+      'building id (see `directory`) or facility part id (see `find_features` over MCP)',
+    )
     .option('--floor <n>', 'floor index, 0 = ground (default: all for SVG, 0 for VTT)', (v) => Number(v))
     .option('--svg <file>', 'SVG path; with several floors, -1, -2… is inserted before the extension')
     .option('--uvtt <file>', 'Universal VTT path (walls and doors; no image without a browser)')
@@ -240,7 +243,7 @@ export function buildCli(out: (line: string) => void = (l) => process.stdout.wri
       ) => {
         const host = await EngineHost.open(path);
         const plan = await host.interior(o.building);
-        if (!plan) throw new Error(`no generated building ${o.building}`);
+        if (!plan) throw new Error(`no generated building or facility part ${o.building}`);
         const { interiorSvg, interiorVtt } = await import('@citygen/export');
         const { writeFile } = await import('node:fs/promises');
         const floors = o.floor !== undefined ? plan.floors.filter((f) => f.floor === o.floor) : plan.floors;
@@ -264,6 +267,61 @@ export function buildCli(out: (line: string) => void = (l) => process.stdout.wri
         }
       },
     );
+
+  program
+    .command('packs <index>')
+    .description('List a pack registry (a hosted index.json), or add one of its packs to a document')
+    .option('--doc <file>', 'document to add the pack to')
+    .option('--add <name>', 'pack name (or URL) from the registry to add; needs --doc')
+    .option('-o, --out <file>', 'write to another document')
+    .action(async (index: string, o: { doc?: string; add?: string; out?: string }) => {
+      const { fetchRegistry } = await import('@citygen/import');
+      const reg = await fetchRegistry(index);
+      if (!o.add) {
+        out(`${reg.name}${reg.description ? ` — ${reg.description}` : ''}`);
+        for (const p of reg.packs)
+          out(`${p.kind}\t${p.name}\t${p.url}${p.description ? `\t${p.description}` : ''}`);
+        for (const d of reg.documents)
+          out(`document\t${d.name}\t${d.url}${d.description ? `\t${d.description}` : ''}`);
+        if (!reg.packs.length && !reg.documents.length) out('(empty registry)');
+        return;
+      }
+      if (!o.doc) throw new Error('--add needs --doc');
+      const pack = reg.packs.find((p) => p.name === o.add || p.url === o.add);
+      if (!pack) throw new Error(`no pack "${o.add}" in ${reg.name}`);
+      const res = await fetch(pack.url);
+      if (!res.ok) throw new Error(`${pack.url}: HTTP ${res.status}`);
+      const host = await EngineHost.open(o.doc);
+      const { culturePackSchema, customFeatureTypeSchema } = await import('@citygen/core');
+      const json: unknown = JSON.parse(await res.text());
+      const doc = host.document();
+      if (pack.kind === 'culturePack') {
+        const parsed = culturePackSchema.parse(json);
+        const idx = doc.spec.customCulturePacks.findIndex((p) => p.id === parsed.id);
+        host.dispatch({
+          type: 'spec.patch',
+          ops: [
+            idx >= 0
+              ? { op: 'replace', path: `/customCulturePacks/${idx}`, value: parsed }
+              : { op: 'add', path: '/customCulturePacks/-', value: parsed },
+          ],
+        });
+        out(`added culture pack ${parsed.id} (${parsed.name})`);
+      } else {
+        const parsed = customFeatureTypeSchema.parse(json);
+        const idx = doc.spec.customFeatureTypes.findIndex((t) => t.id === parsed.id);
+        host.dispatch({
+          type: 'spec.patch',
+          ops: [
+            idx >= 0
+              ? { op: 'replace', path: `/customFeatureTypes/${idx}`, value: parsed }
+              : { op: 'add', path: '/customFeatureTypes/-', value: parsed },
+          ],
+        });
+        out(`added feature type ${parsed.id} (${parsed.name})`);
+      }
+      out(`saved ${await host.save(o.out ?? o.doc)}`);
+    });
 
   program
     .command('mcp')

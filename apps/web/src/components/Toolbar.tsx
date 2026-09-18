@@ -7,8 +7,12 @@ import { useAssistant } from '../assistant/store.js';
 import { imagePixels, importText } from '../import/importFile.js';
 import { HeightmapDialog } from './HeightmapDialog.js';
 import { GalleryPanel } from './GalleryPanel.js';
+import { LOCALES, useLocale, useT } from '../i18n/index.js';
 
 export function Toolbar() {
+  const t = useT();
+  const locale = useLocale((s) => s.locale);
+  const setLocale = useLocale((s) => s.setLocale);
   const doc = useApp((s) => s.document);
   const {
     dispatch,
@@ -57,28 +61,28 @@ export function Toolbar() {
       <span className="text-xs text-stone-500">Phase 10</span>
 
       <label className="ml-4 flex items-center gap-1">
-        <span className="text-stone-600">Name</span>
+        <span className="text-stone-600">{t('Name')}</span>
         <input
-          aria-label="Document name"
+          aria-label={t('Document name')}
           className="w-40 rounded border border-stone-300 px-2 py-1"
           value={doc.meta.name}
           onChange={(e) => dispatch({ type: 'meta.rename', name: e.target.value || 'Untitled region' })}
         />
       </label>
       <div className="ml-auto flex items-center gap-1">
-        <button className={btn} onClick={undo} disabled={!canUndo} aria-label="Undo">
-          Undo
+        <button className={btn} onClick={undo} disabled={!canUndo} aria-label={t('Undo')}>
+          {t('Undo')}
         </button>
-        <button className={btn} onClick={redo} disabled={!canRedo} aria-label="Redo">
-          Redo
+        <button className={btn} onClick={redo} disabled={!canRedo} aria-label={t('Redo')}>
+          {t('Redo')}
         </button>
         <HistoryMenu />
         <button className={btn} onClick={() => newDocument()}>
-          New
+          {t('New')}
         </button>
         <RecentMenu />
         <button className={btn} onClick={() => fileInput.current?.click()}>
-          Import…
+          {t('Import…')}
         </button>
         <input
           ref={fileInput}
@@ -88,17 +92,29 @@ export function Toolbar() {
           onChange={onFile}
         />
         <button className={btn} onClick={() => setGalleryOpen(true)}>
-          Gallery
+          {t('Gallery')}
         </button>
         <button className={btn} onClick={() => setDirectoryOpen(!directoryOpen)} aria-pressed={directoryOpen}>
-          Directory
+          {t('Directory')}
         </button>
         <button className={btn} onClick={() => setExportOpen(true)}>
-          Export…
+          {t('Export…')}
         </button>
         <button className={btn} onClick={() => setAssistantOpen(!assistantOpen)} aria-pressed={assistantOpen}>
-          Assistant
+          {t('Assistant')}
         </button>
+        <select
+          aria-label={t('Language')}
+          className="rounded border border-stone-300 bg-white px-1 py-1 text-xs"
+          value={locale}
+          onChange={(e) => setLocale(e.target.value as (typeof LOCALES)[number]['id'])}
+        >
+          {LOCALES.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </select>
       </div>
       {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
       {galleryOpen && <GalleryPanel onClose={() => setGalleryOpen(false)} />}
@@ -117,7 +133,7 @@ export function Toolbar() {
           {report}{' '}
           <button
             className="text-stone-400 hover:text-stone-700"
-            aria-label="Dismiss import report"
+            aria-label={t('Dismiss import report')}
             onClick={() => setReport(null)}
           >
             ×
@@ -126,11 +142,21 @@ export function Toolbar() {
       )}
 
       <div className="basis-full text-xs text-stone-500" data-testid="status">
-        {status === 'generating' && 'Generating…'}
+        {status === 'generating' && t('Generating…')}
         {status === 'idle' &&
           stats &&
-          `Ready · terrain ${stats.terrainMs.toFixed(0)} ms · land cover ${stats.landcoverMs.toFixed(0)} ms · settlements ${stats.settlementsMs.toFixed(0)} ms · roads & rail ${stats.roadsMs.toFixed(0)} ms · tiles ${stats.tilesMs.toFixed(0)} ms · memo ${stats.memoHits}/${stats.memoHits + stats.memoMisses}`}
-        {status === 'idle' && !stats && 'Starting engine…'}
+          t(
+            'Ready · terrain {terrain} ms · land cover {landcover} ms · settlements {settlements} ms · roads & rail {roads} ms · tiles {tiles} ms · memo {memo}',
+            {
+              terrain: stats.terrainMs.toFixed(0),
+              landcover: stats.landcoverMs.toFixed(0),
+              settlements: stats.settlementsMs.toFixed(0),
+              roads: stats.roadsMs.toFixed(0),
+              tiles: stats.tilesMs.toFixed(0),
+              memo: `${stats.memoHits}/${stats.memoHits + stats.memoMisses}`,
+            },
+          )}
+        {status === 'idle' && !stats && t('Starting engine…')}
         {error && <span className="ml-2 text-red-700">{error}</span>}
       </div>
     </header>

@@ -1,49 +1,52 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Command } from '@citygen/editor';
 import { useApp } from '../store.js';
+import { useT, type Translate } from '../i18n/index.js';
 
-function describe(c: Command): string {
+function describe(c: Command, t: Translate): string {
   switch (c.type) {
     case 'meta.rename':
-      return `Rename to “${c.name}”`;
+      return t('Rename to “{name}”', { name: c.name });
     case 'spec.patch':
-      return `Change ${c.ops.map((o) => o.path.replace(/^\//, '').replace(/\//g, ' › ')).join(', ')}`;
+      return t('Change {what}', {
+        what: c.ops.map((o) => o.path.replace(/^\//, '').replace(/\//g, ' › ')).join(', '),
+      });
     case 'spec.setSeed':
-      return `Seed ${c.seed}`;
+      return t('Seed {seed}', { seed: c.seed });
     case 'year.set':
-      return `Year ${c.year}`;
+      return t('Year {year}', { year: c.year });
     case 'settlement.add':
-      return `Add settlement ${c.settlement.name ?? c.settlement.id}`;
+      return t('Add settlement {name}', { name: c.settlement.name ?? c.settlement.id });
     case 'settlement.update':
-      return `Edit settlement ${c.id}`;
+      return t('Edit settlement {id}', { id: c.id });
     case 'settlement.remove':
-      return `Remove settlement ${c.id}`;
+      return t('Remove settlement {id}', { id: c.id });
     case 'authored.add':
       return c.features.length === 1
-        ? `Draw ${c.features[0]!.properties.layer}`
-        : `Add ${c.features.length} features`;
+        ? t('Draw {layer}', { layer: c.features[0]!.properties.layer })
+        : t('Add {count} features', { count: c.features.length });
     case 'authored.update':
-      return c.geometry ? 'Edit geometry' : 'Edit properties';
+      return t(c.geometry ? 'Edit geometry' : 'Edit properties');
     case 'authored.remove':
-      return c.ids.length === 1 ? 'Delete feature' : `Delete ${c.ids.length} features`;
+      return c.ids.length === 1 ? t('Delete feature') : t('Delete {count} features', { count: c.ids.length });
     case 'annotation.add':
-      return `Add ${c.annotation.kind}`;
+      return t('Add {kind}', { kind: c.annotation.kind });
     case 'annotation.update':
-      return 'Edit annotation';
+      return t('Edit annotation');
     case 'annotation.remove':
-      return 'Remove annotation';
+      return t('Remove annotation');
     case 'override.add':
       return c.override.op === 'reseed'
-        ? `Regenerate ${c.override.target}`
+        ? t('Regenerate {target}', { target: c.override.target })
         : c.override.op === 'reroll'
-          ? 'Re-roll blocks'
+          ? t('Re-roll blocks')
           : c.override.op === 'suppress'
-            ? 'Remove generated feature'
-            : `Override ${c.override.op}`;
+            ? t('Remove generated feature')
+            : t('Override {op}', { op: c.override.op });
     case 'override.remove':
-      return 'Remove override';
+      return t('Remove override');
     case 'override.clear':
-      return c.op ? `Clear ${c.op} overrides` : 'Clear overrides';
+      return c.op ? t('Clear {op} overrides', { op: c.op }) : t('Clear overrides');
     default:
       return c.type;
   }
@@ -51,6 +54,7 @@ function describe(c: Command): string {
 
 /** Drop-down list of the undo history; clicking an entry jumps to that state. */
 export function HistoryMenu() {
+  const t = useT();
   const history = useApp((s) => s.history);
   const canRedo = useApp((s) => s.canRedo);
   const jumpTo = useApp((s) => s.jumpTo);
@@ -74,7 +78,7 @@ export function HistoryMenu() {
   return (
     <div className="relative" ref={ref}>
       <button className={btn} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="listbox">
-        History ({history.length}
+        {t('History')} ({history.length}
         {canRedo ? ' ↷' : ''})
       </button>
       {open && (
@@ -91,7 +95,7 @@ export function HistoryMenu() {
                 setOpen(false);
               }}
             >
-              Original document
+              {t('Original document')}
             </button>
           </li>
           {history.map((h, i) => (
@@ -103,12 +107,12 @@ export function HistoryMenu() {
                   setOpen(false);
                 }}
               >
-                {describe(h.command)}
+                {describe(h.command, t)}
                 <span className="ml-1 text-stone-400">{new Date(h.at).toLocaleTimeString()}</span>
               </button>
             </li>
           ))}
-          {history.length === 0 && <li className="px-2 py-1 text-stone-500">No edits yet</li>}
+          {history.length === 0 && <li className="px-2 py-1 text-stone-500">{t('No edits yet')}</li>}
         </ul>
       )}
     </div>

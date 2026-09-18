@@ -13,6 +13,7 @@ import { eraForYear } from '@citygen/features';
 import { randomSeed, useApp } from '../store.js';
 import { EventsPanel } from './EventsPanel.js';
 import { SettlementsPanel } from './SettlementsPanel.js';
+import { useT } from '../i18n/index.js';
 
 const PRESET_LABELS: Record<string, string> = {
   plains: 'Plains',
@@ -51,6 +52,7 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
 /** A slider that dispatches on release (and on keyboard steps) rather than every pixel. */
 /** Play the timeline: step the year forward while the engine keeps up. */
 function TimelinePlayer() {
+  const t = useT();
   const year = useApp((s) => s.document.spec.year);
   const status = useApp((s) => s.status);
   const dispatch = useApp((s) => s.dispatch);
@@ -80,12 +82,12 @@ function TimelinePlayer() {
           }
         }}
       >
-        {playing ? 'Pause' : 'Play'}
+        {t(playing ? 'Pause' : 'Play')}
       </button>
       <label className="flex items-center gap-1">
-        <span className="text-stone-600">from</span>
+        <span className="text-stone-600">{t('from')}</span>
         <input
-          aria-label="Play from"
+          aria-label={t('Play from')}
           type="number"
           className="w-16 rounded border border-stone-300 px-1"
           value={from}
@@ -96,9 +98,9 @@ function TimelinePlayer() {
         />
       </label>
       <label className="flex items-center gap-1">
-        <span className="text-stone-600">to</span>
+        <span className="text-stone-600">{t('to')}</span>
         <input
-          aria-label="Play to"
+          aria-label={t('Play to')}
           type="number"
           className="w-16 rounded border border-stone-300 px-1"
           value={to}
@@ -161,12 +163,13 @@ function Slider({
 }
 
 export function GenerateDock() {
+  const t = useT();
   const doc = useApp((s) => s.document);
   const dispatch = useApp((s) => s.dispatch);
   const stats = useApp((s) => s.stats);
   const regenerate = useApp((s) => s.regenerate);
   const reseeds = doc.overrides.filter((o) => o.op === 'reseed').length;
-  const t = doc.spec.terrain;
+  const terrain = doc.spec.terrain;
   const patch = (path: string, value: unknown) =>
     dispatch({ type: 'spec.patch', ops: [{ op: 'replace', path, value }] });
   const ui = doc.ui ?? { theme: 'atlas', layers: {}, terrain3d: false };
@@ -177,37 +180,37 @@ export function GenerateDock() {
       data-testid="generate-dock"
     >
       <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Region</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Region')}</h2>
         <label className="flex items-center gap-2 text-xs">
-          <span className="w-16 text-stone-600">Seed</span>
+          <span className="w-16 text-stone-600">{t('Seed')}</span>
           <input
-            aria-label="Seed"
+            aria-label={t('Seed')}
             className="min-w-0 flex-1 rounded border border-stone-300 px-2 py-1 font-mono"
             value={doc.spec.seed}
             onChange={(e) => e.target.value && dispatch({ type: 'spec.setSeed', seed: e.target.value })}
           />
           <button
             className={btn}
-            title="Random seed"
+            title={t('Random seed')}
             onClick={() => dispatch({ type: 'spec.setSeed', seed: randomSeed() })}
           >
             ⟳
           </button>
         </label>
         <div className="flex items-center gap-2 text-xs">
-          <span className="w-16 text-stone-600">Layout</span>
+          <span className="w-16 text-stone-600">{t('Layout')}</span>
           <button
             className={btn}
-            title="Keep the terrain and your features; re-roll settlements, roads and buildings"
+            title={t('Keep the terrain and your features; re-roll settlements, roads and buildings')}
             onClick={() => regenerate('region')}
             data-testid="regenerate-region"
           >
-            Regenerate settlements
+            {t('Regenerate settlements')}
           </button>
           {reseeds > 0 && (
             <button
               className={btn}
-              title="Undo all regenerations"
+              title={t('Undo all regenerations')}
               onClick={() => dispatch({ type: 'override.clear', op: 'reseed' })}
             >
               Reset ({reseeds})
@@ -215,9 +218,9 @@ export function GenerateDock() {
           )}
         </div>
         <label className="flex items-center gap-2 text-xs">
-          <span className="w-16 text-stone-600">Size</span>
+          <span className="w-16 text-stone-600">{t('Size')}</span>
           <select
-            aria-label="Region size"
+            aria-label={t('Region size')}
             className={sel}
             value={doc.spec.extent.widthM}
             onChange={(e) => {
@@ -238,9 +241,9 @@ export function GenerateDock() {
           </select>
         </label>
         <label className="flex items-center gap-2 text-xs">
-          <span className="w-16 text-stone-600">Culture</span>
+          <span className="w-16 text-stone-600">{t('Culture')}</span>
           <select
-            aria-label="Culture"
+            aria-label={t('Culture')}
             className={sel}
             value={doc.spec.culture}
             onChange={(e) => patch('/culture', e.target.value)}
@@ -263,9 +266,9 @@ export function GenerateDock() {
           </p>
         )}
         <label className="flex items-center gap-2 text-xs">
-          <span className="w-16 text-stone-600">Biome</span>
+          <span className="w-16 text-stone-600">{t('Biome')}</span>
           <select
-            aria-label="Biome"
+            aria-label={t('Biome')}
             className={sel}
             value={doc.spec.biome}
             onChange={(e) => patch('/biome', e.target.value)}
@@ -280,25 +283,25 @@ export function GenerateDock() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Terrain</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Terrain')}</h2>
         <label className="flex items-center gap-2 text-xs">
-          <span className="w-16 text-stone-600">Preset</span>
+          <span className="w-16 text-stone-600">{t('Preset')}</span>
           <select
-            aria-label="Terrain preset"
+            aria-label={t('Terrain preset')}
             className={sel}
-            value={t.preset}
+            value={terrain.preset}
             onChange={(e) => patch('/terrain/preset', e.target.value)}
           >
             {terrainPresetSchema.options.map((id) => (
               <option key={id} value={id}>
-                {PRESET_LABELS[id] ?? id}
+                {t(PRESET_LABELS[id] ?? id)}
               </option>
             ))}
           </select>
         </label>
         <Slider
           label="Relief"
-          value={t.relief}
+          value={terrain.relief}
           min={0}
           max={1}
           step={0.05}
@@ -306,7 +309,7 @@ export function GenerateDock() {
         />
         <Slider
           label="Roughness"
-          value={t.roughness}
+          value={terrain.roughness}
           min={0}
           max={1}
           step={0.05}
@@ -314,7 +317,7 @@ export function GenerateDock() {
         />
         <Slider
           label="Erosion"
-          value={t.erosion}
+          value={terrain.erosion}
           min={0}
           max={1}
           step={0.1}
@@ -322,7 +325,7 @@ export function GenerateDock() {
         />
         <Slider
           label="Sea level"
-          value={t.seaLevel}
+          value={terrain.seaLevel}
           min={-60}
           max={120}
           step={2}
@@ -331,7 +334,7 @@ export function GenerateDock() {
         />
         <Slider
           label="Major rivers"
-          value={t.rivers.major}
+          value={terrain.rivers.major}
           min={0}
           max={4}
           step={1}
@@ -339,7 +342,7 @@ export function GenerateDock() {
         />
         <Slider
           label="Minor rivers"
-          value={t.rivers.minor}
+          value={terrain.rivers.minor}
           min={0}
           max={8}
           step={1}
@@ -348,7 +351,7 @@ export function GenerateDock() {
       </section>
 
       <section className="space-y-2" data-testid="timeline">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Timeline</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Timeline')}</h2>
         <Slider
           label={`Year · ${eraForYear(doc.spec.year).name}`}
           value={doc.spec.year}
@@ -364,7 +367,7 @@ export function GenerateDock() {
             <button
               className="underline"
               onClick={() => patch('/anchorYear', doc.spec.year)}
-              title="Treat the settlement populations as this year's"
+              title={t("Treat the settlement populations as this year's")}
             >
               Make {doc.spec.year} the design year
             </button>
@@ -377,7 +380,7 @@ export function GenerateDock() {
       <EventsPanel />
 
       <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Society</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Society')}</h2>
         <Slider
           label="Inequality"
           value={doc.spec.society.inequality}
@@ -432,7 +435,7 @@ export function GenerateDock() {
                     checked={on}
                     onChange={(e) => dispatch({ type: 'ui.set', layers: { [field]: e.target.checked } })}
                   />
-                  {field === 'wealth' ? 'Wealth overlay' : 'Density overlay'}
+                  {t(field === 'wealth' ? 'Wealth overlay' : 'Density overlay')}
                 </label>
                 {on && (
                   <ul className="mt-1 flex flex-wrap gap-1" data-testid={`legend-${field}`}>
@@ -454,15 +457,15 @@ export function GenerateDock() {
       </section>
 
       <section className="space-y-2" data-testid="networks">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Networks</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Networks')}</h2>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            aria-label="Railways"
+            aria-label={t('Railways')}
             checked={doc.spec.networks.rail.enabled}
             onChange={(e) => patch('/networks/rail/enabled', e.target.checked)}
           />
-          Railways and trams (from the 1840s; branch lines close after the 1960s)
+          {t('Railways and trams (from the 1840s; branch lines close after the 1960s)')}
         </label>
         <Slider
           label="Mainlines leaving the region"
@@ -485,24 +488,24 @@ export function GenerateDock() {
       </section>
 
       <section className="space-y-2" data-testid="facilities">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Facilities</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Facilities')}</h2>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            aria-label="Default facilities"
+            aria-label={t('Default facilities')}
             checked={doc.spec.defaultFacilities}
             onChange={(e) => patch('/defaultFacilities', e.target.checked)}
           />
-          Ports, industry and institutions from settlement kind, size and year
+          {t('Ports, industry and institutions from settlement kind, size and year')}
         </label>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            aria-label="Scale compression"
+            aria-label={t('Scale compression')}
             checked={doc.spec.scaleCompression}
             onChange={(e) => patch('/scaleCompression', e.target.checked)}
           />
-          Compress large facilities for playability (inspector shows true scale)
+          {t('Compress large facilities for playability (inspector shows true scale)')}
         </label>
         {stats && (
           <div className="text-[11px] text-stone-600" data-testid="facility-stats">
@@ -525,8 +528,11 @@ export function GenerateDock() {
                   </span>
                   <button
                     className="px-1 text-stone-400 hover:text-red-700"
-                    aria-label={`Remove ${f.name} at ${f.settlement ?? 'region'}`}
-                    title="Remove this facility"
+                    aria-label={t('Remove {name} at {place}', {
+                      name: f.name,
+                      place: f.settlement ?? t('region'),
+                    })}
+                    title={t('Remove this facility')}
                     onClick={() =>
                       dispatch({ type: 'override.add', override: { op: 'remove', target: f.id } })
                     }
@@ -551,7 +557,7 @@ export function GenerateDock() {
                   dispatch({ type: 'override.clear', op: 'pin' });
                 }}
               >
-                Restore removed and unpin
+                {t('Restore removed and unpin')}
               </button>
             )}
           </div>
@@ -559,11 +565,11 @@ export function GenerateDock() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">View</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('View')}</h2>
         <label className="flex items-center gap-2 text-xs">
-          <span className="w-16 text-stone-600">Theme</span>
+          <span className="w-16 text-stone-600">{t('Theme')}</span>
           <select
-            aria-label="Theme"
+            aria-label={t('Theme')}
             className={sel}
             value={ui.theme}
             onChange={(e) => dispatch({ type: 'ui.set', theme: e.target.value })}
@@ -578,29 +584,29 @@ export function GenerateDock() {
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            aria-label="3D terrain"
+            aria-label={t('3D terrain')}
             checked={ui.terrain3d}
             onChange={(e) => dispatch({ type: 'ui.set', terrain3d: e.target.checked })}
           />
-          3D terrain (drag with right mouse to tilt)
+          {t('3D terrain (drag with right mouse to tilt)')}
         </label>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            aria-label="3D buildings"
+            aria-label={t('3D buildings')}
             checked={ui.layers.buildings3d === true}
             onChange={(e) => dispatch({ type: 'ui.set', layers: { buildings3d: e.target.checked } })}
           />
-          3D buildings (extruded by floors)
+          {t('3D buildings (extruded by floors)')}
         </label>
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            aria-label="Age overlay"
+            aria-label={t('Age overlay')}
             checked={ui.layers.age === true}
             onChange={(e) => dispatch({ type: 'ui.set', layers: { age: e.target.checked } })}
           />
-          Building age overlay
+          {t('Building age overlay')}
         </label>
         {ui.layers.age === true && (
           <ul className="flex flex-wrap gap-1 text-[10px]" data-testid="legend-age">
@@ -617,11 +623,11 @@ export function GenerateDock() {
             <label key={g.id} className="flex items-center gap-1 text-xs">
               <input
                 type="checkbox"
-                aria-label={g.label}
+                aria-label={t(g.label)}
                 checked={ui.layers[g.id] !== false}
                 onChange={(e) => dispatch({ type: 'ui.set', layers: { [g.id]: e.target.checked } })}
               />
-              {g.label}
+              {t(g.label)}
             </label>
           ))}
         </div>
@@ -629,37 +635,39 @@ export function GenerateDock() {
 
       {stats && (
         <section className="space-y-1 text-xs text-stone-600" data-testid="terrain-stats">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Terrain stats</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            {t('Terrain stats')}
+          </h2>
           <div className="grid grid-cols-2 gap-x-2">
-            <span>Cells</span>
+            <span>{t('Cells')}</span>
             <span className="font-mono">
               {stats.terrain.cells.toLocaleString()} @ {stats.terrain.cellSizeM} m
             </span>
-            <span>Elevation</span>
+            <span>{t('Elevation')}</span>
             <span className="font-mono">
               {stats.terrain.minM.toFixed(0)} … {stats.terrain.maxM.toFixed(0)} m
             </span>
-            <span>Land</span>
+            <span>{t('Land')}</span>
             <span className="font-mono">{(stats.terrain.landFraction * 100).toFixed(0)} %</span>
-            <span>Rivers</span>
+            <span>{t('Rivers')}</span>
             <span className="font-mono">{stats.terrain.riverKm.toFixed(0)} km</span>
-            <span>Lakes</span>
+            <span>{t('Lakes')}</span>
             <span className="font-mono">{stats.terrain.lakes}</span>
-            <span>Contours</span>
+            <span>{t('Contours')}</span>
             <span className="font-mono">every {stats.terrain.contourIntervalM} m</span>
-            <span>Era</span>
+            <span>{t('Era')}</span>
             <span className="font-mono">{stats.era.name}</span>
-            <span>Settlements</span>
+            <span>{t('Settlements')}</span>
             <span className="font-mono">{stats.settlements.length}</span>
-            <span>Blocks</span>
+            <span>{t('Blocks')}</span>
             <span className="font-mono">{stats.blocks.toLocaleString()}</span>
-            <span>Roads</span>
+            <span>{t('Roads')}</span>
             <span className="font-mono">{stats.roads.roadKm.toFixed(0)} km</span>
-            <span>Rail</span>
+            <span>{t('Rail')}</span>
             <span className="font-mono">
               {stats.rail.trackKm.toFixed(0)} km · {stats.rail.stations} stn
             </span>
-            <span>Generated in</span>
+            <span>{t('Generated in')}</span>
             <span className="font-mono">{stats.totalMs.toFixed(0)} ms</span>
           </div>
         </section>

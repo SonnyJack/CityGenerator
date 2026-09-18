@@ -155,6 +155,42 @@ Packs are validated against the schema; a missing list or an empty grammar
 is refused with the field named. The eight built-in packs in
 `packages/core/src/naming/packs.ts` are complete examples.
 
+## Publishing a registry
+
+A registry is one JSON index, hosted anywhere (GitHub Pages, a gist, any
+static host with CORS), that lists packs and example documents. The web
+app's **Gallery** shows every registry it knows next to the site's own, and
+`citygen packs <index-url>` lists one from the command line.
+
+```json
+{
+  "name": "Miskatonic packs",
+  "description": "Packs for the Massachusetts coast.",
+  "packs": [
+    { "file": "lowlands.json", "name": "Lowlands", "kind": "culturePack", "description": "…", "author": "…" },
+    { "url": "https://example.org/cannery.json", "name": "Cannery", "kind": "featureType" }
+  ],
+  "documents": [
+    {
+      "file": "arkham-1925.citygen.json",
+      "name": "Arkham, 1925",
+      "seed": "arkham",
+      "year": 1925,
+      "description": "…"
+    }
+  ]
+}
+```
+
+`file` is resolved against the index URL; `url` is absolute. `kind` is
+`culturePack` or `featureType`; entries without a known kind are ignored.
+A bare array of pack entries (or of document entries carrying a `seed`) is
+accepted too. Add a registry in the Gallery with its index URL; it is
+remembered in that browser. Documents open with **Open** or through a share
+link (`?doc=<url>`), packs import with one click, and
+`citygen packs <index-url> --doc region.citygen.json --add <name>` does the
+same headlessly.
+
 ## Sharing
 
 A pack or type is one JSON file; a document that uses it carries a copy, so

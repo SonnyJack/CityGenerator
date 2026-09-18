@@ -28,6 +28,8 @@ export interface InteriorInput {
   year: number;
   /** Street-facing edge as [a, b]; the longest edge when omitted. */
   front?: [Pt, Pt];
+  /** Display name of a facility part (use 'facility'); picks its programme. */
+  label?: string;
 }
 
 export interface Room {
@@ -294,7 +296,7 @@ export function generateInterior(input: InteriorInput): Interior {
 
   const floors: FloorPlan[] = [];
   for (let floor = 0; floor < count; floor++) {
-    const prog = programmeFor(input.use, input.kind, floor, count, area(body), input.year);
+    const prog = programmeFor(input.use, input.kind, floor, count, area(body), input.year, input.label);
     // Shuffle the non-front rooms a little so twin houses differ.
     const specs = [...prog.rooms];
     const frontRooms = specs.filter((s) => s.front);

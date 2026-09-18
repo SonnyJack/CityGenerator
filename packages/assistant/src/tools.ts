@@ -165,7 +165,11 @@ export const TOOL_SCHEMAS = {
   }),
   remove_event: z.object({ id: z.string() }),
   floor_plan: z.object({
-    id: z.string().describe('Building id (from find_features or describe_area).'),
+    id: z
+      .string()
+      .describe(
+        'Building id (from find_features or describe_area) or a facility part id (from a facility’s `parts` in find_features).',
+      ),
     floor: z
       .number()
       .int()
@@ -219,7 +223,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
     'Put a disaster on the timeline: a fire (burnt buildings rebuild over the following years), a storm (damage that heals) or a flood (low ground under water for a while). Centre, radius and year.',
   remove_event: 'Remove a disaster by id.',
   floor_plan:
-    'Rooms, doors, windows and stairs of a building, floor by floor, generated from its footprint, use and era. Use it to describe an interior or plan a scene.',
+    'Rooms, doors, windows and stairs of a building or a facility part (warehouse, hall, ward, cell block, terminal…), floor by floor, generated from its footprint, use and era. Use it to describe an interior or plan a scene.',
   undo: 'Undo the last command.',
   redo: 'Redo the last undone command.',
 };

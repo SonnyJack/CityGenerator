@@ -62,6 +62,73 @@ describe('citygen command line', () => {
     expect(JSON.parse(await readFile(doc, 'utf8')).spec.year).toBe(1955);
   });
 
+  it('lists a hosted pack registry and adds a pack to a document', async () => {
+    const { createServer } = await import('node:http');
+    const { readFile: read } = await import('node:fs/promises');
+    const lowlands = await read(
+      new URL('../../../apps/web/public/plugins/lowlands.json', import.meta.url),
+      'utf8',
+    );
+    const cannery = await read(
+      new URL('../../../apps/web/public/plugins/cannery.json', import.meta.url),
+      'utf8',
+    );
+    const server = createServer((req, res) => {
+      const body =
+        req.url === '/packs/index.json'
+          ? JSON.stringify({
+              name: 'Test registry',
+              packs: [
+                { file: 'lowlands.json', name: 'Lowlands', kind: 'culturePack', description: 'Dutch' },
+                { file: 'cannery.json', name: 'Cannery', kind: 'featureType' },
+              ],
+              documents: [{ file: '../gallery/x.citygen.json', name: 'X', seed: 'x' }],
+            })
+          : req.url === '/packs/lowlands.json'
+            ? lowlands
+            : req.url === '/packs/cannery.json'
+              ? cannery
+              : null;
+      res.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });
+      res.end(body ?? '');
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as { port: number }).port;
+    const index = `http://127.0.0.1:${port}/packs/index.json`;
+    try {
+      const dir = await mkdtemp(join(tmpdir(), 'citygen-packs-'));
+      const doc = join(dir, 'r.citygen.json');
+      const lines: string[] = [];
+      const out = (l: string) => lines.push(l);
+      await main(['new', '-o', doc, '--seed', 'packs', '--width', '4', '--height', '4'], out);
+      lines.length = 0;
+      await main(['packs', index], out);
+      expect(lines[0]).toBe('Test registry');
+      expect(lines[1]).toContain(
+        `culturePack\tLowlands\thttp://127.0.0.1:${port}/packs/lowlands.json\tDutch`,
+      );
+      expect(lines[3]).toContain(`document\tX\thttp://127.0.0.1:${port}/gallery/x.citygen.json`);
+      lines.length = 0;
+      await main(['packs', index, '--doc', doc, '--add', 'Lowlands'], out);
+      await main(['packs', index, '--doc', doc, '--add', 'Cannery'], out);
+      expect(lines[0]).toContain('added culture pack');
+      expect(lines[2]).toContain('added feature type');
+      const saved = JSON.parse(await readFile(doc, 'utf8')) as {
+        spec: { customCulturePacks: { id: string }[]; customFeatureTypes: { id: string }[] };
+      };
+      expect(saved.spec.customCulturePacks).toHaveLength(1);
+      expect(saved.spec.customFeatureTypes).toHaveLength(1);
+      // Adding again replaces rather than duplicates.
+      await main(['packs', index, '--doc', doc, '--add', 'Lowlands'], out);
+      expect((JSON.parse(await readFile(doc, 'utf8')) as typeof saved).spec.customCulturePacks).toHaveLength(
+        1,
+      );
+      await expect(main(['packs', index, '--doc', doc, '--add', 'Nope'], out)).rejects.toThrow('no pack');
+    } finally {
+      server.close();
+    }
+  });
+
   it('serves the assistant tools over MCP', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const { host } = await serveMcp(serverTransport);

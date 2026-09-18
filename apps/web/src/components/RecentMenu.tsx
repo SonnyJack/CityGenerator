@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../store.js';
 import { importFromUrl } from '../import/importFile.js';
+import { useT } from '../i18n/index.js';
 
 /** Documents stored in this browser (IndexedDB), most recent first. */
 export function RecentMenu() {
+  const t = useT();
   const recent = useApp((s) => s.recent);
   const current = useApp((s) => s.document.meta.created);
   const openRecent = useApp((s) => s.openRecent);
@@ -30,7 +32,7 @@ export function RecentMenu() {
   return (
     <div className="relative" ref={ref}>
       <button className={btn} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="listbox">
-        Open ▾
+        {t('Open ▾')}
       </button>
       {open && (
         <ul
@@ -40,7 +42,7 @@ export function RecentMenu() {
         >
           <li className="flex items-center gap-1 px-2 py-1">
             <input
-              aria-label="Document URL"
+              aria-label={t('Document URL')}
               className="min-w-0 flex-1 rounded border border-stone-300 px-1 py-0.5"
               placeholder="https://… (a raw gist or any .citygen.json)"
               value={url}
@@ -53,7 +55,7 @@ export function RecentMenu() {
               className="rounded border border-stone-300 px-1 py-0.5 hover:bg-stone-100"
               onClick={() => void importFromUrl(url).then((r) => setUrlReport(r.message))}
             >
-              Open URL
+              {t('Open URL')}
             </button>
           </li>
           {urlReport && (
@@ -76,7 +78,7 @@ export function RecentMenu() {
               {!r.key.endsWith(current) && (
                 <button
                   className="px-2 text-stone-400 hover:text-red-700"
-                  aria-label={`Forget ${r.name}`}
+                  aria-label={t('Forget {name}', { name: r.name })}
                   onClick={() => forget(r.key)}
                 >
                   ×
@@ -84,7 +86,7 @@ export function RecentMenu() {
               )}
             </li>
           ))}
-          {recent.length === 0 && <li className="px-2 py-1 text-stone-500">Nothing stored yet</li>}
+          {recent.length === 0 && <li className="px-2 py-1 text-stone-500">{t('Nothing stored yet')}</li>}
         </ul>
       )}
     </div>

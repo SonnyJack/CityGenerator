@@ -1,6 +1,7 @@
 import { settlementKindSchema, type SettlementKind } from '@citygen/core';
 import { CULTURE_PACKS, DEFAULT_POPULATION, FEATURE_TYPES } from '@citygen/core';
 import { useApp } from '../store.js';
+import { useT } from '../i18n/index.js';
 
 const KIND_LABELS: Record<SettlementKind, string> = {
   metropolis: 'Metropolis',
@@ -20,6 +21,7 @@ const KIND_LABELS: Record<SettlementKind, string> = {
 
 /** Explicit settlement list; when empty, the settlement policy draws one. */
 export function SettlementsPanel() {
+  const t = useT();
   const settlements = useApp((s) => s.document.spec.settlements);
   const doc = useApp((s) => s.document);
   const policy = useApp((s) => s.document.spec.settlementPolicy);
@@ -45,16 +47,16 @@ export function SettlementsPanel() {
 
   return (
     <section className="space-y-2" data-testid="settlements-panel">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Settlements</h2>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{t('Settlements')}</h2>
       {settlements.length === 0 && (
         <div className="space-y-1 text-xs text-stone-600">
           <p>
             Automatic: a city and {policy.count[0]}–{policy.count[1]} smaller places.
           </p>
           <label className="flex items-center gap-2">
-            <span className="w-16">Count</span>
+            <span className="w-16">{t('Count')}</span>
             <input
-              aria-label="Settlement count"
+              aria-label={t('Settlement count')}
               type="range"
               min={1}
               max={14}
@@ -88,7 +90,7 @@ export function SettlementsPanel() {
             >
               <div className="flex items-center gap-1">
                 <input
-                  aria-label={`Name of ${s.id}`}
+                  aria-label={t('Name of {id}', { id: s.id })}
                   className="min-w-0 flex-1 rounded border border-stone-300 px-1 py-0.5"
                   placeholder={s.id}
                   value={s.name ?? ''}
@@ -102,15 +104,15 @@ export function SettlementsPanel() {
                 />
                 <button
                   className="rounded border border-stone-300 px-1.5 py-0.5 hover:bg-stone-100"
-                  aria-label={`Regenerate ${s.id}`}
-                  title="Re-roll this settlement's layout"
+                  aria-label={t('Regenerate {id}', { id: s.id })}
+                  title={t("Re-roll this settlement's layout")}
                   onClick={() => regenerate(s.id)}
                 >
                   ⟳
                 </button>
                 <button
                   className="rounded border border-stone-300 px-1.5 py-0.5 hover:bg-stone-100"
-                  aria-label={`Remove ${s.id}`}
+                  aria-label={t('Remove {id}', { id: s.id })}
                   onClick={() => dispatch({ type: 'settlement.remove', id: s.id })}
                 >
                   ×
@@ -118,7 +120,7 @@ export function SettlementsPanel() {
               </div>
               <div className="mt-1 flex items-center gap-1">
                 <select
-                  aria-label={`Kind of ${s.id}`}
+                  aria-label={t('Kind of {id}', { id: s.id })}
                   className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-1 py-0.5"
                   value={s.kind}
                   onChange={(e) => {
@@ -132,12 +134,12 @@ export function SettlementsPanel() {
                 >
                   {settlementKindSchema.options.map((k) => (
                     <option key={k} value={k}>
-                      {KIND_LABELS[k]}
+                      {t(KIND_LABELS[k])}
                     </option>
                   ))}
                 </select>
                 <select
-                  aria-label={`Culture of ${s.id}`}
+                  aria-label={t('Culture of {id}', { id: s.id })}
                   className="w-24 rounded border border-stone-300 bg-white px-1 py-0.5"
                   value={s.culture ?? ''}
                   onChange={(e) =>
@@ -148,7 +150,7 @@ export function SettlementsPanel() {
                     })
                   }
                 >
-                  <option value="">region culture</option>
+                  <option value="">{t('region culture')}</option>
                   {[
                     ...doc.spec.customCulturePacks,
                     ...CULTURE_PACKS.filter((b) => !doc.spec.customCulturePacks.some((c) => c.id === b.id)),
@@ -159,7 +161,7 @@ export function SettlementsPanel() {
                   ))}
                 </select>
                 <input
-                  aria-label={`Population of ${s.id}`}
+                  aria-label={t('Population of {id}', { id: s.id })}
                   type="number"
                   min={20}
                   step={100}
@@ -182,7 +184,7 @@ export function SettlementsPanel() {
                     {f.size && f.size !== 'medium' ? ` (${f.size})` : ''}
                     <button
                       className="text-stone-400 hover:text-red-700"
-                      aria-label={`Remove ${f.type} from ${s.id}`}
+                      aria-label={t('Remove {type} from {id}', { type: f.type, id: s.id })}
                       onClick={() =>
                         dispatch({
                           type: 'settlement.update',
@@ -196,7 +198,7 @@ export function SettlementsPanel() {
                   </span>
                 ))}
                 <select
-                  aria-label={`Add facility to ${s.id}`}
+                  aria-label={t('Add facility to {id}', { id: s.id })}
                   className="rounded border border-stone-300 bg-white px-1 py-0.5"
                   value=""
                   onChange={(e) => {
@@ -214,7 +216,7 @@ export function SettlementsPanel() {
                     });
                   }}
                 >
-                  <option value="">+ facility…</option>
+                  <option value="">{t('+ facility…')}</option>
                   {[
                     ...FEATURE_TYPES.map((t) => ({ id: t.id, name: t.name })),
                     ...doc.spec.customFeatureTypes.map((t) => ({ id: t.id, name: `${t.name} (custom)` })),
@@ -239,14 +241,14 @@ export function SettlementsPanel() {
         className="rounded border border-stone-300 bg-white px-2 py-1 text-xs hover:bg-stone-100"
         onClick={add}
       >
-        + Add settlement
+        {t('+ Add settlement')}
       </button>
       {stats && settlements.length === 0 && stats.settlements.length > 0 && (
         <ul className="text-[11px] text-stone-500">
           {stats.settlements.map((s) => (
             <li key={s.id}>
-              {KIND_LABELS[s.kind as SettlementKind] ?? s.kind} · {s.population.toLocaleString()} · {s.blocks}{' '}
-              blocks{s.walled ? ' · walled' : ''} · founded {s.founded}
+              {t(KIND_LABELS[s.kind as SettlementKind] ?? s.kind)} · {s.population.toLocaleString()} ·{' '}
+              {s.blocks} blocks{s.walled ? ' · walled' : ''} · founded {s.founded}
               {s.peakPopulation > s.population * 1.03
                 ? ` · peak ${s.peakPopulation.toLocaleString()} in ${s.peakYear}, ${s.abandonedBlocks} blocks abandoned`
                 : ''}

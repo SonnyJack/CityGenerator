@@ -175,3 +175,83 @@ describe('building interiors', () => {
     expect(shack.floors[0]!.doors.some((d) => d.exterior)).toBe(true);
   });
 });
+
+describe('facility interiors', () => {
+  it('plans facility parts by name and kind, and keeps the front on the given edge', () => {
+    const warehouse = generateInterior({
+      id: 'port-1-p3',
+      footprint: rect(60, 20),
+      floors: 2,
+      use: 'facility',
+      kind: 'warehouse',
+      label: 'Wharf',
+      year: 1900,
+      front: [
+        [0, 20],
+        [60, 20],
+      ],
+    });
+    expect(warehouse.floors).toHaveLength(2);
+    const ground = warehouse.floors[0]!;
+    expect(ground.rooms.some((r) => /^bay 1/.test(r.name))).toBe(true);
+    expect(ground.rooms.some((r) => r.name === 'loading dock')).toBe(true);
+    expect(connected(ground.rooms)).toBe(true);
+    const door = ground.doors.find((d) => d.exterior)!;
+    expect(door).toBeDefined();
+    expect(Math.abs(door.at[1] - 20)).toBeLessThan(1e-6);
+    const total = ground.rooms.reduce((a, r) => a + area(r.ring), 0);
+    expect(Math.abs(total - 1200)).toBeLessThan(1);
+
+    const cells = generateInterior({
+      id: 'prison-1-p2',
+      footprint: rect(40, 12),
+      floors: 3,
+      use: 'facility',
+      kind: 'building',
+      label: 'Cell block',
+      year: 1880,
+    });
+    expect(cells.floors).toHaveLength(3);
+    expect(cells.floors[1]!.rooms.filter((r) => /^cell \d/.test(r.name)).length).toBeGreaterThanOrEqual(2);
+    // Cells are blind: no windows on their walls.
+    const cellIds = new Set(cells.floors[1]!.rooms.filter((r) => /^cell \d/.test(r.name)).map((r) => r.id));
+    expect(cells.floors[1]!.windows.every((w) => !cellIds.has(w.room))).toBe(true);
+
+    const hall = generateInterior({
+      id: 'power-1-p0',
+      footprint: rect(50, 25),
+      floors: 1,
+      use: 'facility',
+      kind: 'hall',
+      label: 'Turbine hall',
+      year: 1925,
+    });
+    expect(hall.floors[0]!.rooms.map((r) => r.name)).toContain('control room');
+    expect(hall.floors[0]!.rooms.map((r) => r.name)).toContain('turbine hall');
+    const ward = generateInterior({
+      id: 'hospital-1-p1',
+      footprint: rect(30, 10),
+      floors: 2,
+      use: 'facility',
+      kind: 'building',
+      label: 'Ward pavilion',
+      year: 1925,
+    });
+    expect(ward.floors[1]!.rooms.map((r) => r.name)).toContain('ward');
+    expect(contentHash(ward)).toBe(
+      contentHash(
+        generateInterior({
+          ...{
+            id: 'hospital-1-p1',
+            footprint: rect(30, 10),
+            floors: 2,
+            use: 'facility',
+            kind: 'building',
+            label: 'Ward pavilion',
+            year: 1925,
+          },
+        }),
+      ),
+    );
+  });
+});

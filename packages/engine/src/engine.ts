@@ -14,6 +14,7 @@ import {
   StreetIndex,
   culturePack,
   generateInterior,
+  INTERIOR_PART_KINDS,
   registerCulturePacks,
   radiusAt,
   decodeHeightmap,
@@ -684,8 +685,11 @@ export function createEngine(): EngineApi {
           ...(part
             ? {
                 part: {
+                  id: String(part.id),
                   kind: part.properties.kind,
                   ...(part.properties.name ? { name: part.properties.name } : {}),
+                  ...(part.properties.floors ? { floors: part.properties.floors } : {}),
+                  interior: INTERIOR_PART_KINDS.has(part.properties.kind),
                 },
               }
             : {}),
@@ -713,6 +717,38 @@ export function createEngine(): EngineApi {
     async interior(buildingId) {
       if (!latest) return null;
       const { towns, tiler } = latest;
+      const year = currentDoc?.spec.year ?? 1925;
+      // Facility parts (`<facility>-p<k>`): the front faces the middle of the facility.
+      const part = latest.facilities.parts.features.find((p) => String(p.id) === buildingId);
+      if (part) {
+        if (part.geometry.type !== 'Polygon' || !INTERIOR_PART_KINDS.has(part.properties.kind)) return null;
+        const owner = latest.facilities.features.features.find(
+          (f) => f.properties.id === part.properties.feature,
+        );
+        const ring = part.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+        const towards = owner ? centroidOf(owner.geometry.coordinates[0]!) : centroidOf(ring);
+        let front: [[number, number], [number, number]] | undefined;
+        let best = Infinity;
+        for (let i = 0; i + 1 < ring.length; i++) {
+          const a = ring[i]!;
+          const b = ring[i + 1]!;
+          const d = Math.hypot((a[0] + b[0]) / 2 - towards[0], (a[1] + b[1]) / 2 - towards[1]);
+          if (Math.hypot(a[0] - b[0], a[1] - b[1]) > 3 && d < best) {
+            best = d;
+            front = [a, b];
+          }
+        }
+        return generateInterior({
+          id: buildingId,
+          footprint: ring,
+          floors: part.properties.floors ?? 1,
+          use: 'facility',
+          kind: part.properties.kind,
+          label: part.properties.name,
+          year,
+          ...(front ? { front } : {}),
+        });
+      }
       const cut = buildingId.lastIndexOf('-h');
       if (cut < 0) return null;
       const blockId = buildingId.slice(0, cut);
@@ -728,7 +764,7 @@ export function createEngine(): EngineApi {
           floors: p.floors,
           use: p.use ?? 'residential',
           kind: p.kind,
-          year: typeof p.built === 'number' ? p.built : (currentDoc?.spec.year ?? 1925),
+          year: typeof p.built === 'number' ? p.built : year,
         });
       }
       return null;
@@ -938,6 +974,20 @@ export function createEngine(): EngineApi {
               type: f.properties.type,
               pinned: f.properties.pinned,
               outcome: f.properties.outcome,
+              parts: facilities.parts.features
+                .filter(
+                  (p) =>
+                    p.properties.feature === f.properties.id &&
+                    p.geometry.type === 'Polygon' &&
+                    INTERIOR_PART_KINDS.has(p.properties.kind),
+                )
+                .map((p) => ({
+                  id: String(p.id),
+                  kind: p.properties.kind,
+                  ...(p.properties.name ? { name: p.properties.name } : {}),
+                  floors: p.properties.floors ?? 1,
+                  center: centroidOf((p.geometry as Polygon).coordinates[0]!),
+                })),
             },
           });
       if (want('station') && rail)

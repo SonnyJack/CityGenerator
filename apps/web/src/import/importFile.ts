@@ -6,6 +6,7 @@ import {
 } from '@citygen/core';
 import { importOsm } from '@citygen/import';
 import { useApp } from '../store.js';
+import { t } from '../i18n/index.js';
 
 /**
  * One entry point for everything the Import button accepts: a .citygen.json
@@ -32,7 +33,7 @@ export function detectKind(name: string, text: string): ImportKind {
       if (j.format === 'citygen') return 'document';
       if (Array.isArray(j.elements)) return 'osm';
       if (j.naming && j.conventions) return 'culturePack';
-      if (j.footprint && j.parts) return 'featureType';
+      if ((j.footprintM ?? j.footprint) && j.parts) return 'featureType';
     } catch {
       return 'unknown';
     }
@@ -48,11 +49,15 @@ export function importText(name: string, text: string): ImportReport {
     switch (kind) {
       case 'document':
         importJson(text);
-        return { kind, ok: true, message: `Opened ${name}` };
+        return { kind, ok: true, message: t('Opened {name}', { name }) };
       case 'osm': {
         const r = importOsm(text, { idPrefix: `osm-${Date.now().toString(36)}` });
         if (!r.features.length)
-          return { kind, ok: false, message: `${name}: no streets, railways, buildings or water found` };
+          return {
+            kind,
+            ok: false,
+            message: t('{name}: no streets, railways, buildings or water found', { name }),
+          };
         dispatch({ type: 'authored.add', features: r.features });
         const counts = Object.entries(r.counts)
           .map(([k, v]) => `${v} ${k}`)
@@ -60,7 +65,13 @@ export function importText(name: string, text: string): ImportReport {
         return {
           kind,
           ok: true,
-          message: `${name}: ${r.features.length} features (${counts}), centre ${r.centre[0].toFixed(4)}, ${r.centre[1].toFixed(4)}`,
+          message: t('{name}: {count} features ({counts}), centre {x}, {y}', {
+            name,
+            count: r.features.length,
+            counts,
+            x: r.centre[0].toFixed(4),
+            y: r.centre[1].toFixed(4),
+          }),
         };
       }
       case 'culturePack': {
@@ -78,7 +89,12 @@ export function importText(name: string, text: string): ImportReport {
         return {
           kind,
           ok: true,
-          message: `Culture pack “${pack.name}” (${pack.id}) ${idx >= 0 ? 'replaced' : 'added'}; pick it under Culture`,
+          message: t(
+            idx >= 0
+              ? 'Culture pack “{name}” ({id}) replaced; pick it under Culture'
+              : 'Culture pack “{name}” ({id}) added; pick it under Culture',
+            { name: pack.name, id: pack.id },
+          ),
         };
       }
       case 'featureType': {
@@ -96,16 +112,23 @@ export function importText(name: string, text: string): ImportReport {
         return {
           kind,
           ok: true,
-          message: `Feature type “${type.name}” (${type.id}) ${idx >= 0 ? 'replaced' : 'added'}; request it from a settlement`,
+          message: t(
+            idx >= 0
+              ? 'Feature type “{name}” ({id}) replaced; request it from a settlement'
+              : 'Feature type “{name}” ({id}) added; request it from a settlement',
+            { name: type.name, id: type.id },
+          ),
         };
       }
       case 'heightmap':
-        return { kind, ok: false, message: 'Use the heightmap dialog for images' };
+        return { kind, ok: false, message: t('Use the heightmap dialog for images') };
       default:
         return {
           kind,
           ok: false,
-          message: `${name}: not a CityGenerator document, OSM extract, culture pack or feature type`,
+          message: t('{name}: not a CityGenerator document, OSM extract, culture pack or feature type', {
+            name,
+          }),
         };
     }
   } catch (e) {
@@ -148,7 +171,13 @@ export function importHeightmap(
   return {
     kind: 'heightmap',
     ok: true,
-    message: `Terrain from ${options.source ?? 'image'}: ${pixels.width} × ${pixels.height}, ${Math.round(spec.minM)} to ${Math.round(spec.maxM)} m`,
+    message: t('Terrain from {source}: {width} × {height}, {min} to {max} m', {
+      source: options.source ?? t('image'),
+      width: pixels.width,
+      height: pixels.height,
+      min: Math.round(spec.minM),
+      max: Math.round(spec.maxM),
+    }),
   };
 }
 

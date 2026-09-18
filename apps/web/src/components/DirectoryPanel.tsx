@@ -3,9 +3,11 @@ import { engine } from '../engine/client.js';
 import type { DirectoryEntry } from '../engine/api.js';
 import { useApp } from '../store.js';
 import { downloadText, exportDirectoryCsv, slug } from '../export/exports.js';
+import { useT } from '../i18n/index.js';
 
 /** Business and resident directory with search; click an entry to fly to it. */
 export function DirectoryPanel({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const stats = useApp((s) => s.stats);
   const doc = useApp((s) => s.document);
   const tileVersion = useApp((s) => s.tileVersion);
@@ -34,10 +36,10 @@ export function DirectoryPanel({ onClose }: { onClose: () => void }) {
   return (
     <aside className="rounded border border-stone-300 bg-white/95 p-3 text-xs shadow" data-testid="directory">
       <div className="mb-1 flex items-center justify-between">
-        <span className="font-semibold">Directory</span>
+        <span className="font-semibold">{t('Directory')}</span>
         <button
           className="rounded px-1 text-stone-500 hover:bg-stone-100"
-          aria-label="Close directory"
+          aria-label={t('Close directory')}
           onClick={onClose}
         >
           ×
@@ -45,12 +47,12 @@ export function DirectoryPanel({ onClose }: { onClose: () => void }) {
       </div>
       <div className="flex gap-1">
         <select
-          aria-label="Directory settlement"
+          aria-label={t('Directory settlement')}
           className="rounded border border-stone-300 bg-white px-1 py-0.5"
           value={settlement}
           onChange={(e) => setSettlement(e.target.value)}
         >
-          <option value="">All settlements</option>
+          <option value="">{t('All settlements')}</option>
           {(stats?.settlements ?? []).map((s) => (
             <option key={s.id} value={s.id}>
               {s.name ?? s.id}
@@ -58,16 +60,16 @@ export function DirectoryPanel({ onClose }: { onClose: () => void }) {
           ))}
         </select>
         <input
-          aria-label="Directory search"
+          aria-label={t('Directory search')}
           className="min-w-0 flex-1 rounded border border-stone-300 px-1 py-0.5"
-          placeholder="Search names, trades, streets…"
+          placeholder={t('Search names, trades, streets…')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
       <label className="mt-1 flex items-center gap-1 text-stone-600">
         <input type="checkbox" checked={businessOnly} onChange={(e) => setBusinessOnly(e.target.checked)} />
-        Businesses and institutions only
+        {t('Businesses and institutions only')}
       </label>
       <p className="mt-1 text-stone-500">
         {result.total.toLocaleString()} premises
@@ -104,7 +106,7 @@ export function DirectoryPanel({ onClose }: { onClose: () => void }) {
           )
         }
       >
-        Export CSV
+        {t('Export CSV')}
       </button>
     </aside>
   );

@@ -1,6 +1,6 @@
 # CityGenerator — Design Document
 
-Status: **Draft v0.11** (Phases 3–10 delivered; see §16)
+Status: **Draft v0.12** (Phases 3–10 delivered; see §16)
 Audience: contributors, reviewers, and anyone deciding whether to build this.
 
 CityGenerator is a browser-based procedural generator and editor for
@@ -963,6 +963,11 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v0.12** — Phase 10 third slice: facility-part interiors (programmes by
+  part name and kind, the front edge facing the facility's centre), hosted
+  pack registries (one index format for the Gallery and `citygen packs`),
+  and localisation of the interface (English keys, per-locale dictionaries
+  with a coverage test, locale in `localStorage`).
 - **v0.11** — Phase 10 second slice: building interiors (the stretch
   project from §12), the gallery, community pack index and share links.
   Implementation notes: plans are pure functions of the building id,

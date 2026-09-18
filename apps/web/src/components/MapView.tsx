@@ -22,6 +22,7 @@ import { EditorBar } from './EditorBar.js';
 import { PropertiesPanel } from './PropertiesPanel.js';
 import { DirectoryPanel } from './DirectoryPanel.js';
 import { ANNOTATION_SOURCE, AUTHORED_SOURCE, OVERLAY_SOURCE, attachEditor } from './editorMap.js';
+import { useT } from '../i18n/index.js';
 
 const SOURCE_ID = 'citygen';
 const DEM_SOURCE_ID = 'citygen-dem';
@@ -112,6 +113,7 @@ function tileUrls(version: number) {
 }
 
 export function MapView() {
+  const t = useT();
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [webglError, setWebglError] = useState<string | null>(null);
@@ -214,7 +216,9 @@ export function MapView() {
       {webglError && (
         <div className="absolute inset-0 flex items-center justify-center bg-stone-100 p-6 text-center text-sm text-stone-700">
           <div>
-            <p className="font-medium">The map view needs WebGL, which this browser could not provide.</p>
+            <p className="font-medium">
+              {t('The map view needs WebGL, which this browser could not provide.')}
+            </p>
             <p className="mt-1 text-xs text-stone-500">{webglError}</p>
           </div>
         </div>

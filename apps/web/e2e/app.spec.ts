@@ -1207,16 +1207,69 @@ test('a building opens floor plans from the inspector with rooms, doors and down
   }
   await page.getByRole('button', { name: 'Close floor plans' }).click();
   await expect(page.getByTestId('interior-panel')).toHaveCount(0);
+  // A facility part (a warehouse, hall, ward…) has plans too, from the same button.
+  const facilities = (await page.evaluate(() => window.__citygen.find({ kind: 'facility', limit: 50 }))) as {
+    id: string;
+    name: string;
+    properties: {
+      parts: { id: string; kind: string; name?: string; floors: number; center: [number, number] }[];
+    };
+  }[];
+  const part = facilities.flatMap((f) => f.properties.parts)[0];
+  expect(part).toBeDefined();
+  const partPlan = (await page.evaluate((id) => window.__citygen.interior(id), part!.id)) as {
+    floors: { rooms: { name: string; connects: string[] }[] }[];
+  };
+  expect(partPlan.floors.length).toBe(part!.floors);
+  expect(partPlan.floors[0]!.rooms.some((r) => r.connects.includes('outside'))).toBe(true);
+  await page.evaluate(([x, y]) => window.__citygen.inspectAt(x!, y!), part!.center);
+  await expect(page.getByTestId('inspector-facility')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('inspector-facility')).toContainText(part!.name ?? part!.kind);
+  await page.getByRole('button', { name: 'Floor plans' }).click();
+  await expect(page.getByTestId('interior-svg').locator('svg')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByTestId('interior-rooms')).toContainText('m²');
+  await page.getByRole('button', { name: 'Close floor plans' }).click();
 });
 
 test('the gallery opens example regions and share links open hosted documents', async ({ page }) => {
   test.setTimeout(120_000);
   await ready(page);
+  // A hosted registry elsewhere: an index that lists a pack and a document by relative path.
+  const origin = new URL(page.url()).origin;
+  await page.route('https://packs.example/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/r/index.json')
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          name: 'Miskatonic packs',
+          description: 'test registry',
+          packs: [{ file: 'cannery.json', name: 'Cannery (hosted)', kind: 'featureType', author: 'tester' }],
+          documents: [{ url: `${origin}/gallery/castle-town-1650.citygen.json`, name: 'Hosted castle town' }],
+        }),
+      });
+    if (url.pathname === '/r/cannery.json') {
+      const res = await page.request.get(`${origin}/plugins/cannery.json`);
+      return route.fulfill({ contentType: 'application/json', body: await res.text() });
+    }
+    return route.fulfill({ status: 404, body: '' });
+  });
   await page.getByRole('button', { name: 'Gallery', exact: true }).click();
   await expect(page.getByTestId('gallery-list')).toContainText('Arkham Coast');
   await expect(page.getByTestId('plugin-list')).toContainText('Lowlands');
   await page.getByTestId('plugin-list').getByRole('button', { name: 'Import' }).first().click();
   await expect(page.getByTestId('gallery-report')).toContainText('Lowlands');
+  await page.getByLabel('Registry URL').fill('https://packs.example/r/index.json');
+  await page.getByRole('button', { name: 'Add registry' }).click();
+  await expect(page.getByTestId('registry-packs')).toContainText('Cannery (hosted)');
+  await expect(page.getByTestId('registry-packs')).toContainText('tester');
+  await expect(page.getByTestId('registry-documents')).toContainText('Hosted castle town');
+  await page.getByTestId('registry-packs').getByRole('button', { name: 'Import' }).click();
+  await expect(page.getByTestId('gallery-report')).toContainText('Cannery');
+  expect(await page.evaluate(() => localStorage.getItem('citygen.registries'))).toContain('packs.example');
+  await page.getByRole('button', { name: 'Remove registry Miskatonic packs' }).click();
+  await expect(page.getByTestId('registry-packs')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('citygen.registries'))).toBe('[]');
   const v = await page.evaluate(() => window.__citygen.tileVersion());
   await page
     .getByTestId('gallery-list')
@@ -1241,4 +1294,27 @@ test('the gallery opens example regions and share links open hosted documents', 
   await page.waitForFunction(() => typeof window.__citygen !== 'undefined');
   await expect(page.getByLabel('Document name')).toHaveValue('Castle Town', { timeout: 60_000 });
   await page.waitForFunction(() => !window.location.search.includes('doc='));
+});
+
+test('the interface switches language and remembers the choice', async ({ page }) => {
+  await ready(page);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.getByLabel('Language').selectOption('fr');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
+  await expect(page.getByRole('button', { name: 'Galerie', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exporter…' })).toBeVisible();
+  await expect(page.getByLabel('Nom du document')).toBeVisible();
+  // Tool labels, table-driven labels and the status line follow.
+  await expect(page.getByRole('button', { name: 'Outil Polygone' })).toBeVisible();
+  await expect(page.getByTestId('status')).toContainText('Prêt');
+  await page.reload();
+  await page.waitForFunction(() => typeof window.__citygen !== 'undefined');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
+  await expect(page.getByRole('button', { name: 'Galerie', exact: true })).toBeVisible();
+  await page.getByLabel('Langue').selectOption('de');
+  await expect(page.getByRole('button', { name: 'Galerie', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exportieren…' })).toBeVisible();
+  await page.getByLabel('Sprache').selectOption('en');
+  await expect(page.getByRole('button', { name: 'Export…' })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('citygen.locale'))).toBe('en');
 });
