@@ -8,3 +8,66 @@ body,
   margin: 0;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Annotations rendered as DOM markers (no glyph atlas needed). */
+.citygen-annotation {
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.citygen-annotation-label {
+  padding: 1px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #1f1a17;
+  text-shadow:
+    0 0 3px #fff,
+    0 0 3px #fff,
+    0 0 3px #fff;
+}
+.citygen-annotation-marker {
+  width: 18px;
+  height: 18px;
+}
+/* MapLibre positions the marker element with an inline transform, so the pin shape lives on a pseudo-element. */
+.citygen-annotation-marker::before {
+  content: '';
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: #b91c1c;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.citygen-annotation-note {
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: #fef3c7;
+  border: 1px solid #b45309;
+  border-radius: 3px;
+  color: #78350f;
+  max-width: 14rem;
+  white-space: normal;
+}
+.citygen-annotation-note::before {
+  content: 'GM · ';
+  font-weight: 700;
+}
+.citygen-annotation-handoutFrame {
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: #b91c1c;
+  color: #fff;
+  border-radius: 2px 2px 0 0;
+}
+.citygen-annotation.is-selected {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}

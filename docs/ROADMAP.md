@@ -190,23 +190,46 @@ blocks.
 
 ## Phase 4 — Editor
 
-- [ ] Selection: click, box, lasso, by-query; properties panel; multi-select.
-- [ ] Draw: street/rail/tram/waterway/wall lines with class; zone, building,
-      water, park, facility polygons; rectangle and freehand buildings; POIs.
-- [ ] Edit: move, rotate, scale, mirror, vertex edit, split/join, offset,
-      snapping (grid, network, parcel, angle), alignment guides.
-- [ ] Brushes: terrain (raise/lower/smooth/flatten/water), zone, wealth,
-      density, vegetation, year, erase, reroll.
-- [ ] Authored vs. generated: freeze/unfreeze; regeneration around authored
-      features with conflict rules and inspector reporting.
-- [ ] Regenerate at region/settlement/district/area scope with pins kept.
-- [ ] Annotations: labels, markers, arrows, GM notes, handout frames.
-- [ ] Layers panel (show/hide/lock/opacity); undo/redo with history strip;
-      autosave; recent documents; migrations tested against fixtures.
+- [x] Tool controller in `@citygen/editor` (framework-agnostic, unit and
+      fuzz tested): navigate, select (click, shift-click, box), line, polygon,
+      rectangle, point, brush and annotate tools; vertex handles with drag,
+      insert (double-click a segment) and remove; move by drag or arrow keys;
+      rotate, scale, mirror; snapping to vertices, angles (15°, or Shift) and
+      a metre grid (Alt bypasses); Escape/Enter/Delete; split, join and
+      offset helpers.
+- [x] Draw: streets, railways, tram lines, canals and walls with kind and
+      metre width; buildings, facilities, zones (by ward), vegetation and
+      water polygons; rectangle buildings; points of interest.
+- [x] Brushes: terrain raise/lower/smooth/flatten/water (applied in the
+      terrain stage before hydrology, so rivers and coasts follow), wealth
+      and density (applied to the society fields), zone paint (overrides
+      generated wards), erase (authored features) and re-roll (blocks under
+      the stroke draw from a salted seed).
+- [x] Authored vs. generated: authored features render from a main-thread
+      GeoJSON source so edits are instant; generated buildings under authored
+      buildings, zones, streets and rails are dropped; a generated building,
+      street or block can be frozen into an authored feature (kept across
+      reseeds and year changes) or removed (a `suppress` override).
+- [x] Regenerate the whole layout or one settlement with `reseed` overrides
+      (terrain and authored features stay put); reset clears them.
+- [x] Annotations: labels, markers and GM notes as DOM markers (draggable,
+      no glyph atlas needed), handout frames as dashed rectangles; edited in
+      the properties panel; a layer toggle hides them.
+- [x] Properties panel (name, kind, width, floors, stroke radius/amount,
+      transforms), history menu (jump to any state), recent documents
+      (IndexedDB, most recent first, forget), layer toggles for authored
+      features, brush strokes and annotations.
+- [ ] Deferred: lasso and by-query selection, alignment guides, vegetation and
+      year brushes, layer lock/opacity/reorder, history thumbnails, derived
+      caches for instant reopen, arrows as a drawn annotation tool.
 
-Acceptance: Playwright e2e for every tool; geometry validity checks pass after
-each command in a fuzz test; a hand-drawn street and building survive a reseed
-and a year change.
+Acceptance (met): Playwright covers each tool (line, rectangle + select +
+move + undo, terrain and wealth brushes + erase, annotations, freeze and
+remove, regenerate and reset, recent documents and history); a fuzz test runs
+random command sequences and random pointer sequences through every tool and
+checks the document stays valid, the selection stays consistent and undo
+restores every intermediate state; the e2e "hand-drawn street survives a
+reseed and a year change" passes.
 
 ## Phase 5 — Rail and tram
 

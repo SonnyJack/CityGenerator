@@ -53,6 +53,9 @@ importers:
       '@citygen/tiles':
         specifier: workspace:*
         version: link:../../packages/tiles
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       comlink:
         specifier: ^4.4.2
         version: 4.4.2
@@ -115,6 +118,9 @@ importers:
       '@citygen/core':
         specifier: workspace:*
         version: link:../core
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       fast-json-patch:
         specifier: ^3.1.1
         version: 3.1.1

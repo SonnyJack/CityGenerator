@@ -14,6 +14,12 @@ export interface CompileOptions {
   demTileUrl: string;
   /** Per-layer visibility overrides (layer group id → visible). */
   layers?: Partial<Record<LayerGroup, boolean>>;
+  /**
+   * GeoJSON sources owned by the editor on the UI thread: hand-authored features,
+   * the in-progress draft/selection overlay and annotation frames. When set, the
+   * style declares them (empty) and styles them; the app feeds them with setData.
+   */
+  editor?: { authoredSourceId: string; overlaySourceId: string; annotationSourceId: string };
 }
 
 export type LayerGroup =
@@ -29,7 +35,9 @@ export type LayerGroup =
   | 'buildings'
   | 'parcels'
   | 'wealth'
-  | 'density';
+  | 'density'
+  | 'edits'
+  | 'annotations';
 
 const LANDCOVER_KINDS: LandcoverKind[] = [
   'snow',
@@ -43,16 +51,17 @@ const LANDCOVER_KINDS: LandcoverKind[] = [
 ];
 
 /** Pixels per metre at zoom z (512 px tiles at the equator) as a MapLibre expression factor. */
-function metresToPixels(widthProperty: string, min = 0.6): ExpressionSpecification {
+function metresToPixels(width: string | ExpressionSpecification, min = 0.6): ExpressionSpecification {
   // px = metres * 2^z / 78271.517; exponential interpolation between the z0 and z20 stops reproduces it.
+  const w: ExpressionSpecification = typeof width === 'string' ? ['get', width] : width;
   return [
     'interpolate',
     ['exponential', 2],
     ['zoom'],
     0,
-    ['max', min, ['/', ['get', widthProperty], 78271.517]],
+    ['max', min, ['/', w, 78271.517]],
     20,
-    ['max', min, ['*', ['get', widthProperty], 13.4]],
+    ['max', min, ['*', w, 13.4]],
   ];
 }
 
@@ -399,27 +408,7 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     paint: { 'line-color': p.ink, 'line-width': theme.sketch ? 1.5 : 1.2 },
   });
 
-  layers.push({
-    id: 'authored-lines',
-    type: 'line',
-    source: options.sourceId,
-    'source-layer': 'authored',
-    filter: ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'MultiLineString']],
-    layout: { visibility: visible('authored'), 'line-join': 'round', 'line-cap': 'round' },
-    paint: {
-      'line-color': ['match', ['get', 'layer'], 'rail', p.ink, 'water', p.waterLine, p.accent],
-      'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 16, 4],
-    },
-  });
-  layers.push({
-    id: 'authored-polygons',
-    type: 'fill',
-    source: options.sourceId,
-    'source-layer': 'authored',
-    filter: ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']],
-    layout: { visibility: visible('authored') },
-    paint: { 'fill-color': p.accent, 'fill-opacity': 0.35, 'fill-outline-color': p.accent },
-  });
+  if (options.editor) layers.push(...editorLayers(theme, options, visible));
 
   return {
     version: 8,
@@ -434,7 +423,332 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
         minzoom: 6,
         maxzoom: 16,
       },
+      ...(options.editor
+        ? {
+            [options.editor.authoredSourceId]: { type: 'geojson', data: EMPTY },
+            [options.editor.overlaySourceId]: { type: 'geojson', data: EMPTY },
+            [options.editor.annotationSourceId]: { type: 'geojson', data: EMPTY },
+          }
+        : {}),
     },
     layers,
   };
+}
+
+const EMPTY = { type: 'FeatureCollection', features: [] } as const;
+
+/** Highlight colour for selection and drafts; deliberately outside both palettes. */
+export const EDITOR_ACCENT = '#2563eb';
+
+/**
+ * Styling for hand-authored features, the editor overlay and annotations. Authored
+ * features carry `layer` (street, rail, …) and metre widths/radii; the overlay
+ * carries `role` (draft, selection, handle, brush, hover).
+ */
+function editorLayers(
+  theme: Theme,
+  options: CompileOptions,
+  visible: (group: LayerGroup) => 'visible' | 'none',
+): LayerSpecification[] {
+  const p = theme.palette;
+  const t = theme.town;
+  const src = options.editor!.authoredSourceId;
+  const overlay = options.editor!.overlaySourceId;
+  const ann = options.editor!.annotationSourceId;
+  const isPoly: ExpressionSpecification = ['==', ['geometry-type'], 'Polygon'];
+  const isLine: ExpressionSpecification = ['==', ['geometry-type'], 'LineString'];
+  const isPoint: ExpressionSpecification = ['==', ['geometry-type'], 'Point'];
+  const layerIn = (...ids: string[]): ExpressionSpecification => ['in', ['get', 'layer'], ['literal', ids]];
+  const wardColor: ExpressionSpecification | string = Object.keys(t.ward).length
+    ? ([
+        'match',
+        ['get', 'kind'],
+        ...Object.entries(t.ward).flat(),
+        t.plaza,
+      ] as unknown as ExpressionSpecification)
+    : p.inkMuted;
+  const out: LayerSpecification[] = [];
+
+  // Zones: tinted by ward with a dashed outline so they read as "designated", not built.
+  out.push({
+    id: 'authored-zones',
+    type: 'fill',
+    source: src,
+    filter: ['all', isPoly, layerIn('zone')],
+    layout: { visibility: visible('authored') },
+    paint: { 'fill-color': wardColor, 'fill-opacity': theme.sketch ? 0.15 : 0.45 },
+  });
+  out.push({
+    id: 'authored-zones-outline',
+    type: 'line',
+    source: src,
+    filter: ['all', isPoly, layerIn('zone')],
+    layout: { visibility: visible('authored'), 'line-join': 'round' },
+    paint: { 'line-color': p.inkMuted, 'line-width': 1.2, 'line-dasharray': [3, 2] },
+  });
+  out.push({
+    id: 'authored-vegetation',
+    type: 'fill',
+    source: src,
+    filter: ['all', isPoly, layerIn('vegetation')],
+    layout: { visibility: visible('authored') },
+    paint: {
+      'fill-color': theme.landcover.forest.color,
+      'fill-opacity': theme.sketch ? 0.3 : 0.8,
+      'fill-outline-color': p.inkMuted,
+    },
+  });
+  out.push({
+    id: 'authored-water-fill',
+    type: 'fill',
+    source: src,
+    filter: ['all', isPoly, layerIn('water')],
+    layout: { visibility: visible('authored') },
+    paint: { 'fill-color': p.water, 'fill-outline-color': p.waterLine },
+  });
+  out.push({
+    id: 'authored-buildings',
+    type: 'fill',
+    source: src,
+    filter: ['all', isPoly, layerIn('building', 'facility')],
+    layout: { visibility: visible('authored') },
+    paint: { 'fill-color': t.building, 'fill-opacity': theme.sketch ? 0.85 : 0.95 },
+  });
+  out.push({
+    id: 'authored-buildings-outline',
+    type: 'line',
+    source: src,
+    filter: ['all', isPoly, layerIn('building', 'facility')],
+    layout: { visibility: visible('authored'), 'line-join': 'round' },
+    paint: {
+      'line-color': t.buildingOutline,
+      'line-width': ['case', ['==', ['get', 'layer'], 'facility'], 1.6, 0.8],
+    },
+  });
+
+  // Lines with metre widths: streets, rail, tram, water, walls.
+  const lineColor: ExpressionSpecification = [
+    'match',
+    ['get', 'layer'],
+    'street',
+    theme.sketch ? p.ink : t.street,
+    'rail',
+    p.ink,
+    'tram',
+    p.inkMuted,
+    'water',
+    theme.sketch ? p.waterLine : p.river,
+    'wall',
+    t.wall,
+    p.accent,
+  ];
+  if (t.streetCasing) {
+    out.push({
+      id: 'authored-lines-casing',
+      type: 'line',
+      source: src,
+      filter: ['all', isLine, layerIn('street')],
+      layout: { visibility: visible('authored'), 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': t.streetCasing,
+        'line-width': metresToPixels(['+', ['get', 'widthM'], 2], 1.4),
+      },
+    });
+  }
+  out.push({
+    id: 'authored-lines',
+    type: 'line',
+    source: src,
+    filter: ['all', isLine, layerIn('street', 'rail', 'tram', 'water', 'wall')],
+    layout: { visibility: visible('authored'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': lineColor,
+      'line-width': metresToPixels('widthM', theme.sketch ? 0.9 : 0.8),
+    },
+  });
+  out.push({
+    id: 'authored-rail-ties',
+    type: 'line',
+    source: src,
+    filter: ['all', isLine, layerIn('rail')],
+    minzoom: 12,
+    layout: { visibility: visible('authored'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': p.background,
+      'line-width': metresToPixels(['*', ['get', 'widthM'], 0.4], 0.5),
+      'line-dasharray': [2, 2],
+    },
+  });
+
+  // Terrain and field strokes: translucent bands the width of the brush.
+  const strokeColor: ExpressionSpecification = [
+    'match',
+    ['coalesce', ['get', 'op'], ['get', 'field']],
+    'raise',
+    '#b45309',
+    'lower',
+    '#0369a1',
+    'smooth',
+    '#78716c',
+    'flatten',
+    '#a16207',
+    'water',
+    p.waterLine,
+    'wealth',
+    '#15803d',
+    'density',
+    '#6d28d9',
+    p.accent,
+  ];
+  out.push({
+    id: 'authored-strokes',
+    type: 'line',
+    source: src,
+    filter: ['all', isLine, layerIn('terrainEdit', 'fieldEdit')],
+    layout: { visibility: visible('edits'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': strokeColor,
+      'line-opacity': 0.22,
+      'line-width': metresToPixels(['*', ['get', 'radiusM'], 2], 2),
+    },
+  });
+  out.push({
+    id: 'authored-strokes-centre',
+    type: 'line',
+    source: src,
+    filter: ['all', isLine, layerIn('terrainEdit', 'fieldEdit')],
+    layout: { visibility: visible('edits'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': strokeColor, 'line-opacity': 0.7, 'line-width': 1, 'line-dasharray': [4, 3] },
+  });
+  out.push({
+    id: 'authored-stroke-points',
+    type: 'circle',
+    source: src,
+    filter: ['all', isPoint, layerIn('terrainEdit', 'fieldEdit')],
+    layout: { visibility: visible('edits') },
+    paint: {
+      'circle-color': strokeColor,
+      'circle-opacity': 0.22,
+      'circle-radius': metresToPixels('radiusM', 2),
+    },
+  });
+  // Zone strokes (brush zones are lines with a radius).
+  out.push({
+    id: 'authored-zone-strokes',
+    type: 'line',
+    source: src,
+    filter: ['all', isLine, layerIn('zone')],
+    layout: { visibility: visible('authored'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: {
+      'line-color': wardColor,
+      'line-opacity': theme.sketch ? 0.2 : 0.5,
+      'line-width': metresToPixels(['*', ['get', 'radiusM'], 2], 2),
+    },
+  });
+
+  out.push({
+    id: 'authored-points',
+    type: 'circle',
+    source: src,
+    filter: ['all', isPoint, layerIn('poi', 'facility', 'building')],
+    layout: { visibility: visible('authored') },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 16, 6],
+      'circle-color': p.accent,
+      'circle-stroke-color': p.background,
+      'circle-stroke-width': 1.5,
+    },
+  });
+
+  // Annotations: handout frames and arrows (labels and markers are DOM markers).
+  out.push({
+    id: 'annotation-frames',
+    type: 'line',
+    source: ann,
+    filter: ['==', ['get', 'kind'], 'handoutFrame'],
+    layout: { visibility: visible('annotations'), 'line-join': 'miter' },
+    paint: { 'line-color': '#b91c1c', 'line-width': 2, 'line-dasharray': [6, 3] },
+  });
+  out.push({
+    id: 'annotation-lines',
+    type: 'line',
+    source: ann,
+    filter: ['all', isLine, ['==', ['get', 'kind'], 'arrow']],
+    layout: { visibility: visible('annotations'), 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': '#b91c1c', 'line-width': 2.5 },
+  });
+
+  // Editor overlay: drafts, selection, brush footprint and vertex handles, always on top.
+  const role = (r: string): ExpressionSpecification => ['==', ['get', 'role'], r];
+  out.push({
+    id: 'editor-brush',
+    type: 'fill',
+    source: overlay,
+    filter: ['all', isPoly, role('brush')],
+    paint: { 'fill-color': EDITOR_ACCENT, 'fill-opacity': 0.12, 'fill-outline-color': EDITOR_ACCENT },
+  });
+  out.push({
+    id: 'editor-selection-fill',
+    type: 'fill',
+    source: overlay,
+    filter: ['all', isPoly, role('selection')],
+    paint: { 'fill-color': EDITOR_ACCENT, 'fill-opacity': 0.1 },
+  });
+  out.push({
+    id: 'editor-selection-line',
+    type: 'line',
+    source: overlay,
+    filter: ['all', ['any', isPoly, isLine], role('selection')],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': EDITOR_ACCENT, 'line-width': 2.5, 'line-opacity': 0.9 },
+  });
+  out.push({
+    id: 'editor-draft-fill',
+    type: 'fill',
+    source: overlay,
+    filter: ['all', isPoly, role('draft')],
+    paint: { 'fill-color': EDITOR_ACCENT, 'fill-opacity': 0.15 },
+  });
+  out.push({
+    id: 'editor-draft-line',
+    type: 'line',
+    source: overlay,
+    filter: ['all', ['any', isPoly, isLine], role('draft')],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': EDITOR_ACCENT, 'line-width': 2, 'line-dasharray': [2, 2] },
+  });
+  out.push({
+    id: 'editor-selection-point',
+    type: 'circle',
+    source: overlay,
+    filter: ['all', isPoint, role('selection')],
+    paint: {
+      'circle-radius': 8,
+      'circle-color': EDITOR_ACCENT,
+      'circle-opacity': 0.25,
+      'circle-stroke-color': EDITOR_ACCENT,
+      'circle-stroke-width': 2,
+    },
+  });
+  out.push({
+    id: 'editor-handles',
+    type: 'circle',
+    source: overlay,
+    filter: ['all', isPoint, role('handle')],
+    paint: {
+      'circle-radius': 4.5,
+      'circle-color': '#ffffff',
+      'circle-stroke-color': EDITOR_ACCENT,
+      'circle-stroke-width': 2,
+    },
+  });
+  out.push({
+    id: 'editor-hover',
+    type: 'line',
+    source: overlay,
+    filter: ['all', ['any', isPoly, isLine], role('hover')],
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': EDITOR_ACCENT, 'line-width': 1.5, 'line-opacity': 0.6 },
+  });
+  return out;
 }

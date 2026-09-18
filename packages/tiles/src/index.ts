@@ -1,6 +1,6 @@
 export { TileSource, TILE_EXTENT, type TileLayerInput, type TileLayerProvider } from './builder.js';
 export { encodeTileLayer, tileProjection, type TileProjection } from './mvt.js';
-export { BlockTiler } from './blocks.js';
+export { BlockTiler, type BlockTilerOptions } from './blocks.js';
 export { settlementLayers, societyLayers } from './settlementLayers.js';
 export { encodePng } from './png.js';
 export {

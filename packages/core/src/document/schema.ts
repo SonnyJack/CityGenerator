@@ -256,6 +256,12 @@ export const overrideSchema = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('remove'), target: z.string() }),
   z.object({ op: z.literal('setProperty'), target: z.string(), key: z.string(), value: z.unknown() }),
+  /** Re-roll a settlement (target = settlement id) or the whole region (target = 'region'). */
+  z.object({ op: z.literal('reseed'), target: z.string(), salt: z.string() }),
+  /** Re-roll the blocks whose centroid lies inside the polygon. */
+  z.object({ op: z.literal('reroll'), polygon: z.array(z.array(z.number()).min(2)).min(3), salt: z.string() }),
+  /** Hide a generated feature by id (e.g. a building removed by the user). */
+  z.object({ op: z.literal('suppress'), target: z.string() }),
 ]);
 export type Override = z.infer<typeof overrideSchema>;
 

@@ -29,6 +29,9 @@ const LAYER_GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'settlements', label: 'Settlements' },
   { id: 'buildings', label: 'Buildings' },
   { id: 'parcels', label: 'Parcels' },
+  { id: 'authored', label: 'Your features' },
+  { id: 'edits', label: 'Brush strokes' },
+  { id: 'annotations', label: 'Annotations' },
 ];
 
 /** A slider that dispatches on release (and on keyboard steps) rather than every pixel. */
@@ -83,6 +86,8 @@ export function GenerateDock() {
   const doc = useApp((s) => s.document);
   const dispatch = useApp((s) => s.dispatch);
   const stats = useApp((s) => s.stats);
+  const regenerate = useApp((s) => s.regenerate);
+  const reseeds = doc.overrides.filter((o) => o.op === 'reseed').length;
   const t = doc.spec.terrain;
   const patch = (path: string, value: unknown) =>
     dispatch({ type: 'spec.patch', ops: [{ op: 'replace', path, value }] });
@@ -111,6 +116,26 @@ export function GenerateDock() {
             ⟳
           </button>
         </label>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="w-16 text-stone-600">Layout</span>
+          <button
+            className={btn}
+            title="Keep the terrain and your features; re-roll settlements, roads and buildings"
+            onClick={() => regenerate('region')}
+            data-testid="regenerate-region"
+          >
+            Regenerate settlements
+          </button>
+          {reseeds > 0 && (
+            <button
+              className={btn}
+              title="Undo all regenerations"
+              onClick={() => dispatch({ type: 'override.clear', op: 'reseed' })}
+            >
+              Reset ({reseeds})
+            </button>
+          )}
+        </div>
         <label className="flex items-center gap-2 text-xs">
           <span className="w-16 text-stone-600">Size</span>
           <select

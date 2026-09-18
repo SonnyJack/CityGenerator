@@ -7,6 +7,7 @@ import { computeFlow, diffuse, distanceTo, erodeStep, fillDepressions, slopeAspe
 import { extractRivers, type RiverReach } from './rivers.js';
 import { presetShape, type TerrainPresetId } from './presets.js';
 import { DEFAULT_BIOME, type BiomeTerrainParams } from './biome.js';
+import { distToPolyline, type TerrainEdit } from '../document/authored.js';
 
 /** Water classes in the `water` mask. */
 export const WATER = { land: 0, sea: 1, lake: 2, river: 3 } as const;
@@ -26,6 +27,8 @@ export interface TerrainInput {
   cellSizeM?: number;
   /** Imported heights replacing the synthetic field (row-major, south row first). */
   imported?: { width: number; height: number; data: Float32Array; minM: number; maxM: number };
+  /** Hand-authored brush strokes applied after synthesis (DESIGN §6.1). */
+  edits?: TerrainEdit[];
 }
 
 export interface TerrainOutput {
@@ -133,6 +136,8 @@ export const terrainStage = defineStage<TerrainInput, TerrainOutput>({
         }
       }
     }
+    ctx.checkpoint();
+    applyTerrainEdits(height, input.edits ?? []);
     ctx.checkpoint();
     ctx.progress(0.25, 'heights');
 
@@ -374,6 +379,74 @@ function selectLakes(
 
 function polygonFeature<P>(id: string, rings: Ring[], properties: P): Feature<Polygon, P> {
   return { type: 'Feature', id, geometry: { type: 'Polygon', coordinates: rings }, properties };
+}
+
+/**
+ * Replay brush strokes on the heightmap. Each stroke affects cells within its
+ * radius with a smooth falloff; ops: raise/lower by `amount` metres, flatten
+ * (and water: flatten below sea level) toward `amount` metres, smooth toward
+ * the local mean with strength `amount` in [0, 1].
+ */
+export function applyTerrainEdits(height: Raster, edits: TerrainEdit[]): void {
+  for (const e of edits) {
+    if (!e.points.length) continue;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of e.points) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    const c0 = Math.max(0, Math.floor(height.col(minX - e.radiusM)));
+    const c1 = Math.min(height.width - 1, Math.ceil(height.col(maxX + e.radiusM)));
+    const r0 = Math.max(0, Math.floor(height.row(minY - e.radiusM)));
+    const r1 = Math.min(height.height - 1, Math.ceil(height.row(maxY + e.radiusM)));
+    if (c1 < c0 || r1 < r0) continue;
+    const before = e.op === 'smooth' ? new Float32Array(height.data) : null;
+    for (let row = r0; row <= r1; row++) {
+      for (let col = c0; col <= c1; col++) {
+        const x = height.x(col);
+        const y = height.y(row);
+        const d = distToPolyline(x, y, e.points);
+        if (d > e.radiusM) continue;
+        const t = 1 - d / e.radiusM;
+        const w = t * t * (3 - 2 * t);
+        const i = row * height.width + col;
+        const h = height.data[i]!;
+        switch (e.op) {
+          case 'raise':
+            height.data[i] = h + e.amount * w;
+            break;
+          case 'lower':
+            height.data[i] = h - e.amount * w;
+            break;
+          case 'flatten':
+            height.data[i] = h + (e.amount - h) * w;
+            break;
+          case 'water':
+            height.data[i] = h + (Math.min(e.amount, -2) - h) * w;
+            break;
+          case 'smooth': {
+            let sum = 0;
+            let n = 0;
+            for (let dr = -2; dr <= 2; dr++)
+              for (let dc = -2; dc <= 2; dc++) {
+                const rr = row + dr;
+                const cc = col + dc;
+                if (rr < 0 || cc < 0 || rr >= height.height || cc >= height.width) continue;
+                sum += before![rr * height.width + cc]!;
+                n++;
+              }
+            height.data[i] = h + (sum / n - h) * w * Math.min(1, Math.max(0, e.amount));
+            break;
+          }
+        }
+      }
+    }
+  }
 }
 
 function hashFloat32(data: Float32Array): string {

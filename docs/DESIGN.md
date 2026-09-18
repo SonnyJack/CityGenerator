@@ -720,7 +720,7 @@ Because buildings carry `floors`, MapLibre `fill-extrusion` gives an optional
 
 ### 9.1 Layout
 
-Map view centre with a top toolbar (tools), left dock (Generate: parameters
+Map view centre with a floating tool strip and contextual options (tools), left dock (Generate: parameters
 from the spec schema, grouped Region / Settlements / Terrain / Society /
 Networks / Features / Year), right dock (Layers & legend, Inspector,
 Assistant), bottom bar (coordinates, scale, year slider, undo history strip).
@@ -749,10 +749,20 @@ Assistant), bottom bar (coordinates, scale, year slider, undo history strip).
   building) and reported in the inspector.
 - Brush strokes are authored features too (`terrainEdit`, `fieldEdit`), so they
   are undoable, visible in the layer list, and replayed on regeneration.
+- Implementation (Phase 4): authored features live in a main-thread GeoJSON
+  source styled by the theme compiler, so drawing never waits for the engine;
+  the engine key that triggers regeneration ignores decorative layers (POIs,
+  names, annotations). Terrain strokes feed the terrain stage before
+  hydrology, field strokes the society stage, zone strokes and polygons the
+  town stage; the block tiler drops generated buildings under authored
+  buildings, zones, streets and rails, hides `suppress` targets and salts
+  blocks inside `reroll` polygons. `reseed` overrides salt the seed of the
+  siting, society, town and road stages (region) or one town.
 
 ### 9.4 History and persistence
 
-- Undo/redo over commands; a history strip with thumbnails.
+- Undo/redo over commands; a history menu that jumps to any earlier state
+  (thumbnails deferred).
 - Autosave to IndexedDB on every command (debounced); a "Recent documents"
   screen; explicit `.citygen.json` export/import; schema migrations in `core`.
 - Derived caches in IndexedDB keyed by hash for near-instant reopen.

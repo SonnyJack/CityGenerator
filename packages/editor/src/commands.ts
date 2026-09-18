@@ -5,6 +5,7 @@ import {
   geometrySchema,
   authoredPropsSchema,
   settlementSpecSchema,
+  overrideSchema,
 } from '@citygen/core';
 
 /**
@@ -42,6 +43,14 @@ export const commandSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('authored.remove'), ids: z.array(z.string()).min(1) }),
   z.object({ type: z.literal('annotation.add'), annotation: annotationSchema }),
+  z.object({
+    type: z.literal('annotation.update'),
+    id: z.string(),
+    patch: annotationSchema.partial().omit({ id: true }),
+  }),
+  z.object({ type: z.literal('override.add'), override: overrideSchema }),
+  z.object({ type: z.literal('override.remove'), index: z.number().int().min(0) }),
+  z.object({ type: z.literal('override.clear'), op: z.string().optional() }),
   z.object({ type: z.literal('annotation.remove'), ids: z.array(z.string()).min(1) }),
   z.object({
     type: z.literal('ui.set'),

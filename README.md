@@ -33,7 +33,15 @@ routed between them. A year slider moves the region through ten era
 profiles: towns keep their organic core and grow rings of Georgian grids,
 streetcar blocks, post-war suburbs and cul-de-sacs, zoned from wealth and
 density fields that you can overlay and inspect. Both an atlas and an ink
-theme render everything. The full editor is next (Phase 4).
+theme render everything.
+
+Phase 4 adds the editor: draw streets, railways, canals, walls, buildings,
+zones and points; select, move, rotate, scale, mirror and edit vertices with
+snapping; brush the terrain, wealth, density and zones; freeze generated
+buildings or remove them; regenerate a settlement or the whole layout while
+your features stay put; annotate with labels, markers, GM notes and handout
+frames; browse the history and reopen recent documents. Rail and tram
+networks are next (Phase 5).
 
 ## Development
 

@@ -14,6 +14,7 @@ export { presetShape, type TerrainPresetId, type PresetShape } from './presets.j
 export { DEFAULT_BIOME, type BiomeTerrainParams } from './biome.js';
 export {
   terrainStage,
+  applyTerrainEdits,
   landcoverStage,
   baseCellSize,
   contourInterval,

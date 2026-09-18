@@ -18,6 +18,14 @@ export function installTestApi() {
     stats: () => useApp.getState().stats,
     thumbnails: () => useApp.getState().thumbnails.length,
     inspect: (x, y) => engine().inspect(x, y),
+    generatedAt: (x, y, tol) => engine().generatedAt(x, y, tol),
+    tool: () => useApp.getState().tool,
+    setTool: (tool) => useApp.getState().setTool(tool as never),
+    setToolOptions: (patch) => useApp.getState().setToolOptions(patch as never),
+    selection: () => useApp.getState().selection,
+    generatedHit: () => useApp.getState().generatedHit,
+    recent: () => useApp.getState().recent,
+    openRecent: (key) => useApp.getState().openRecent(key),
   };
 }
 
@@ -35,6 +43,14 @@ declare global {
       stats(): unknown;
       thumbnails(): number;
       inspect(x: number, y: number): Promise<unknown>;
+      generatedAt(x: number, y: number, toleranceM: number): Promise<unknown>;
+      tool(): string;
+      setTool(tool: string): void;
+      setToolOptions(patch: Record<string, unknown>): void;
+      selection(): string[];
+      generatedHit(): unknown;
+      recent(): { key: string; name: string; seed: string }[];
+      openRecent(key: string): Promise<boolean>;
     };
   }
 }

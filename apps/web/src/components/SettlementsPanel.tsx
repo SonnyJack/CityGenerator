@@ -24,6 +24,7 @@ export function SettlementsPanel() {
   const policy = useApp((s) => s.document.spec.settlementPolicy);
   const stats = useApp((s) => s.stats);
   const dispatch = useApp((s) => s.dispatch);
+  const regenerate = useApp((s) => s.regenerate);
 
   function add() {
     const n = settlements.length + 1;
@@ -98,6 +99,14 @@ export function SettlementsPanel() {
                     })
                   }
                 />
+                <button
+                  className="rounded border border-stone-300 px-1.5 py-0.5 hover:bg-stone-100"
+                  aria-label={`Regenerate ${s.id}`}
+                  title="Re-roll this settlement's layout"
+                  onClick={() => regenerate(s.id)}
+                >
+                  ⟳
+                </button>
                 <button
                   className="rounded border border-stone-300 px-1.5 py-0.5 hover:bg-stone-100"
                   aria-label={`Remove ${s.id}`}

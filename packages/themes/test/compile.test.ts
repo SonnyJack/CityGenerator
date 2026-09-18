@@ -29,6 +29,25 @@ describe('compileStyle', () => {
     }
   });
 
+  it('adds editor sources and layers that validate in both themes', () => {
+    for (const theme of Object.values(themes)) {
+      const style = compileStyle(theme, {
+        ...options,
+        editor: { authoredSourceId: 'authored', overlaySourceId: 'editor', annotationSourceId: 'annotations' },
+      });
+      const errors = validateStyleMin(style);
+      expect(errors, errors.map((e) => e.message).join('\n')).toEqual([]);
+      expect(Object.keys(style.sources)).toEqual(expect.arrayContaining(['authored', 'editor', 'annotations']));
+      const ids = style.layers.map((l) => l.id);
+      for (const id of ['authored-lines', 'authored-buildings', 'authored-zones', 'authored-strokes', 'editor-handles', 'editor-selection-line', 'annotation-frames'])
+        expect(ids).toContain(id);
+      // Editor overlay renders above everything else.
+      expect(ids[ids.length - 1]).toBe('editor-hover');
+    }
+    // Without editor sources the tile style carries no authored layers.
+    expect(compileStyle(atlas, options).layers.some((l) => l.id.startsWith('authored'))).toBe(false);
+  });
+
   it('keeps society overlays hidden unless enabled', () => {
     const off = compileStyle(atlas, options).layers.find((l) => l.id === 'overlay-wealth')!;
     expect(off.layout?.visibility).toBe('none');

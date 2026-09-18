@@ -12,12 +12,15 @@ import {
 // bundler does not preserve. Let Vite bundle the worker (with its shared chunk) and
 // hand MapLibre the resulting URL.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
-import { lonLatToMeters, metersToLonLat } from '@citygen/core';
+import { metersToLonLat } from '@citygen/core';
 import { compileStyle, themeById, type LayerGroup } from '@citygen/themes';
 import { engine } from '../engine/client.js';
 import { useApp } from '../store.js';
 import { renderPattern } from './patterns.js';
 import { Inspector } from './Inspector.js';
+import { EditorBar } from './EditorBar.js';
+import { PropertiesPanel } from './PropertiesPanel.js';
+import { ANNOTATION_SOURCE, AUTHORED_SOURCE, OVERLAY_SOURCE, attachEditor } from './editorMap.js';
 
 const SOURCE_ID = 'citygen';
 const DEM_SOURCE_ID = 'citygen-dem';
@@ -57,6 +60,11 @@ function styleFor(themeId: string | undefined, layers: Partial<Record<LayerGroup
     demSourceId: DEM_SOURCE_ID,
     demTileUrl: DEM_URL,
     layers,
+    editor: {
+      authoredSourceId: AUTHORED_SOURCE,
+      overlaySourceId: OVERLAY_SOURCE,
+      annotationSourceId: ANNOTATION_SOURCE,
+    },
   });
 }
 
@@ -122,15 +130,13 @@ export function MapView() {
       if (/WebGL/i.test(String(e.error?.message))) setWebglError(String(e.error?.message));
     });
     map.on('style.load', () => ensurePatterns(map, useApp.getState().document.ui?.theme));
-    map.on('click', (e) => {
-      const [x, y] = lonLatToMeters([e.lngLat.lng, e.lngLat.lat]);
-      useApp.getState().inspect(x, y);
-    });
     map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
     map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
+    const detachEditor = attachEditor(map);
     window.__citygenMap = map;
     mapRef.current = map;
     return () => {
+      detachEditor();
       map.remove();
       mapRef.current = null;
     };
@@ -145,8 +151,10 @@ export function MapView() {
       (map.getSource(SOURCE_ID) as VectorTileSource | undefined)?.setTiles([urls.vector]);
       (map.getSource(DEM_SOURCE_ID) as RasterDEMTileSource | undefined)?.setTiles([urls.dem]);
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once('load', apply);
+    // After a setStyle the sources exist before the style reports loaded, and the map's
+    // one-time 'load' event has already fired, so wait for 'style.load' instead.
+    if (map.getSource(SOURCE_ID)) apply();
+    else map.once('style.load', apply);
   }, [tileVersion]);
 
   // Theme or layer visibility changes: swap the style (sources keep the current tile version).
@@ -184,14 +192,18 @@ export function MapView() {
     const [w, s] = metersToLonLat([-extent.widthM / 2, -extent.heightM / 2]);
     const [e, n] = metersToLonLat([extent.widthM / 2, extent.heightM / 2]);
     const fit = () => map.fitBounds([w, s, e, n], { padding: 24, duration: 0 });
-    if (map.isStyleLoaded()) fit();
+    if (map.loaded()) fit();
     else map.once('load', fit);
   }, [extent.widthM, extent.heightM]);
 
   return (
     <div className="relative h-full w-full" data-testid="map">
       <div ref={container} className="h-full w-full" />
-      <Inspector />
+      <EditorBar />
+      <div className="absolute right-3 top-3 z-10 flex max-h-[calc(100%-1.5rem)] w-72 flex-col gap-2 overflow-y-auto">
+        <PropertiesPanel />
+        <Inspector />
+      </div>
       {webglError && (
         <div className="absolute inset-0 flex items-center justify-center bg-stone-100 p-6 text-center text-sm text-stone-700">
           <div>

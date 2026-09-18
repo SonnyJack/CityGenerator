@@ -1,3 +1,4 @@
+import type { Geometry } from 'geojson';
 import type { MapDocument } from '@citygen/core';
 
 /** Contract between the UI thread and the engine worker. */
@@ -20,6 +21,15 @@ export interface EngineApi {
   fixtureHash(): Promise<string>;
   /** What is at a world position: terrain, society fields and the zone with its explanation. */
   inspect(x: number, y: number): Promise<Inspection | null>;
+  /** The generated building, street or patch under a point (for freeze/remove), or null. */
+  generatedAt(x: number, y: number, toleranceM: number): Promise<GeneratedHit | null>;
+}
+
+export interface GeneratedHit {
+  layer: 'buildings' | 'streets' | 'patches';
+  id: string;
+  geometry: Geometry;
+  properties: Record<string, unknown>;
 }
 
 export interface Inspection {

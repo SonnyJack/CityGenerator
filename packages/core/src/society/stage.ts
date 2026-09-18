@@ -5,6 +5,7 @@ import { Simplex2, fbm } from '../raster/noise.js';
 import { contourPolygons, smoothLine, simplifyLine } from '../raster/contours.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { SettlementSite } from '../settlement/siting.js';
+import { distToPolyline, type FieldEdit } from '../document/authored.js';
 
 /**
  * Region stage R4: wealth and density fields (DESIGN §6.2). Both are scalar
@@ -33,6 +34,8 @@ export interface SocietyInput {
   windFrom?: number;
   /** Optional nuisance sources: [x, y, radiusM, strength]. */
   nuisance?: [number, number, number, number][];
+  /** Hand-painted adjustments applied after the model. */
+  edits?: FieldEdit[];
 }
 
 export const WEALTH_CLASSES = ['slum', 'poor', 'modest', 'comfortable', 'affluent', 'elite'] as const;
@@ -69,7 +72,7 @@ export const societyStage = defineStage<SocietyInput, SocietyOutput>({
   version: 1,
   seedOf: (i) => i.seed,
   keyOf: (i) =>
-    `${i.terrain.key}|${i.seed}|${i.year}|${JSON.stringify([i.wealth, i.density, i.inequality, i.windFrom, i.nuisance])}|${JSON.stringify(i.sites.map((s) => [s.id, s.center, s.population, s.radiusM]))}`,
+    `${i.terrain.key}|${i.seed}|${i.year}|${JSON.stringify([i.wealth, i.density, i.inequality, i.windFrom, i.nuisance, i.edits])}|${JSON.stringify(i.sites.map((s) => [s.id, s.center, s.population, s.radiusM]))}`,
   run(input, ctx) {
     const { terrain, sites, year } = input;
     const fine = terrain.height;
@@ -168,6 +171,23 @@ export const societyStage = defineStage<SocietyInput, SocietyOutput>({
         landValue[i] = 0.5 * density[i]! + 0.5 * wealth[i]!;
       }
       if ((row & 63) === 0) ctx.checkpoint();
+    }
+    // Painted adjustments: smooth falloff from the stroke, clamped to (0, 1] so land stays land.
+    for (const e of input.edits ?? []) {
+      const target = e.field === 'wealth' ? wealth : density;
+      for (let row = 0; row < rows; row++) {
+        const y = grid.y(row);
+        for (let col = 0; col < width; col++) {
+          const i = row * width + col;
+          if (target[i] === 0) continue;
+          const d = distToPolyline(grid.x(col), y, e.points);
+          if (d > e.radiusM) continue;
+          const t = 1 - d / e.radiusM;
+          const w = t * t * (3 - 2 * t);
+          target[i] = Math.min(1, Math.max(0.001, target[i]! + e.delta * w));
+          landValue[i] = 0.5 * density[i]! + 0.5 * wealth[i]!;
+        }
+      }
     }
     ctx.progress(0.6, 'fields');
 

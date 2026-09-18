@@ -19,6 +19,7 @@ import { FILL_WARDS, WARDS, type WardContext, type WardId } from './wards.js';
 import type { EraParams } from './eras.js';
 import type { SocietyOutput } from '../society/stage.js';
 import { generateRings, growthRings, modernCoreZone, modernZone } from './rings.js';
+import { distToPolyline, type ZoneEdit } from '../document/authored.js';
 import type { Ring } from '../raster/contours.js';
 
 /**
@@ -40,6 +41,10 @@ export interface TownInput {
   eras?: EraParams[];
   /** Wealth and density fields for modern zoning; when omitted, ring blocks use a modest default. */
   society?: SocietyOutput;
+  /** Extra seed material from reseed overrides; changes every random choice of this town. */
+  salt?: string;
+  /** Hand-authored zone polygons and strokes that override generated wards. */
+  zoneEdits?: ZoneEdit[];
 }
 
 export interface BlockRecipe {
@@ -101,9 +106,9 @@ const STREET_HALF_WIDTH = 2;
 export const townStage = defineStage<TownInput, TownOutput>({
   id: 'town',
   version: 1,
-  seedOf: (i) => `${i.seed}/${i.site.id}`,
+  seedOf: (i) => `${i.seed}/${i.site.id}${i.salt ? `/${i.salt}` : ''}`,
   keyOf: (i) =>
-    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}`,
+    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}|${i.salt ?? ''}|${JSON.stringify(i.zoneEdits ?? [])}`,
   run(input, ctx) {
     const { site, terrain, year } = input;
     const rng = ctx.rng;
@@ -476,7 +481,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
         ring,
         ward: p.ward,
         areaM2: area(ring),
-        seed: `${input.seed}/settlement:${id}/block:${p.index}`,
+        seed: `${input.seed}${input.salt ? `/${input.salt}` : ''}/settlement:${id}/block:${p.index}`,
         elevationM: p.elevation,
       });
     }
@@ -516,11 +521,32 @@ export const townStage = defineStage<TownInput, TownOutput>({
           ring: b.ring,
           ward: zone,
           areaM2: area(b.ring),
-          seed: `${input.seed}/settlement:${id}/ring:${k}`,
+          seed: `${input.seed}${input.salt ? `/${input.salt}` : ''}/settlement:${id}/ring:${k}`,
           elevationM: height.sample(c[0], c[1]),
         });
       });
       rings.streets.forEach((st, k) => pushLine(st.points, st.cls, 1000 + k));
+    }
+    // Authored zones override generated wards for the patches they cover (DESIGN §9.3).
+    if (input.zoneEdits?.length) {
+      const covers = (x: number, y: number, e: ZoneEdit) =>
+        e.ring ? pointInRing(x, y, e.ring) : e.points ? distToPolyline(x, y, e.points) <= (e.radiusM ?? 80) : false;
+      const zoneFor = (ring: Ring): ZoneEdit | undefined => {
+        const c = centroid(ring);
+        return input.zoneEdits!.find((e) => covers(c[0], c[1], e));
+      };
+      for (const f of patchFeatures) {
+        const ring = f.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]);
+        const e = zoneFor(ring);
+        if (e && e.ward in WARDS) {
+          f.properties.ward = e.ward as WardId;
+          f.properties.why = `${e.ward}: authored zone ${e.id}`;
+        }
+      }
+      for (const b of blocks) {
+        const e = zoneFor(b.ring);
+        if (e && e.ward in WARDS) b.ward = e.ward as WardId;
+      }
     }
     return {
       key: ctx.key,

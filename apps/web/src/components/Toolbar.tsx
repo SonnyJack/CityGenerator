@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 import { useApp } from '../store.js';
+import { HistoryMenu } from './HistoryMenu.js';
+import { RecentMenu } from './RecentMenu.js';
 
 export function Toolbar() {
   const doc = useApp((s) => s.document);
@@ -37,7 +39,7 @@ export function Toolbar() {
   return (
     <header className="flex flex-wrap items-center gap-2 border-b border-stone-300 bg-stone-50 px-3 py-2 text-sm">
       <span className="font-semibold tracking-tight">CityGenerator</span>
-      <span className="text-xs text-stone-500">Phase 3</span>
+      <span className="text-xs text-stone-500">Phase 4</span>
 
       <label className="ml-4 flex items-center gap-1">
         <span className="text-stone-600">Name</span>
@@ -55,9 +57,11 @@ export function Toolbar() {
         <button className={btn} onClick={redo} disabled={!canRedo} aria-label="Redo">
           Redo
         </button>
+        <HistoryMenu />
         <button className={btn} onClick={() => newDocument()}>
           New
         </button>
+        <RecentMenu />
         <button className={btn} onClick={() => fileInput.current?.click()}>
           Import…
         </button>

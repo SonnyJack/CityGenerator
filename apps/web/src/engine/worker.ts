@@ -11,6 +11,11 @@ import {
   townStage,
   LANDCOVER,
   pointInRing,
+  distToPolyline,
+  fieldEdits,
+  reseedSalt,
+  terrainEdits,
+  zoneEdits,
   type LandcoverOutput,
   type MapDocument,
   type SitingOutput,
@@ -31,7 +36,7 @@ import {
   terrainLayers,
   type DemSampler,
 } from '@citygen/tiles';
-import type { EngineApi, EngineStats, Thumbnail } from './api.js';
+import type { EngineApi, EngineStats, GeneratedHit, Thumbnail } from './api.js';
 
 /**
  * Engine worker: runs pipeline stages off the UI thread and serves vector and
@@ -51,11 +56,14 @@ let latest: {
   society: SocietyOutput;
   siting: SitingOutput;
   towns: TownOutput[];
+  tiler: BlockTiler;
 } | null = null;
 
 function terrainInput(doc: MapDocument, cellSizeM?: number): TerrainInput {
   const t = doc.spec.terrain;
+  const edits = terrainEdits(doc);
   return {
+    ...(edits.length ? { edits } : {}),
     seed: doc.spec.seed,
     extent: doc.spec.extent,
     preset: t.preset,
@@ -94,12 +102,16 @@ const api: EngineApi = {
       { signal },
     );
 
-    // Settlements: siting, one town stage per site, then roads between them.
+    // Settlements: siting, one town stage per site, then roads between them. A
+    // region-wide reseed salts everything downstream of terrain; a settlement
+    // reseed salts only that town.
+    const regionSalt = reseedSalt(doc.overrides, 'region');
+    const seed = regionSalt ? `${doc.spec.seed}/${regionSalt}` : doc.spec.seed;
     const t3 = performance.now();
     const siting = await runner.run(
       sitingStage,
       {
-        seed: doc.spec.seed,
+        seed,
         terrain,
         year: doc.spec.year,
         settlements: doc.spec.settlements,
@@ -108,43 +120,72 @@ const api: EngineApi = {
       { signal },
     );
     const era = eraForYear(doc.spec.year);
+    const edits = fieldEdits(doc);
     const society = await runner.run(
       societyStage,
       {
-        seed: doc.spec.seed,
+        seed,
         terrain,
         sites: siting.sites,
         year: doc.spec.year,
         wealth: doc.spec.society.wealth,
         density: doc.spec.society.density,
         inequality: doc.spec.society.inequality,
+        ...(edits.length ? { edits } : {}),
       },
       { signal },
     );
     const eras = eraParams();
+    const zones = zoneEdits(doc);
     const towns: TownOutput[] = [];
     for (const site of siting.sites) {
       const blockSizeM = site.spec.layout.blockSizeM ?? era.blockSizeM.core;
+      // Settlement salts exclude the region salt, which is already in `seed`.
+      const salt = reseedSalt(
+        doc.overrides.filter((o) => o.op !== 'reseed' || o.target !== 'region'),
+        site.id,
+      );
       towns.push(
         await runner.run(
           townStage,
-          { seed: doc.spec.seed, site, terrain, year: doc.spec.year, blockSizeM, eras, society },
+          {
+            seed,
+            site,
+            terrain,
+            year: doc.spec.year,
+            blockSizeM,
+            eras,
+            society,
+            ...(salt ? { salt } : {}),
+            ...(zones.length ? { zoneEdits: zones } : {}),
+          },
           { signal },
         ),
       );
     }
     const settlementsMs = performance.now() - t3;
     const t4 = performance.now();
-    const roads = await runner.run(
-      roadsStage,
-      { seed: doc.spec.seed, terrain, sites: siting.sites },
-      { signal },
-    );
+    const roads = await runner.run(roadsStage, { seed, terrain, sites: siting.sites }, { signal });
     const roadsMs = performance.now() - t4;
 
     const t2 = performance.now();
     version += 1;
     const blocks = towns.flatMap((t) => t.blocks);
+    // Authored geometry wins over generated buildings; overrides hide or re-roll them.
+    const tiler = new BlockTiler(blocks, doc.spec.year, {
+      minZoom: 13,
+      authored: doc.authored.features.filter((f) =>
+        ['building', 'zone', 'facility', 'street', 'rail', 'tram', 'water', 'vegetation'].includes(
+          f.properties.layer,
+        ),
+      ),
+      suppressIds: doc.overrides.flatMap((o) => (o.op === 'suppress' || o.op === 'remove' ? [o.target] : [])),
+      rerolls: doc.overrides.flatMap((o) =>
+        o.op === 'reroll'
+          ? [{ polygon: o.polygon.map((p) => [p[0]!, p[1]!] as [number, number]), salt: o.salt }]
+          : [],
+      ),
+    });
     source = new TileSource(
       [
         { name: 'region', features: { type: 'FeatureCollection', features: [outline.boundary] } },
@@ -152,12 +193,11 @@ const api: EngineApi = {
         ...terrainLayers(terrain, landcover, options.sketch ? { sketch: { seed: doc.spec.seed } } : {}),
         ...settlementLayers(towns, roads, siting),
         ...societyLayers(society),
-        { name: 'authored', features: doc.authored },
       ],
       version,
-      [new BlockTiler(blocks, doc.spec.year, { minZoom: 13 })],
+      [tiler],
     );
-    latest = { terrain, landcover, society, siting, towns };
+    latest = { terrain, landcover, society, siting, towns, tiler };
     dem = { sampler: createDemSampler(terrain, doc.spec.seed), extent: doc.spec.extent };
     const tilesMs = performance.now() - t2;
 
@@ -276,6 +316,41 @@ const api: EngineApi = {
       settlement,
       patch,
     };
+  },
+
+  async generatedAt(x, y, toleranceM) {
+    if (!latest) return null;
+    const { towns, tiler } = latest;
+    const asHit = (
+      layer: GeneratedHit['layer'],
+      f: { id?: string | number; geometry: GeneratedHit['geometry']; properties: unknown },
+    ): GeneratedHit => ({
+      layer,
+      id: String(f.id),
+      geometry: f.geometry,
+      properties: (f.properties ?? {}) as Record<string, unknown>,
+    });
+    for (const town of towns) {
+      if (Math.hypot(x - town.center[0], y - town.center[1]) > town.radiusM * 2) continue;
+      // Buildings first (smallest), then streets, then the patch.
+      for (const block of town.blocks) {
+        if (!pointInRing(x, y, block.ring)) continue;
+        for (const b of tiler.model(block).buildings) {
+          const ring = b.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+          if (pointInRing(x, y, ring)) return asHit('buildings', b);
+        }
+      }
+      for (const st of town.streets.features) {
+        const pts = st.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number]);
+        const w = st.properties.class === 'artery' ? 10 : 6;
+        if (distToPolyline(x, y, pts) <= Math.max(toleranceM, w / 2)) return asHit('streets', st);
+      }
+      for (const p of town.patches.features) {
+        const ring = p.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+        if (pointInRing(x, y, ring)) return asHit('patches', p);
+      }
+    }
+    return null;
   },
 };
 

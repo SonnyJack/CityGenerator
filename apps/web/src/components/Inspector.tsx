@@ -7,10 +7,7 @@ export function Inspector() {
   if (!inspection) return null;
   const i = inspection;
   return (
-    <aside
-      className="absolute right-3 top-3 z-10 w-72 rounded border border-stone-300 bg-white/95 p-3 text-xs shadow"
-      data-testid="inspector"
-    >
+    <aside className="rounded border border-stone-300 bg-white/95 p-3 text-xs shadow" data-testid="inspector">
       <div className="mb-1 flex items-center justify-between">
         <span className="font-semibold">Inspector</span>
         <button

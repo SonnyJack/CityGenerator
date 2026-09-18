@@ -86,6 +86,23 @@ export function applyCommand(doc: MapDocument, command: Command, now: string): A
       }
       next.annotations.push(command.annotation);
       break;
+    case 'annotation.update': {
+      const a = next.annotations.find((x) => x.id === command.id);
+      if (!a) throw new CommandError(`Annotation "${command.id}" not found`);
+      Object.assign(a, command.patch);
+      break;
+    }
+    case 'override.add':
+      next.overrides.push(command.override);
+      break;
+    case 'override.remove':
+      if (command.index >= next.overrides.length)
+        throw new CommandError(`No override at index ${command.index}`);
+      next.overrides.splice(command.index, 1);
+      break;
+    case 'override.clear':
+      next.overrides = command.op ? next.overrides.filter((o) => o.op !== command.op) : [];
+      break;
     case 'annotation.remove': {
       const ids = new Set(command.ids);
       next.annotations = next.annotations.filter((a) => !ids.has(a.id));
