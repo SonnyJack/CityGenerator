@@ -306,11 +306,13 @@ export function placeFeatures(
 
     if (req.pin) {
       const axis: Pt = [Math.cos(req.pin.rotation), Math.sin(req.pin.rotation)];
+      // A pin may carry a drawn footprint: the works is then laid out inside the ground the
+      // hand gave it, however that compares with the size the type would have taken.
       const frame: Frame = {
         center: [req.pin.x, req.pin.y],
         axis,
-        lengthM: realL * compression,
-        widthM: realW * compression,
+        lengthM: req.pin.lengthM ?? realL * compression,
+        widthM: req.pin.widthM ?? realW * compression,
       };
       const info = candidateInfo(frame, host, ctx);
       const problems = type.hard.map((h) => h(info)).filter((r): r is string => !!r);

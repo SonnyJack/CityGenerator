@@ -132,6 +132,11 @@ export const featureRequestSchema = z.object({
   size: z.enum(['small', 'medium', 'large']).optional(),
   pin: z.object({ x: z.number(), y: z.number(), rotation: z.number().default(0) }).optional(),
   lock: z.boolean().default(false),
+  /**
+   * The settlement a region-level request belongs to, when it is not listed under that
+   * settlement: a facility drawn by hand in a town the region generated, say.
+   */
+  settlement: z.string().optional(),
   hint: z.string().optional(),
   params: z.record(z.string(), z.unknown()).optional(),
 });
@@ -299,6 +304,9 @@ export const overrideSchema = z.discriminatedUnion('op', [
     x: z.number(),
     y: z.number(),
     rotation: z.number().default(0),
+    /** A drawn footprint: the facility is laid out inside this frame instead of its own size. */
+    lengthM: z.number().positive().optional(),
+    widthM: z.number().positive().optional(),
   }),
   z.object({ op: z.literal('remove'), target: z.string() }),
   z.object({ op: z.literal('setProperty'), target: z.string(), key: z.string(), value: z.unknown() }),

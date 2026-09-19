@@ -495,4 +495,11 @@ export const de: Record<string, string> = {
   Lock: 'Sperre',
   'Draw {layer} above': '{layer} darüber zeichnen',
   'Draw {layer} below': '{layer} darunter zeichnen',
+  Type: 'Typ',
+  'Facility type': 'Anlagentyp',
+  'Facility size': 'Anlagengröße',
+  small: 'klein',
+  large: 'groß',
+  'Drag the ground a works, a port or an institution stands on; it is laid out inside it':
+    'Ziehen Sie das Gelände eines Werks, Hafens oder einer Einrichtung auf; sie wird darin angelegt',
 };

@@ -572,3 +572,77 @@ describe('locked layers', () => {
     expect([...h.tools.selection]).toEqual(['street-1']);
   });
 });
+
+describe('the facility tool', () => {
+  it('asks for a facility on the ground it was drawn on, pinned to that footprint', () => {
+    const h = harness();
+    h.tools.setTool('facility');
+    h.tools.setOptions({ facilityType: 'industry.gasworks', facilitySize: 'large' });
+    // A rectangle 400 m east-west by 200 m north-south.
+    h.tools.pointerDown([-200, -100]);
+    h.tools.pointerMove([200, 100]);
+    h.tools.pointerUp([200, 100]);
+    const spec = h.doc().spec.features;
+    expect(spec).toHaveLength(1);
+    expect(spec[0]).toMatchObject({ type: 'industry.gasworks', size: 'large', lock: true });
+    const pin = h.doc().overrides.find((o) => o.op === 'pin')!;
+    expect(pin).toMatchObject({ target: spec[0]!.id, x: 0, y: 0, lengthM: 400, widthM: 200, rotation: 0 });
+
+    // A tall rectangle is the same works turned a quarter: the long side is its length.
+    h.tools.pointerDown([1000, 0]);
+    h.tools.pointerMove([1100, 600]);
+    h.tools.pointerUp([1100, 600]);
+    const second = h.doc().overrides.filter((o) => o.op === 'pin')[1]!;
+    expect(second).toMatchObject({ lengthM: 600, widthM: 100 });
+    expect((second as { rotation: number }).rotation).toBeCloseTo(Math.PI / 2, 6);
+
+    // A click with no drag asks for nothing.
+    h.tools.pointerDown([3000, 3000]);
+    h.tools.pointerUp([3000, 3000]);
+    expect(h.doc().spec.features).toHaveLength(2);
+  });
+
+  it('gives the facility to the settlement it was drawn in, when the host knows one', () => {
+    const bus = new CommandBus(createDocument({ now: NOW, seed: 'facility' }), { now: () => NOW });
+    bus.dispatch({
+      type: 'settlement.add',
+      settlement: {
+        id: 'arkham',
+        kind: 'town',
+        population: 9000,
+        layout: { streetPattern: 'mixed' },
+        features: [],
+      },
+    });
+    let n = 0;
+    const tools = new ToolController({
+      document: () => bus.document,
+      dispatch: (c) => bus.dispatch(c),
+      changed: () => {},
+      newId: (p) => `${p}-${++n}`,
+      settlementAt: (p) => (Math.hypot(p[0], p[1]) < 500 ? 'arkham' : null),
+    });
+    tools.setTool('facility');
+    tools.setOptions({ facilityType: 'institution.hospital' });
+    tools.pointerDown([-100, -50]);
+    tools.pointerMove([100, 50]);
+    tools.pointerUp([100, 50]);
+    // The request says which settlement it belongs to, so a town the region generated can
+    // own a hand-drawn works without being written into the spec.
+    expect(bus.document.spec.features).toHaveLength(1);
+    expect(bus.document.spec.features[0]).toMatchObject({
+      type: 'institution.hospital',
+      settlement: 'arkham',
+    });
+    expect(bus.document.overrides[0]).toMatchObject({
+      op: 'pin',
+      target: bus.document.spec.features[0]!.id,
+    });
+    // Drawn out in the region, it stands on its own.
+    tools.pointerDown([5000, 5000]);
+    tools.pointerMove([5200, 5100]);
+    tools.pointerUp([5200, 5100]);
+    expect(bus.document.spec.features).toHaveLength(2);
+    expect(bus.document.spec.features[1]!.settlement).toBeUndefined();
+  });
+});

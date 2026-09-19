@@ -621,3 +621,57 @@ test('the drawn-layers panel locks a layer, fades it and changes the draw order'
   d = await doc(page);
   expect(d.authored.features).toHaveLength(2);
 });
+
+test('the facility tool draws a works on the ground it was given', async ({ page }) => {
+  test.setTimeout(180_000); // a regeneration from the facilities up
+  await ready(page);
+  const [cx, cy] = await townCenter(page);
+  await jumpTo(page, cx, cy, 14);
+  await page.keyboard.press('f');
+  expect(await page.evaluate(() => window.__citygen.tool())).toBe('facility');
+  await page.getByLabel('Facility type').selectOption('industry.gasworks');
+  await page.getByLabel('Facility size').selectOption('medium');
+
+  // Drag the ground for it, a little out from the centre.
+  const a = await screen(page, cx + 400, cy + 250);
+  const b = await screen(page, cx + 800, cy + 430);
+  await regenerated(page, async () => {
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 6 });
+    await page.mouse.up();
+  });
+
+  // The request is in the document, pinned to the drawn footprint.
+  type Doc2 = {
+    spec: {
+      features: { id: string; type: string }[];
+      settlements: { features: { id: string; type: string }[] }[];
+    };
+    overrides: { op: string; target?: string; lengthM?: number; widthM?: number }[];
+  };
+  const d = (await page.evaluate(() => window.__citygen.getDocument())) as unknown as Doc2;
+  const asked = [...d.spec.features, ...d.spec.settlements.flatMap((s) => s.features)].find(
+    (f) => f.type === 'industry.gasworks',
+  )!;
+  expect(asked).toBeDefined();
+  const pin = d.overrides.find((o) => o.op === 'pin' && o.target === asked.id)!;
+  expect(pin.lengthM).toBeGreaterThan(300);
+  expect(pin.widthM).toBeGreaterThan(100);
+
+  // The engine placed it where it was drawn, at that size.
+  type Stats = {
+    facilities: { list: { id: string; type: string; center: [number, number] }[]; failures: unknown[] };
+  };
+  const stats = (await page.evaluate(() => window.__citygen.stats())) as unknown as Stats;
+  const placed = stats.facilities.list.find((f) => f.id === asked.id)!;
+  expect(placed).toBeDefined();
+  expect(Math.abs(placed.center[0] - (cx + 600))).toBeLessThan(40);
+  expect(Math.abs(placed.center[1] - (cy + 340))).toBeLessThan(40);
+  const info = (await page.evaluate(([x, y]) => window.__citygen.inspect(x, y), placed.center)) as {
+    facility?: { id: string; lengthM: number; pinned: boolean };
+  };
+  expect(info.facility?.id).toBe(asked.id);
+  expect(info.facility?.pinned).toBe(true);
+  expect(Math.abs((info.facility?.lengthM ?? 0) - (pin.lengthM ?? 0))).toBeLessThan(1);
+});

@@ -497,4 +497,11 @@ export const es: Record<string, string> = {
   Lock: 'Bloqueo',
   'Draw {layer} above': 'Dibujar {layer} encima',
   'Draw {layer} below': 'Dibujar {layer} debajo',
+  Type: 'Tipo',
+  'Facility type': 'Tipo de instalación',
+  'Facility size': 'Tamaño de la instalación',
+  small: 'pequeña',
+  large: 'grande',
+  'Drag the ground a works, a port or an institution stands on; it is laid out inside it':
+    'Arrastre el terreno de una fábrica, un puerto o una institución; se dispone dentro',
 };

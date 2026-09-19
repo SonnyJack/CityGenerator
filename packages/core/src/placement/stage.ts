@@ -39,7 +39,7 @@ export interface FacilitiesInput {
   requests: PlacementRequest[];
   /** Ids of default requests to drop, and pins to apply. */
   removed: string[];
-  pins: { target: string; x: number; y: number; rotation: number }[];
+  pins: { target: string; x: number; y: number; rotation: number; lengthM?: number; widthM?: number }[];
   customTypes: CustomFeatureType[];
   scaleCompression: boolean;
   windFrom?: number;
@@ -135,7 +135,14 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
     for (const id of removed) byId.delete(id);
     for (const pin of input.pins) {
       const r = byId.get(pin.target);
-      if (r) r.pin = { x: pin.x, y: pin.y, rotation: pin.rotation };
+      if (r)
+        r.pin = {
+          x: pin.x,
+          y: pin.y,
+          rotation: pin.rotation,
+          ...(pin.lengthM ? { lengthM: pin.lengthM } : {}),
+          ...(pin.widthM ? { widthM: pin.widthM } : {}),
+        };
     }
     // Rail yards already occupy land: register them so facilities avoid them.
     if (input.rail) {

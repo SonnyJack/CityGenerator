@@ -254,6 +254,7 @@ export function createEngine(): EngineApi {
             id: f.id,
             type: f.type,
             size: f.size ?? 'medium',
+            ...(f.settlement ? { settlement: f.settlement } : {}),
             ...(f.pin ? { pin: f.pin } : {}),
             ...(f.params ? { params: f.params } : {}),
           })),
@@ -270,7 +271,18 @@ export function createEngine(): EngineApi {
         ],
         removed: doc.overrides.flatMap((o) => (o.op === 'remove' ? [o.target] : [])),
         pins: doc.overrides.flatMap((o) =>
-          o.op === 'pin' ? [{ target: o.target, x: o.x, y: o.y, rotation: o.rotation }] : [],
+          o.op === 'pin'
+            ? [
+                {
+                  target: o.target,
+                  x: o.x,
+                  y: o.y,
+                  rotation: o.rotation,
+                  ...(o.lengthM ? { lengthM: o.lengthM } : {}),
+                  ...(o.widthM ? { widthM: o.widthM } : {}),
+                },
+              ]
+            : [],
         ),
         customTypes: doc.spec.customFeatureTypes,
         scaleCompression: doc.spec.scaleCompression,

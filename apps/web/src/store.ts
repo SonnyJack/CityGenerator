@@ -142,11 +142,27 @@ export function newId(prefix: string): string {
   return `${prefix}-${rnd}`;
 }
 
+/** Settlements of the last generation, for the tool host (see `settlementAt`). */
+let latestSettlements: EngineStats['settlements'] = [];
+
 export const tools = new ToolController({
   document: () => bus.document,
   dispatch: (c) => useApp.getState().dispatch(c),
   changed: () => useApp.getState().dispatchEditorChanged?.(),
   newId,
+  // A facility drawn inside a town belongs to it; the index is what a spec patch addresses.
+  // The settlements come from the last generation, kept here so the host does not have to
+  // read the store (which would make the store's own type depend on this one).
+  settlementAt: (p) => {
+    if (!latestSettlements.length) return null;
+    let best: { id: string; d: number } | null = null;
+    for (const s of latestSettlements) {
+      const d = Math.hypot(p[0] - s.center[0], p[1] - s.center[1]);
+      if (d > Math.max(s.extentM, s.radiusM) * 1.2) continue;
+      if (!best || d < best.d) best = { id: s.id, d };
+    }
+    return best ? best.id : null;
+  },
 });
 
 export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>((set, get) => {
@@ -159,6 +175,7 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
     try {
       const { version, stats } = await engine().setDocument(doc, { sketch: themeById(doc.ui?.theme).sketch });
       if (run !== generation) return; // superseded
+      latestSettlements = stats.settlements;
       set({ tileVersion: version, stats, status: 'idle', generatedHit: undefined });
     } catch (e) {
       if (run !== generation) return;

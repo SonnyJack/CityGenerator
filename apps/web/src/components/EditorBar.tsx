@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AuthoredLayer } from '@citygen/core';
+import { FEATURE_TYPES, type AuthoredLayer } from '@citygen/core';
 import type { BrushKind, ToolId } from '@citygen/editor';
 import { useApp } from '../store.js';
 import { useT } from '../i18n/index.js';
@@ -32,6 +32,12 @@ const TOOLS: { id: ToolId; label: string; key: string; hint: string }[] = [
   },
   { id: 'rectangle', label: 'Rectangle', key: 'R', hint: 'Drag a rectangle' },
   { id: 'point', label: 'Point', key: 'O', hint: 'Click to place a point of interest' },
+  {
+    id: 'facility',
+    label: 'Facility',
+    key: 'F',
+    hint: 'Drag the ground a works, a port or an institution stands on; it is laid out inside it',
+  },
   {
     id: 'brush',
     label: 'Brush',
@@ -344,6 +350,40 @@ export function EditorBar() {
                   </select>
                 </label>
               )}
+            </>
+          )}
+          {tool === 'facility' && (
+            <>
+              <label className="flex items-center gap-1">
+                <span className="text-stone-600">{t('Type')}</span>
+                <select
+                  aria-label={t('Facility type')}
+                  className={sel}
+                  value={o.facilityType}
+                  onChange={(e) => setOptions({ facilityType: e.target.value })}
+                >
+                  {FEATURE_TYPES.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-stone-600">{t('Size')}</span>
+                <select
+                  aria-label={t('Facility size')}
+                  className={sel}
+                  value={o.facilitySize}
+                  onChange={(e) =>
+                    setOptions({ facilitySize: e.target.value as 'small' | 'medium' | 'large' })
+                  }
+                >
+                  <option value="small">{t('small')}</option>
+                  <option value="medium">{t('medium')}</option>
+                  <option value="large">{t('large')}</option>
+                </select>
+              </label>
             </>
           )}
           {tool === 'annotate' && (

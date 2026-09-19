@@ -25,7 +25,16 @@ import {
  */
 
 export type ToolId =
-  'navigate' | 'select' | 'lasso' | 'line' | 'polygon' | 'rectangle' | 'point' | 'brush' | 'annotate';
+  | 'navigate'
+  | 'select'
+  | 'lasso'
+  | 'line'
+  | 'polygon'
+  | 'rectangle'
+  | 'point'
+  | 'facility'
+  | 'brush'
+  | 'annotate';
 
 /**
  * A line the host draws while an edge or a centre of what is being moved or
@@ -84,6 +93,10 @@ export interface ToolOptions {
   zoneWard: string;
   /** Land cover the vegetation brush paints. */
   cover: string;
+  /** Feature type the facility tool draws (a library id such as `industry.gasworks`). */
+  facilityType: string;
+  /** Size band for the drawn facility; the drawn ground decides the footprint. */
+  facilitySize: 'small' | 'medium' | 'large';
   annotation: 'label' | 'marker' | 'arrow' | 'note' | 'handoutFrame';
   text: string;
   snapGridM: number;
@@ -104,6 +117,8 @@ export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   brushAmount: 15,
   zoneWard: 'park',
   cover: 'forest',
+  facilityType: 'industry.gasworks',
+  facilitySize: 'medium',
   annotation: 'label',
   text: 'Label',
   snapGridM: 0,
@@ -146,6 +161,11 @@ export interface ToolHost {
   newId(prefix: string): string;
   /** Hit-test generated features under the cursor (optional; used for freeze/suppress). */
   generatedAt?(p: XY): GeneratedFeature | null;
+  /**
+   * The settlement a point belongs to, when the host knows it: a facility drawn inside a town
+   * belongs to it, one drawn out in the region stands on its own.
+   */
+  settlementAt?(p: XY): string | null;
 }
 
 export interface GeneratedFeature {
@@ -556,6 +576,7 @@ export class ToolController {
         return true;
       }
       case 'rectangle':
+      case 'facility':
         this.dragging = { kind: 'rect', start: this.drawPoint(raw, mods).p };
         return true;
       case 'point':
@@ -747,9 +768,12 @@ export class ToolController {
         const p = this.drawPoint(raw, mods).p;
         const g = rectGeometry(d.start, p);
         this.draft = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
-        if (g && Math.abs((p[0] - d.start[0]) * (p[1] - d.start[1])) > 4)
-          this.commitFeature(g, this.options.layer === 'street' ? 'building' : this.options.layer);
-        else this.host.changed();
+        if (!g || Math.abs((p[0] - d.start[0]) * (p[1] - d.start[1])) <= 4) {
+          this.host.changed();
+          return true;
+        }
+        if (this.tool === 'facility') this.commitFacility(d.start, p);
+        else this.commitFeature(g, this.options.layer === 'street' ? 'building' : this.options.layer);
         return true;
       }
       case 'arrow': {
@@ -1095,6 +1119,46 @@ export class ToolController {
         },
       ],
     });
+  }
+
+  /**
+   * A facility drawn by hand: the type is asked for where the rectangle was drawn and laid
+   * out inside it. The request goes in the spec (so the facilities panel lists it) and the
+   * pin carries the centre, the angle and the drawn footprint.
+   */
+  private commitFacility(a: XY, b: XY): void {
+    const o = this.options;
+    const id = this.host.newId('drawn');
+    const centre: XY = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    // The long side of the rectangle is the facility's length, and its angle the rotation.
+    const dx = Math.abs(b[0] - a[0]);
+    const dy = Math.abs(b[1] - a[1]);
+    const lengthM = Math.max(dx, dy);
+    const widthM = Math.min(dx, dy);
+    const rotation = dx >= dy ? 0 : Math.PI / 2;
+    // A works drawn inside a town belongs to it, whether or not the town is in the spec.
+    const settlement = this.host.settlementAt?.(centre) ?? null;
+    this.host.dispatch({
+      type: 'spec.patch',
+      ops: [
+        {
+          op: 'add',
+          path: '/features/-',
+          value: {
+            id,
+            type: o.facilityType,
+            size: o.facilitySize,
+            lock: true,
+            ...(settlement ? { settlement } : {}),
+          },
+        },
+      ],
+    });
+    this.host.dispatch({
+      type: 'override.add',
+      override: { op: 'pin', target: id, x: centre[0], y: centre[1], rotation, lengthM, widthM },
+    });
+    this.host.changed();
   }
 
   private commitAnnotation(p: XY, end?: XY): void {

@@ -178,7 +178,7 @@ export interface PlacementRequest {
   size: FeatureSize;
   /** Settlement id for settlement-level requests. */
   settlement?: string;
-  pin?: { x: number; y: number; rotation: number };
+  pin?: { x: number; y: number; rotation: number; lengthM?: number; widthM?: number };
   /** Point hint the app resolved ("north of the station"). */
   hint?: Pt;
   params?: Record<string, unknown>;

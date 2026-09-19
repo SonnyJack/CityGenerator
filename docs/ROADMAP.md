@@ -354,8 +354,13 @@ settlements and two mainlines routes in about 0.9 s.
       parts with interiors like any other. Region-level fill reporting: the
       engine stats carry land cover by class in km² and the woods, commons
       and farmland within twice each town's radius.
-- [ ] Deferred: a dedicated facility-drawing tool (authored facility
-      polygons already work).
+- [x] A facility tool (`F`): drag the ground a works, a port or an
+      institution stands on and the type is laid out inside that footprint.
+      The request goes in the spec, naming the settlement it was drawn in
+      (so a town the region generated can own it without being written into
+      the spec), and a pin carries the centre, the angle and the drawn
+      length and width, which the placement engine uses in place of the
+      type's own size.
 
 Acceptance (met with one caveat): on the `bay` preset at 1925 a break-bulk
 port with rail on the quay, a marshalling or goods yard behind it, gasworks

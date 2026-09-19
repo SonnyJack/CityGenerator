@@ -288,6 +288,47 @@ describe('placement engine', () => {
     expect(customFeatureType(custom).footprint('large', { population: 0, year: 1925 })[0]).toBeCloseTo(128);
   }, 120_000);
 
+  it('lays a facility out inside a drawn footprint when the pin carries one', async () => {
+    const { terrain, siting, rail } = await bay('bay-drawn', 1925);
+    const port = siting.sites.find((s) => s.id === 'port')!;
+    const centre: [number, number] = [port.center[0] + 500, port.center[1] + 500];
+    const lengthM = 420;
+    const widthM = 160;
+    const out = await runner.run(facilitiesStage, {
+      seed: 'bay-drawn',
+      terrain,
+      sites: siting.sites,
+      rail,
+      year: 1925,
+      extent: { widthM: 16_000, heightM: 12_000 },
+      requests: [{ id: 'drawn-works', type: 'industry.heavy', size: 'medium', settlement: 'port' }],
+      removed: [],
+      pins: [{ target: 'drawn-works', x: centre[0], y: centre[1], rotation: 0, lengthM, widthM }],
+      customTypes: [],
+      scaleCompression: true,
+      defaults: false,
+    });
+    const drawn = out.features.features.find((f) => f.properties.id === 'drawn-works')!;
+    expect(drawn.properties.pinned).toBe(true);
+    // The works takes the ground it was given, whatever size the type would have chosen.
+    expect(drawn.properties.lengthM).toBeCloseTo(lengthM, 6);
+    expect(drawn.properties.widthM).toBeCloseTo(widthM, 6);
+    expect(drawn.properties.realLengthM).not.toBeCloseTo(lengthM, 0);
+    const ring = drawn.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]);
+    const xs = ring.map((p) => p[0]);
+    const ys = ring.map((p) => p[1]);
+    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(centre[0], 6);
+    expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(centre[1], 6);
+    // Its parts are laid out inside that ground, and the land is reserved for it.
+    const parts = out.parts.features.filter((p) => p.properties.feature === 'drawn-works');
+    expect(parts.length).toBeGreaterThan(2);
+    for (const part of parts)
+      if (part.geometry.type === 'Polygon')
+        for (const c of part.geometry.coordinates[0]!.slice(0, 4))
+          expect(pointInRing(c[0]!, c[1]!, ring)).toBe(true);
+    expect(out.reserved.some((r) => r.id === 'drawn-works')).toBe(true);
+  });
+
   it('fills the free ground of a works or a port with sheds that stay inside and off the other parts', async () => {
     const { facilities } = await bay('bay-fill', 1925);
     const sheds = facilities.parts.features.filter((p) => p.properties.kind === 'shed' && p.properties.name);

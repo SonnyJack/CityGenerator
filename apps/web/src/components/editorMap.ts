@@ -28,6 +28,7 @@ const SHORTCUTS: Record<string, ToolId> = {
   p: 'polygon',
   r: 'rectangle',
   o: 'point',
+  f: 'facility',
   b: 'brush',
   n: 'annotate',
 };
