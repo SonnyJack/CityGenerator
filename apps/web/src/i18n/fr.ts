@@ -504,4 +504,5 @@ export const fr: Record<string, string> = {
   large: 'grande',
   'Drag the ground a works, a port or an institution stands on; it is laid out inside it':
     'Tracez le terrain d’une usine, d’un port ou d’une institution ; elle y est disposée',
+  'What was drawn at this point': 'Ce qui était tracé à ce moment',
 };

@@ -48,6 +48,7 @@ import {
   type TownOutput,
   type TramOutput,
   type UtilitiesOutput,
+  type StageStore,
 } from '@citygen/core';
 import { biomeTerrain, eraForYear, eraParams } from '@citygen/features';
 import { eraAt } from '@citygen/core';
@@ -89,8 +90,16 @@ import type { Feature, Geometry, LineString, Point, Polygon } from 'geojson';
  * answers queries. The browser wraps one in a worker; the CLI and the MCP
  * server call it directly. No DOM.
  */
-export function createEngine(): EngineApi {
-  const runner = new StageRunner({ maxEntries: 64 });
+/** What the host can give the engine when it creates it. */
+export interface CreateEngineOptions {
+  /** Somewhere to keep the output of the dear stages between sessions (IndexedDB in a browser). */
+  store?: StageStore;
+}
+
+export function createEngine(options: CreateEngineOptions = {}): EngineApi {
+  // A store, when the host has one, keeps the dear stages (the terrain) between sessions so a
+  // document that is opened again draws without computing them afresh.
+  const runner = new StageRunner({ maxEntries: 64, ...(options.store ? { store: options.store } : {}) });
   let currentDoc: MapDocument | null = null;
   let version = 0;
   let source: TileSource | null = null;
@@ -680,15 +689,23 @@ export function createEngine(): EngineApi {
       return { version, stats };
     },
 
+    /**
+     * The version is the map's cache-buster rather than a filter. A request sent before the last
+     * regeneration is answered from the document the engine holds now — which is the one the map
+     * is about to ask for anyway — because answering it with nothing would leave an empty tile in
+     * the map's cache, and a map has no reason to fetch a tile it believes it already has. A
+     * version ahead of the engine cannot happen: the map is only told of a version once it is
+     * generated.
+     */
     async getTile(v, z, x, y) {
-      if (!source || v !== source.version) return null;
+      if (!source || v > source.version) return null;
       const data = source.getTile(z, x, y);
       if (!data) return null;
       return data;
     },
 
     async getDemTile(v, z, x, y) {
-      if (!dem || !source || v !== source.version) return null;
+      if (!dem || !source || v > source.version) return null;
       const png = await demTilePng(dem.sampler, dem.extent, z, x, y, 256);
       if (!png) return null;
       return png;

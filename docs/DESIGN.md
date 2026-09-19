@@ -784,6 +784,10 @@ The tile builder (in workers) produces two tile sets from the model:
 
 Tiles are served through MapLibre's `addProtocol` from the worker pool; a
 document change bumps the source version so only affected tiles are rebuilt.
+The version is in the tile URL to make the map ask again, not to filter: the
+engine answers a request that was sent before the last regeneration from the
+document it holds now, since a map that is handed an empty tile has no reason
+to fetch it a second time.
 
 ### 8.2 Themes
 
@@ -1057,7 +1061,9 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   and a drawn-layers panel with per-layer opacity, a lock the tools respect
   and a draw order (each style layer follows its primary authored layer);
   a facility tool that draws the ground a works stands on, pinning the type
-  to that footprint.
+  to that footprint; history sketches of what was drawn at each step; and a
+  persistent stage cache (`StageDef.cache` plus a `StageStore` the host
+  provides) that keeps the terrain between sessions.
 - **v1.1** — Generation backlog: the regional roads keep a ruling gradient
   of 8 % on the profile the railways use (`networks/profile.ts`), with
   cuttings, embankments and tunnels as runs of their own, styled per theme

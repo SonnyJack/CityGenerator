@@ -175,6 +175,64 @@ describe('terrain stage', () => {
     expect(painted.key).not.toBe(plain.key);
   });
 
+  it('keeps the terrain in a store and builds it back without running again', async () => {
+    // A store that counts what it is asked for, standing in for IndexedDB.
+    const entries = new Map<string, unknown>();
+    let reads = 0;
+    const store = {
+      get: async (key: string) => {
+        reads++;
+        return entries.get(key);
+      },
+      set: async (key: string, value: unknown) => {
+        // Round-trip through a structured clone, as a real store would.
+        entries.set(key, structuredClone(value));
+      },
+    };
+    // A full-sized terrain, the kind a document really has (a preview is checked below).
+    const full: TerrainInput = { ...fixture, cellSizeM: 40 };
+    const first = new StageRunner({ store });
+    const a = await first.run(terrainStage, full);
+    expect(first.stored).toBe(0);
+    expect(entries.size).toBe(1);
+    expect(reads).toBe(1);
+
+    // A fresh runner, the same store: the terrain comes back without being computed.
+    const second = new StageRunner({ store });
+    const b = await second.run(terrainStage, full);
+    expect(second.stored).toBe(1);
+    expect(second.misses).toBe(1);
+    // It is the same terrain, rasters and all, with the methods a raster needs.
+    expect(b.key).toBe(a.key);
+    expect(b.height.width).toBe(a.height.width);
+    expect(b.height.sample(100, 100)).toBeCloseTo(a.height.sample(100, 100), 6);
+    expect(b.filled.data.length).toBe(a.filled.data.length);
+    expect(contentHash({ w: [...b.water], s: b.stats })).toBe(contentHash({ w: [...a.water], s: a.stats }));
+    expect(b.riverLines.features.length).toBe(a.riverLines.features.length);
+
+    // A different document is a different key, so it is computed and kept beside the first.
+    await second.run(terrainStage, { ...full, seed: 'other' });
+    expect(entries.size).toBe(2);
+    // A coarse preview (the variations strip runs one per seed) is quick and is not kept.
+    await second.run(terrainStage, { ...full, cellSizeM: 400 });
+    expect(entries.size).toBe(2);
+
+    // A store that throws is a miss, not a failure.
+    const broken = new StageRunner({
+      store: {
+        get: async () => {
+          throw new Error('no room');
+        },
+        set: async () => {
+          throw new Error('no room');
+        },
+      },
+    });
+    const c = await broken.run(terrainStage, full);
+    expect(c.key).toBe(a.key);
+    expect(broken.stored).toBe(0);
+  });
+
   it('accepts an imported heightmap', async () => {
     const data = new Float32Array(16 * 16);
     for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) data[r * 16 + c] = c * 10 - 40; // west below sea

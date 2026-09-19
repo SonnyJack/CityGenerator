@@ -141,3 +141,26 @@ describe('CommandBus', () => {
     expect(kinds).toEqual(['command', 'undo', 'redo', 'load']);
   });
 });
+
+describe('the document at a point in the history', () => {
+  it('rebuilds any earlier state without changing the one in hand', () => {
+    const bus = new CommandBus(createDocument({ now: NOW, seed: 'history' }), { now: () => NOW });
+    bus.dispatch({ type: 'meta.rename', name: 'First' });
+    bus.dispatch({ type: 'spec.setSeed', seed: 'second' });
+    bus.dispatch({ type: 'meta.rename', name: 'Third' });
+    expect(bus.history).toHaveLength(3);
+
+    expect(bus.documentAt(0).meta.name).toBe('Untitled region');
+    expect(bus.documentAt(1).meta.name).toBe('First');
+    expect(bus.documentAt(1).spec.seed).toBe('history');
+    expect(bus.documentAt(2).spec.seed).toBe('second');
+    expect(bus.documentAt(3).meta.name).toBe('Third');
+    // Out of range is clamped at both ends.
+    expect(bus.documentAt(-5).meta.name).toBe('Untitled region');
+    expect(bus.documentAt(99).meta.name).toBe('Third');
+    // Asking did not disturb the document in hand.
+    expect(bus.document.meta.name).toBe('Third');
+    expect(bus.document.spec.seed).toBe('second');
+    expect(bus.canUndo).toBe(true);
+  });
+});

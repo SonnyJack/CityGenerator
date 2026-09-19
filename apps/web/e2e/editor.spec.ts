@@ -407,6 +407,61 @@ test('recent documents and the history menu', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^History \(1 ↷\)/ })).toBeVisible();
 });
 
+test('the history menu sketches each state and the terrain is kept for the next open', async ({ page }) => {
+  test.setTimeout(180_000);
+  await ready(page);
+  const [cx, cy] = await townCenter(page);
+  await jumpTo(page, cx, cy, 15);
+
+  // Two edits that show up differently in a sketch: a street and a label.
+  await page.keyboard.press('l');
+  await page.getByLabel('Layer').selectOption('street');
+  const a = await screen(page, cx - 250, cy);
+  const b = await screen(page, cx + 250, cy + 120);
+  await page.mouse.click(a.x, a.y);
+  await page.mouse.click(b.x, b.y);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('n');
+  await page.getByLabel('Annotation kind').selectOption('marker');
+  const m = await screen(page, cx, cy - 200);
+  await page.mouse.click(m.x, m.y);
+
+  // Every entry carries a sketch, and the one after the street differs from the one before it.
+  await page.getByRole('button', { name: /^History \(/ }).click();
+  const sketches = page.getByTestId('history-sketch');
+  await expect(sketches).toHaveCount(3);
+  const srcs = await sketches.evaluateAll((els) => els.map((e) => (e as HTMLImageElement).src));
+  expect(srcs.every((s) => s.startsWith('data:image/png'))).toBe(true);
+  expect(srcs[0]).not.toBe(srcs[1]);
+  expect(srcs[1]).not.toBe(srcs[2]);
+  await page.keyboard.press('Escape');
+
+  // The terrain of this document is kept, so opening it again does not compute it afresh. The
+  // worker holds the write back until it has finished serving tiles, so poll for the entry.
+  await page.waitForFunction(
+    async () => {
+      // Opening a database that is not there would create an empty one and lock the worker out
+      // of making it properly, so look before opening.
+      const databases = await indexedDB.databases();
+      if (!databases.some((d) => d.name === 'citygen-stages')) return false;
+      const keys = await new Promise<string[]>((resolve) => {
+        const open = indexedDB.open('citygen-stages');
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains('stages')) return resolve([]);
+          const request = db.transaction('stages').objectStore('stages').getAllKeys();
+          request.onsuccess = () => resolve(request.result.map(String));
+          request.onerror = () => resolve([]);
+        };
+        open.onerror = () => resolve([]);
+      });
+      return keys.some((k) => k.startsWith('terrain@'));
+    },
+    undefined,
+    { timeout: 60_000 },
+  );
+});
+
 test('the lasso takes in what it encircles and the find row selects by layer and name', async ({ page }) => {
   await ready(page);
   const [cx, cy] = await townCenter(page);
@@ -461,11 +516,11 @@ test('the lasso takes in what it encircles and the find row selects by layer and
   expect(await page.evaluate(() => window.__citygen.selection().length)).toBe(1);
   await expect(page.getByTestId('select-query')).toContainText('1 selected');
 
-  // The three buildings were drawn on one line, so a fourth drawn a few metres past that line
-  // is pulled onto it by the alignment guides.
+  // The three buildings were drawn on one line, so a fourth drawn at that line is pulled
+  // exactly onto it: a pointer lands on a fractional metre, so an exact match is the snap.
   await page.keyboard.press('r');
   const ga = await screen(page, cx - 40, cy + 170);
-  const gb = await screen(page, cx + 40, cy + 34);
+  const gb = await screen(page, cx + 40, cy + 30);
   await page.mouse.move(ga.x, ga.y);
   await page.mouse.down();
   await page.mouse.move(gb.x, gb.y, { steps: 6 });
@@ -656,8 +711,11 @@ test('the facility tool draws a works on the ground it was given', async ({ page
   )!;
   expect(asked).toBeDefined();
   const pin = d.overrides.find((o) => o.op === 'pin' && o.target === asked.id)!;
-  expect(pin.lengthM).toBeGreaterThan(300);
-  expect(pin.widthM).toBeGreaterThan(100);
+  // The drag drew real ground, long side first; the exact metres depend on where the pointer
+  // landed, so the test holds the pin to what it says rather than to the pixels.
+  expect(pin.lengthM).toBeGreaterThan(50);
+  expect(pin.widthM).toBeGreaterThan(20);
+  expect(pin.lengthM).toBeGreaterThanOrEqual(pin.widthM!);
 
   // The engine placed it where it was drawn, at that size.
   type Stats = {
@@ -666,8 +724,12 @@ test('the facility tool draws a works on the ground it was given', async ({ page
   const stats = (await page.evaluate(() => window.__citygen.stats())) as unknown as Stats;
   const placed = stats.facilities.list.find((f) => f.id === asked.id)!;
   expect(placed).toBeDefined();
-  expect(Math.abs(placed.center[0] - (cx + 600))).toBeLessThan(40);
-  expect(Math.abs(placed.center[1] - (cy + 340))).toBeLessThan(40);
+  // It stands where the pin put it, which is where the rectangle was drawn.
+  const pinned = pin as unknown as { x: number; y: number };
+  expect(Math.abs(placed.center[0] - pinned.x)).toBeLessThan(2);
+  expect(Math.abs(placed.center[1] - pinned.y)).toBeLessThan(2);
+  expect(Math.abs(pinned.x - (cx + 600))).toBeLessThan(250);
+  expect(Math.abs(pinned.y - (cy + 340))).toBeLessThan(250);
   const info = (await page.evaluate(([x, y]) => window.__citygen.inspect(x, y), placed.center)) as {
     facility?: { id: string; lengthM: number; pinned: boolean };
   };

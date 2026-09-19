@@ -26,6 +26,7 @@ import {
   saveAutosave,
   type RecentDocument,
 } from './persistence.js';
+import { historyThumbnail } from './components/historyThumbnail.js';
 import type { EngineStats, GeneratedHit, Inspection, Thumbnail } from './engine/api.js';
 
 /** The authored layers, bottom of the draw order first; the panel reorders this list. */
@@ -93,6 +94,8 @@ export interface AppState {
   moveLayer(id: AuthoredLayer, by: number): void;
   /** Select every authored feature matching the query (the editor bar's Find row). */
   selectByQuery(query: { layer?: AuthoredLayer; text?: string; inView?: boolean }): void;
+  /** A sketch of what was drawn by hand after `index` commands, for the history menu. */
+  historyThumbnail(index: number): string;
   selectAnnotation(id: string | undefined): void;
   /** Ask the engine what generated feature is at a point (select tool on empty ground). */
   probeGenerated(x: number, y: number, toleranceM: number): void;
@@ -145,6 +148,9 @@ export function newId(prefix: string): string {
 /** Settlements of the last generation, for the tool host (see `settlementAt`). */
 let latestSettlements: EngineStats['settlements'] = [];
 
+/** History sketches, drawn once each when the menu asks and dropped when the history changes. */
+const historyThumbnails = new Map<number, string>();
+
 export const tools = new ToolController({
   document: () => bus.document,
   dispatch: (c) => useApp.getState().dispatch(c),
@@ -185,6 +191,8 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
 
   function sync(doc: MapDocument, kind: 'command' | 'undo' | 'redo' | 'load') {
     if (kind !== 'command') tools.reconcile();
+    // The sketches belong to the history they were drawn from.
+    historyThumbnails.clear();
     const selectedAnnotation = get().selectedAnnotation;
     set({
       document: doc,
@@ -340,6 +348,16 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
         [list[i], list[j]] = [list[j]!, list[i]!];
         return { authoredLayers: list };
       });
+    },
+    historyThumbnail(index) {
+      const cached = historyThumbnails.get(index);
+      if (cached !== undefined) return cached;
+      const url = historyThumbnail(
+        bus.documentAt(index),
+        latestSettlements.map((s) => ({ center: s.center, radiusM: s.radiusM })),
+      );
+      historyThumbnails.set(index, url);
+      return url;
     },
     selectByQuery({ layer, text, inView }) {
       // A single box of text matches either the kind or the name, so one field does for both.

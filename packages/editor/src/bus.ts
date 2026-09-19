@@ -96,6 +96,19 @@ export class CommandBus {
     return { warnings };
   }
 
+  /**
+   * The document as it stood after `index` commands: 0 is the document before any edit, and
+   * `history.length` is the one in hand. Rebuilt by walking the inverse patches back, so it
+   * costs a patch per step and changes nothing.
+   */
+  documentAt(index: number): MapDocument {
+    const at = Math.max(0, Math.min(index, this.undoStack.length));
+    let doc = this.doc;
+    for (let i = this.undoStack.length - 1; i >= at; i--)
+      doc = applyPatch(structuredClone(doc), this.undoStack[i]!.inverse, true, true).newDocument;
+    return doc;
+  }
+
   undo(): boolean {
     const entry = this.undoStack.pop();
     if (!entry) return false;

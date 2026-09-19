@@ -40,6 +40,23 @@ export interface StageDef<I, O> {
    */
   keyOf?: (input: I) => string;
   run: (input: I, ctx: StageContext) => O | Promise<O>;
+  /**
+   * How to keep this stage's output between sessions. A stage whose output is dear to compute
+   * and cheap to describe (the terrain, say) can say how to flatten it for a store and how to
+   * build it back; the runner then reads it from the store instead of running again. Output
+   * with methods on it (a Raster) has to be rebuilt here, since a store only keeps data.
+   * `pack` may return `undefined` for a run not worth keeping, such as a coarse preview.
+   */
+  cache?: { pack(value: O): unknown | undefined; unpack(raw: unknown): O };
+}
+
+/**
+ * Somewhere to keep stage output between sessions, such as IndexedDB in the browser. Both
+ * calls may fail (quota, a private window); the runner treats a failure as a miss.
+ */
+export interface StageStore {
+  get(key: string): Promise<unknown | undefined>;
+  set(key: string, value: unknown): Promise<void>;
 }
 
 export function defineStage<I, O>(def: StageDef<I, O>): StageDef<I, O> {
@@ -54,6 +71,8 @@ export interface RunOptions {
 export interface StageRunnerOptions {
   /** Maximum memo entries; least recently used are evicted. */
   maxEntries?: number;
+  /** Where to keep the output of stages that say how to cache it (see `StageDef.cache`). */
+  store?: StageStore;
 }
 
 interface MemoEntry {
@@ -65,12 +84,16 @@ export class StageRunner {
   private readonly memo = new Map<string, MemoEntry>();
   private readonly inFlight = new Map<string, Promise<unknown>>();
   private readonly maxEntries: number;
+  private readonly store?: StageStore;
   private tick = 0;
   hits = 0;
   misses = 0;
+  /** Runs answered from the store rather than by running the stage. */
+  stored = 0;
 
   constructor(options: StageRunnerOptions = {}) {
     this.maxEntries = options.maxEntries ?? 512;
+    this.store = options.store;
   }
 
   /** Memo key for a stage and input; exposed for tests and diagnostics. */
@@ -104,10 +127,33 @@ export class StageRunner {
 
     const promise = (async () => {
       ctx.checkpoint();
+      // A stage that says how to cache it may already be in the store from an earlier session.
+      if (stage.cache && this.store) {
+        try {
+          const raw = await this.store.get(key);
+          if (raw !== undefined) {
+            const value = stage.cache.unpack(raw);
+            ctx.checkpoint();
+            this.stored++;
+            this.memo.set(key, { value, lastUsed: ++this.tick });
+            this.evict();
+            return value;
+          }
+        } catch {
+          // A store that cannot be read is a miss, not a failure.
+        }
+      }
       const value = await stage.run(input, ctx);
       ctx.checkpoint();
       this.memo.set(key, { value, lastUsed: ++this.tick });
       this.evict();
+      if (stage.cache && this.store) {
+        const packed = stage.cache.pack(value);
+        if (packed !== undefined)
+          void this.store.set(key, packed).catch(() => {
+            // Out of quota or no store: the run still stands, it just is not kept.
+          });
+      }
       return value;
     })();
     this.inFlight.set(key, promise);

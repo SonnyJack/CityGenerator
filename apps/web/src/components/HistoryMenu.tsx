@@ -52,6 +52,24 @@ function describe(c: Command, t: Translate): string {
   }
 }
 
+/** What was drawn by hand at one point in the history, as a small sketch. */
+function Sketch({ index }: { index: number }) {
+  const t = useT();
+  const thumbnail = useApp((s) => s.historyThumbnail);
+  const src = thumbnail(index);
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt={t('What was drawn at this point')}
+      width={48}
+      height={32}
+      className="shrink-0 rounded-sm border border-stone-200"
+      data-testid="history-sketch"
+    />
+  );
+}
+
 /** Drop-down list of the undo history; clicking an entry jumps to that state. */
 export function HistoryMenu() {
   const t = useT();
@@ -89,26 +107,30 @@ export function HistoryMenu() {
         >
           <li>
             <button
-              className="w-full px-2 py-1 text-left hover:bg-stone-100"
+              className="flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-stone-100"
               onClick={() => {
                 jumpTo(0);
                 setOpen(false);
               }}
             >
+              <Sketch index={0} />
               {t('Original document')}
             </button>
           </li>
           {history.map((h, i) => (
             <li key={`${h.at}-${i}`}>
               <button
-                className={`w-full px-2 py-1 text-left hover:bg-stone-100 ${i === history.length - 1 ? 'font-semibold' : ''}`}
+                className={`flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-stone-100 ${i === history.length - 1 ? 'font-semibold' : ''}`}
                 onClick={() => {
                   jumpTo(i + 1);
                   setOpen(false);
                 }}
               >
-                {describe(h.command, t)}
-                <span className="ml-1 text-stone-400">{new Date(h.at).toLocaleTimeString()}</span>
+                <Sketch index={i + 1} />
+                <span>
+                  {describe(h.command, t)}
+                  <span className="ml-1 text-stone-400">{new Date(h.at).toLocaleTimeString()}</span>
+                </span>
               </button>
             </li>
           ))}

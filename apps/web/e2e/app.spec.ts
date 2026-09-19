@@ -79,19 +79,24 @@ test('autosave restores the document after reload', async ({ page }) => {
 });
 
 test('the tile pipeline renders the region on the map', async ({ page }) => {
+  // A full generation and a map that has drawn its tiles, with the suite running two at a time.
+  test.setTimeout(120_000);
   await ready(page);
   const webglMissing = await page.getByText('needs WebGL').isVisible();
   test.skip(webglMissing, 'WebGL is not available in this browser build');
   await page.waitForFunction(() => window.__citygenMap?.loaded() === true, undefined, { timeout: 30_000 });
-  const counts = await page.evaluate(() => {
-    const map = window.__citygenMap!;
-    return {
-      outline: map.queryRenderedFeatures({ layers: ['region-outline'] }).length,
-      contours: map.queryRenderedFeatures({ layers: ['contours-major'] }).length,
-    };
-  });
-  expect(counts.outline).toBeGreaterThan(0);
-  expect(counts.contours).toBeGreaterThan(0);
+  // The engine can be idle before the map has drawn its tiles, so poll rather than read once.
+  await page.waitForFunction(
+    () => {
+      const map = window.__citygenMap!;
+      return (
+        map.queryRenderedFeatures({ layers: ['region-outline'] }).length > 0 &&
+        map.queryRenderedFeatures({ layers: ['contours-major'] }).length > 0
+      );
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
 });
 
 test('terrain generates, reacts to parameters, and reports stats', async ({ page }) => {
@@ -130,6 +135,7 @@ test('themes switch and the variations strip renders six previews', async ({ pag
 });
 
 test('the map renders terrain layers with hillshade from DEM tiles', async ({ page }) => {
+  test.setTimeout(120_000);
   await ready(page);
   const webglMissing = await page.getByText('needs WebGL').isVisible();
   test.skip(webglMissing, 'WebGL is not available in this browser build');
@@ -137,19 +143,26 @@ test('the map renders terrain layers with hillshade from DEM tiles', async ({ pa
   await page.waitForFunction(() => window.__citygenMap?.areTilesLoaded() === true, undefined, {
     timeout: 60_000,
   });
+  await page.waitForFunction(
+    () => {
+      const map = window.__citygenMap!;
+      return (
+        map.queryRenderedFeatures({ layers: ['water-fill'] }).length > 0 &&
+        map.queryRenderedFeatures({
+          layers: ['landcover-forest', 'landcover-open', 'landcover-farmland'],
+        }).length > 0
+      );
+    },
+    undefined,
+    { timeout: 60_000 },
+  );
   const counts = await page.evaluate(() => {
     const map = window.__citygenMap!;
     return {
-      water: map.queryRenderedFeatures({ layers: ['water-fill'] }).length,
-      landcover: map.queryRenderedFeatures({
-        layers: ['landcover-forest', 'landcover-open', 'landcover-farmland'],
-      }).length,
       dem: map.getSource('citygen-dem') !== undefined,
       hillshade: map.getLayer('hillshade') !== undefined,
     };
   });
-  expect(counts.water).toBeGreaterThan(0);
-  expect(counts.landcover).toBeGreaterThan(0);
   expect(counts.dem).toBe(true);
   expect(counts.hillshade).toBe(true);
 });
@@ -271,6 +284,7 @@ test('society overlays toggle with a legend and the inspector explains a zone', 
 });
 
 test('railways, stations and trams render and respond to the network settings', async ({ page }) => {
+  test.setTimeout(120_000);
   await ready(page);
   type Stats = { rail: { trackKm: number; stations: number; tramLines: number; maxGradient: number } };
   const stats = (await page.evaluate(() => window.__citygen.stats())) as Stats;
@@ -453,6 +467,8 @@ async function waitForRegen(page: Page, from: number) {
 test('the region, settlements, streets and rivers are named and labels render with the vendored glyphs', async ({
   page,
 }) => {
+  // Four jumps, each waiting for the tiles of that zoom, with the suite running two at a time.
+  test.setTimeout(240_000);
   await ready(page);
   const stats = (await page.evaluate(() => window.__citygen.stats())) as NamedStats;
   expect(stats.regionName.length).toBeGreaterThan(2);
@@ -481,7 +497,7 @@ test('the region, settlements, streets and rivers are named and labels render wi
         return map.areTilesLoaded() && map.queryRenderedFeatures({ layers: [l] }).length > 0;
       },
       layer,
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     );
     return page.evaluate(
       (l) =>

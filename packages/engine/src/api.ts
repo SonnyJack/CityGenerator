@@ -13,9 +13,13 @@ export interface EngineApi {
     doc: MapDocument,
     options: { sketch: boolean },
   ): Promise<{ version: number; stats: EngineStats }>;
-  /** Encoded vector tile for the given source version, or null when empty. */
+  /**
+   * Encoded vector tile, or null when empty. The version is the map's cache-buster: a request
+   * from before the last regeneration is answered from the current document rather than refused.
+   */
   getTile(version: number, z: number, x: number, y: number): Promise<Uint8Array | null>;
   /** Terrain-RGB PNG tile for hillshade and 3-D terrain, or null outside the region. */
+  // The version is read as in getTile above.
   getDemTile(version: number, z: number, x: number, y: number): Promise<Uint8Array | null>;
   /** Small terrain previews for other seeds of the same spec. */
   thumbnails(doc: MapDocument, seeds: string[], width: number, height: number): Promise<Thumbnail[]>;

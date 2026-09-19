@@ -82,6 +82,34 @@ export function contourInterval(rangeM: number): number {
 export const terrainStage = defineStage<TerrainInput, TerrainOutput>({
   id: 'terrain',
   version: 1,
+  /**
+   * The terrain is the dearest stage to compute and the easiest to describe, so it is the one
+   * worth keeping between sessions: the rasters go to the store as their spec and their data,
+   * and come back as rasters again.
+   */
+  cache: {
+    // A preview terrain (the variations strip runs one per seed at a coarse cell) is quick to
+    // compute and would only crowd the store, so only a full-sized one is worth keeping.
+    pack: (o) =>
+      o.height.width * o.height.height < 40_000
+        ? undefined
+        : {
+            ...o,
+            height: { spec: o.height.spec, data: o.height.data },
+            filled: { spec: o.filled.spec, data: o.filled.data },
+          },
+    unpack: (raw) => {
+      const r = raw as TerrainOutput & {
+        height: { spec: RasterSpec; data: Float32Array };
+        filled: { spec: RasterSpec; data: Float32Array };
+      };
+      return {
+        ...r,
+        height: new Raster(r.height.spec, r.height.data),
+        filled: new Raster(r.filled.spec, r.filled.data),
+      } as TerrainOutput;
+    },
+  },
   seedOf: (input) => input.seed,
   keyOf: (input) => {
     const { imported, ...rest } = input;

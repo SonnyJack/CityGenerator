@@ -246,7 +246,17 @@ blocks.
       test, no box, lasso or query, no erase, no vertex snap) and the draw
       order, moved a step at a time. It is how the map is drawn rather than
       what the region is, so it lives with the session, not the document.
-- [ ] Deferred: history thumbnails, derived caches for instant reopen.
+- [x] History sketches: every entry in the history menu carries a small
+      picture of what was drawn by hand at that point (the region as a frame,
+      the towns as dots, the authored features and annotations in place),
+      rebuilt from the bus's inverse patches when the menu opens. Derived
+      caches: a stage may say how to flatten and rebuild its output, and the
+      runner then keeps it in a store the host provides. The web app gives
+      the engine an IndexedDB store, so the terrain of a document that has
+      been open before comes back instead of being computed again; the store
+      dates its entries in an index of its own and holds a write back until
+      the worker has finished serving tiles, so keeping the terrain never
+      delays drawing it.
 
 Acceptance (met): Playwright covers each tool (line, rectangle + select +
 move + undo, terrain and wealth brushes + erase, annotations, freeze and
