@@ -6,6 +6,7 @@ import { landSampler, smoothOnLand } from '../terrain/land.js';
 import { gradeProfile, resampleLine } from './profile.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import { eraAt, type EraParams } from '../settlement/eras.js';
+import { populationAt, yearForRadius } from '../settlement/history.js';
 import type { SettlementSite } from '../settlement/siting.js';
 import { cellAt, routeCells } from './routing.js';
 
@@ -35,6 +36,10 @@ export interface TrackProps {
   lengthKm: number;
   /** Steepest gradient on the segment (rise/run). */
   gradient: number;
+  /** Year the line opened: the first year both ends were big enough to be served. */
+  opened: number;
+  /** Year a disused line lost its service. */
+  closed?: number;
 }
 
 export type StationKind = 'central' | 'town' | 'halt' | 'suburban';
@@ -46,6 +51,10 @@ export interface StationProps {
   line: string;
   /** True for stations on closed branches. */
   closed: boolean;
+  /** Year the station opened with its first line. */
+  opened: number;
+  /** Year the last line through a closed station lost its service. */
+  closedYear?: number;
 }
 
 export type StructureKind =
@@ -137,8 +146,8 @@ export const railStage = defineStage<RailInput, RailOutput>({
   seedOf: (i) => i.seed,
   keyOf: (i) =>
     `${i.terrain.key}|${i.seed}|${i.year}|${i.mainlines}|${i.enabled}|${i.windFrom ?? ''}|${JSON.stringify(
-      i.sites.map((s) => [s.id, s.kind, s.center, s.population, s.radiusM, s.coastal]),
-    )}|${JSON.stringify(i.eras.map((e) => [e.id, e.transport.rail]))}`,
+      i.sites.map((s) => [s.id, s.kind, s.center, s.population, s.radiusM, s.coastal, s.history]),
+    )}|${JSON.stringify(i.eras.map((e) => [e.id, e.year, e.transport.rail]))}`,
   run(input, ctx) {
     const { terrain, sites, year } = input;
     const era = eraAt(input.eras, year);
@@ -162,6 +171,34 @@ export const railStage = defineStage<RailInput, RailOutput>({
     served.sort((a, b) => b.population - a.population);
     const hub = served[0]!;
     const isActive = (s: SettlementSite) => s.population >= threshold.active || s === hub;
+
+    // Opening and closing years: the railway age begins with the first era that has rail;
+    // from then on, in five-year steps, a place is served once its population of that year
+    // passes the threshold of that year, and a line opens when both its ends are served.
+    // A disused line closed in the first year an end fell below the active threshold.
+    const railFrom = [...input.eras]
+      .filter((e) => e.transport.rail)
+      .reduce((m, e) => Math.min(m, e.year), year);
+    const STEP = 5;
+    const servedAt = (s: SettlementSite, y: number) =>
+      populationAt(s.history, y) >= railServiceThreshold(y).served;
+    const activeAt = (s: SettlementSite, y: number) =>
+      s === hub || populationAt(s.history, y) >= railServiceThreshold(y).active;
+    const openedYear = (ends: SettlementSite[]) => {
+      for (let y = railFrom; y < year; y += STEP) if (ends.every((s) => servedAt(s, y))) return y;
+      return year;
+    };
+    const closedYear = (ends: SettlementSite[], opened: number) => {
+      for (let y = opened + STEP; y < year; y += STEP) if (!ends.every((s) => activeAt(s, y))) return y;
+      return year;
+    };
+    // A disused line marks a place that once had a train: a place below today's active
+    // threshold that never reached the threshold of any earlier year gets no line at all.
+    const everActive = (s: SettlementSite) => {
+      for (let y = railFrom; y < year; y += STEP) if (activeAt(s, y)) return true;
+      return false;
+    };
+    served = served.filter((s) => isActive(s) || everActive(s));
 
     // --- 2. Links: MST with a penalty for crossing the sea ------------------------------
     const seaFraction = (a: Pt, b: Pt) => {
@@ -439,7 +476,14 @@ export const railStage = defineStage<RailInput, RailOutput>({
     };
 
     /** Split a routed line into mode runs and push them as track features. */
-    const pushTrack = (line: Ring, cls: TrackClass, lineId: string, from: string, to: string): Ring => {
+    const pushTrack = (
+      line: Ring,
+      cls: TrackClass,
+      lineId: string,
+      from: string,
+      to: string,
+      years: { opened: number; closed?: number },
+    ): Ring => {
       // Ease curves at a coarse spacing first (large moves), then at the working spacing.
       // A mainline may bridge a longer inlet than a branch or a spur.
       const spanM = cellSizeM * (cls === 'mainline' ? 6 : 3);
@@ -528,7 +572,17 @@ export const railStage = defineStage<RailInput, RailOutput>({
           type: 'Feature',
           id: `rail-${tracks.length}`,
           geometry: { type: 'LineString', coordinates: coords },
-          properties: { class: cls, mode, line: lineId, from, to, lengthKm: len / 1000, gradient: grad },
+          properties: {
+            class: cls,
+            mode,
+            line: lineId,
+            from,
+            to,
+            lengthKm: len / 1000,
+            gradient: grad,
+            opened: years.opened,
+            ...(years.closed !== undefined ? { closed: years.closed } : {}),
+          },
         });
         stats.trackKm += len / 1000;
         if (cls === 'mainline') stats.mainlineKm += len / 1000;
@@ -551,7 +605,14 @@ export const railStage = defineStage<RailInput, RailOutput>({
     };
 
     // Lines between served sites.
-    const routedLines: { a: number; b: number; pts: Ring; cls: TrackClass }[] = [];
+    const routedLines: {
+      a: number;
+      b: number;
+      pts: Ring;
+      cls: TrackClass;
+      opened: number;
+      closed?: number;
+    }[] = [];
     for (const [a, b] of links) {
       const sa = served[a]!;
       const sb = served[b]!;
@@ -559,8 +620,10 @@ export const railStage = defineStage<RailInput, RailOutput>({
       const cls: TrackClass = !isActive(sa) || !isActive(sb) ? 'disused' : big ? 'mainline' : 'branch';
       const line = route(stationOf.get(sa.id)!, stationOf.get(sb.id)!, cls, new Set([a, b]));
       if (!line) continue;
-      const pts = pushTrack(line, cls, `${sa.id}-${sb.id}`, sa.id, sb.id);
-      routedLines.push({ a, b, pts, cls });
+      const opened = openedYear([sa, sb]);
+      const years = cls === 'disused' ? { opened, closed: closedYear([sa, sb], opened) } : { opened };
+      const pts = pushTrack(line, cls, `${sa.id}-${sb.id}`, sa.id, sb.id, years);
+      routedLines.push({ a, b, pts, cls, ...years });
       ctx.checkpoint();
     }
     // Mainlines out to the region edge from the hub.
@@ -594,8 +657,9 @@ export const railStage = defineStage<RailInput, RailOutput>({
     exits.forEach((target, k) => {
       const line = route(hubStation, target, 'mainline', new Set([0]));
       if (line) {
-        const pts = pushTrack(line, 'mainline', `${hub.id}-edge${k}`, hub.id, 'edge');
-        routedLines.push({ a: 0, b: -1, pts, cls: 'mainline' });
+        const opened = openedYear([hub]);
+        const pts = pushTrack(line, 'mainline', `${hub.id}-edge${k}`, hub.id, 'edge', { opened });
+        routedLines.push({ a: 0, b: -1, pts, cls: 'mainline', opened });
       }
       ctx.checkpoint();
     });
@@ -607,6 +671,12 @@ export const railStage = defineStage<RailInput, RailOutput>({
       const closed = !isActive(s);
       const kind: StationKind = s.population >= 6000 ? 'central' : s.population >= 1500 ? 'town' : 'halt';
       const lineIds = routedLines.filter((l) => l.a === i || l.b === i);
+      const opened = lineIds.length ? Math.min(...lineIds.map((l) => l.opened)) : openedYear([s]);
+      const closedYr = closed
+        ? lineIds.length
+          ? Math.max(...lineIds.map((l) => l.closed ?? year))
+          : closedYear([s], opened)
+        : undefined;
       stations.push({
         type: 'Feature',
         id: `station-${s.id}`,
@@ -621,6 +691,8 @@ export const railStage = defineStage<RailInput, RailOutput>({
               : `${s.id}-edge`
             : s.id,
           closed,
+          opened,
+          ...(closedYr !== undefined ? { closedYear: closedYr } : {}),
         },
       });
       // Suburban stations along each line while still inside the built-up area.
@@ -645,6 +717,8 @@ export const railStage = defineStage<RailInput, RailOutput>({
                   settlement: s.id,
                   line: `${s.id}-${l.b >= 0 ? served[l.b]!.id : 'edge'}`,
                   closed: false,
+                  // A suburban station opens once the line runs and the town has grown out to it.
+                  opened: Math.max(l.opened, 1880, yearForRadius(s.history, 1200, l.opened, year)),
                 },
               });
             }
@@ -745,6 +819,9 @@ export const railStage = defineStage<RailInput, RailOutput>({
       if (!isActive(s) || s.population < 1500) return;
       const host = yardHost(s, i);
       if (!host) return;
+      // Yard tracks date from the station; the spurs from the freight age at the earliest.
+      const siteOpened = openedYear([s]);
+      const spurOpened = Math.max(siteOpened, 1850);
       const total = lengthOf(host);
       const pop = Math.min(s.population, 200_000);
       // Side of the line away from the town centre.
@@ -831,6 +908,7 @@ export const railStage = defineStage<RailInput, RailOutput>({
                   to: `${s.id}-throat-b`,
                   lengthKm: len / 1000,
                   gradient: 0,
+                  opened: siteOpened,
                 },
               });
               stats.trackKm += len / 1000;
@@ -932,7 +1010,7 @@ export const railStage = defineStage<RailInput, RailOutput>({
       for (const sp of spurs) {
         if (Math.hypot(sp.target[0] - spurFrom[0], sp.target[1] - spurFrom[1]) < 150) continue;
         const line = route(spurFrom, sp.target, 'spur', new Set([i]));
-        if (line) pushTrack(line, 'spur', sp.id, s.id, sp.id);
+        if (line) pushTrack(line, 'spur', sp.id, s.id, sp.id, { opened: spurOpened });
         ctx.checkpoint();
       }
     });

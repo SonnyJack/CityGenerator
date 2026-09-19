@@ -948,6 +948,31 @@ function facilityLayers(
       'line-opacity': 0.7,
     },
   });
+  // Closed works and shut institutions: a brownfield, greyed and ringed with a broken line.
+  out.push({
+    id: 'facilities-closed',
+    type: 'fill',
+    source: src,
+    'source-layer': 'facilities',
+    filter: ['has', 'closed'],
+    layout: { visibility: visible('facilities') },
+    paint: { 'fill-color': sketch ? p.inkMuted : '#6f6a62', 'fill-opacity': sketch ? 0.12 : 0.22 },
+  });
+  out.push({
+    id: 'facilities-closed-outline',
+    type: 'line',
+    source: src,
+    'source-layer': 'facilities',
+    minzoom: 11,
+    filter: ['has', 'closed'],
+    layout: { visibility: visible('facilities'), 'line-join': 'round' },
+    paint: {
+      'line-color': sketch ? p.inkMuted : '#6f6a62',
+      'line-width': ['interpolate', ['linear'], ['zoom'], 11, 1, 16, 2.2],
+      'line-dasharray': [1.5, 1.5],
+      'line-opacity': 0.8,
+    },
+  });
   out.push({
     id: 'facility-grounds',
     type: 'fill',

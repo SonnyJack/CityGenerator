@@ -5,7 +5,10 @@ import {
   customFeatureType,
   customFeatureTypeSchema,
   defaultRequests,
+  defaultsWithYears,
+  BROWNFIELD_YEARS,
   facilitiesStage,
+  featureTypeMap,
   frameRing,
   pointInRing,
   railStage,
@@ -246,6 +249,11 @@ describe('placement engine', () => {
       scaleCompression: true,
     });
     expect(out.features.features.some((f) => f.properties.type === 'custom.cannery')).toBe(true);
+    // An explicit request opens with its type, no earlier than its host's founding, and never in the future.
+    const cannery = out.features.features.find((f) => f.properties.type === 'custom.cannery')!;
+    expect(cannery.properties.opened).toBe(Math.max(customFeatureType(custom).years[0], port.founded));
+    expect(cannery.properties.opened).toBeLessThanOrEqual(1925);
+    expect(cannery.properties.closed).toBeUndefined();
     expect(
       out.parts.features.some((p) => p.properties.feature === 'cannery' && p.properties.kind === 'chimney'),
     ).toBe(true);
@@ -288,6 +296,42 @@ describe('placement engine', () => {
         expect(pointInRing(cx, cy, r)).toBe(false);
       }
     }
+  });
+
+  it("dates each default from its host's growth and keeps a closed works as a brownfield for forty years", async () => {
+    const { facilities: f1985, siting } = await bay('bay-years', 1985);
+    const byId = new Map(f1985.features.features.map((f) => [f.properties.id, f.properties]));
+    const port = siting.sites.find((s) => s.id === 'port')!;
+    // The gasworks type ended in 1970: at 1985 it is still on the map, closed in its last year,
+    // drawn with the parts of that year, and its land still reserved.
+    const gas = byId.get('port:industry.gasworks')!;
+    expect(gas.closed).toBe(1970);
+    expect(gas.opened).toBeGreaterThanOrEqual(1815);
+    expect(gas.opened).toBeLessThan(1970);
+    expect(f1985.reserved.some((r) => r.id === 'port:industry.gasworks')).toBe(true);
+    expect(f1985.parts.features.some((p) => p.properties.feature === 'port:industry.gasworks')).toBe(true);
+    // Open facilities carry no closing year, and open no earlier than their host or their type.
+    for (const [id, p] of byId) {
+      expect(p.opened).toBeGreaterThanOrEqual(port.founded);
+      expect(p.opened).toBeLessThanOrEqual(1985);
+      const t = FEATURE_TYPES.find((x) => x.id === p.type)!;
+      expect(p.opened).toBeGreaterThanOrEqual(t.years[0]);
+      if (p.closed === undefined) expect(id).not.toContain('gasworks');
+      else expect(p.closed).toBeLessThanOrEqual(t.years[1]);
+    }
+    // A modern default opened when the town's growth first asked for it, well after the type's first year.
+    const logistics = byId.get('port:industry.logistics')!;
+    expect(logistics.opened).toBeGreaterThanOrEqual(1965);
+    // The replay is on an absolute grid: the same host at a later year gives the same opening years.
+    const years = defaultsWithYears(port, 2020, featureTypeMap([]));
+    const gas2020 = years.find((r) => r.id === 'port:industry.gasworks');
+    expect(gas2020).toBeUndefined();
+    for (const r of years) {
+      const was = byId.get(r.id);
+      if (was && was.closed === undefined) expect(r.opened).toBe(was.opened);
+    }
+    expect(years.find((r) => r.id === 'port:institution.asylum')?.closed).toBe(1990);
+    expect(BROWNFIELD_YEARS).toBe(40);
   });
 
   it('defaults follow kind, size and year; every built-in type lays out parts inside its footprint', () => {

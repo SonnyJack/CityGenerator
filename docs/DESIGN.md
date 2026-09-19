@@ -540,6 +540,19 @@ branch, spur, siding, yard; elevated and subway variants for metropolises after
   graph and also computes the crossings between the railway and the streets;
   crossings with regional roads are computed when the tile layers are built.
   Both are memoised like every other stage.
+- **Years**: every track and station carries the year it opened and, when it
+  is disused, the year it closed. The railway age begins with the first era
+  that has rail; from then on the stage replays each settlement's growth
+  history in five-year steps against the service threshold of that year, so
+  a line opens the first year both its ends were big enough to be served, a
+  branch to a village opens when the village reaches the threshold of its
+  day, and a line the 1965 closures took closed the first year an end fell
+  below the raised threshold. Yard tracks date from the station, spurs from
+  the freight age, suburban stations from the year the town grew out to
+  them. A disused line always marks a place that once had a train: a
+  village that reached the served threshold only after the closures gets no
+  line and no station. The engine lists the lines with their years in the
+  rail stats and on the stations it finds.
 - **Water**: shipping approach along deepest bathymetry; ferries where a
   crossing lacks a bridge; canals (1760–1900) as straight cuts with locks where
   terrain requires, with wharves and warehouses along them.
@@ -614,6 +627,17 @@ Each is a `FeatureType` with a bespoke `layout()` and era variants:
 
 Sub-features are stored as `facilities[].parts[]` with their own geometry so
 renderers draw cranes, tracks and tanks distinctly and exporters keep them.
+
+Every facility carries the year it **opened**. A default facility opens in
+the first five-year step (on an absolute grid from the host's founding) at
+which the host, with the population it had then, would have asked for it, so
+a hospital dates from the town passing six thousand people rather than from
+1750; an explicit request opens with its type, no earlier than its host. A
+default the host has since outgrown, or whose type has run out of years (a
+gasworks after 1970, an asylum after 1990, a tannery after 1950), stays on
+the map as a **closed** brownfield for forty years, drawn as it stood in its
+closing year with its land still reserved, greyed and ringed in the themes
+and labelled closed; after that its land is redeveloped by the town.
 Large facilities apply a `scaleCompression` factor by default (decided) so
 that a port does not consume the entire town; a per-document "true scale"
 toggle disables it, and the inspector shows both the compressed and real
@@ -995,7 +1019,10 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   and exported; the farm belt is cut into strip fields with hedges and
   reached by country lanes; a `fishing` ward lines the shore; rail yards
   take the floodplain; facility grounds get a fill of sheds and stores;
-  the engine reports land cover and the woods and commons near the towns.
+  the engine reports land cover and the woods and commons near the towns;
+  rail lines, stations and facilities carry opening and closing years
+  replayed from the settlements' growth histories, and a closed default
+  facility stays as a brownfield for forty years.
 - **v1.0-rc** — Phase 12 tuning pass: the headless sweep and the two
   robustness fixes it forced (siting relaxation passes; a built core on
   rugged ground). Phase 13 terrain fit: one drawn shoreline for every land

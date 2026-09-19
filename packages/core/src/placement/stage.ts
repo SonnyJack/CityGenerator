@@ -10,6 +10,7 @@ import { cellAt, roadCost, routeCells } from '../networks/routing.js';
 import { createContext, placeFeatures } from './engine.js';
 import { customFeatureType, type CustomFeatureType } from './custom.js';
 import { defaultRequests } from './defaults.js';
+import { populationAt } from '../settlement/history.js';
 import { featureTypeMap } from './library.js';
 import type {
   HostSite,
@@ -67,6 +68,10 @@ export interface FacilityProps {
   pinned: boolean;
   outcome: PlacedFeature['outcome'];
   rotation: number;
+  /** Year the facility opened. */
+  opened: number;
+  /** Year it closed; the site is a brownfield drawn as it stood then. */
+  closed?: number;
 }
 
 export interface FacilitiesOutput {
@@ -114,17 +119,19 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
       hosts.set(s.id, { site: s, coreRadiusM: Math.min(0.8 * s.radiusM, 350 + 0.25 * s.radiusM) });
 
     // Requests: defaults per settlement, then explicit ones (which replace defaults with the same id).
+    // A default's opening year is the first five-year step at which the host, with the population
+    // it had then, would have asked for it; one the host has since outgrown or that its type has
+    // outlived stays for a while as a closed works or a shut asylum, then its land is redeveloped.
     const removed = new Set(input.removed);
     const byId = new Map<string, PlacementRequest>();
     if (input.defaults ?? true)
-      for (const s of sites)
-        for (const r of defaultRequests(s, year)) {
-          // A default outside its type's years (a mill town after the mills closed) is not a failure.
-          const t = types.get(r.type);
-          if (t && (year < t.years[0] || year > t.years[1])) continue;
-          byId.set(r.id, r);
-        }
-    for (const r of input.requests) byId.set(r.id, r);
+      for (const s of sites) for (const r of defaultsWithYears(s, year, types)) byId.set(r.id, r);
+    for (const r of input.requests) {
+      const t = types.get(r.type);
+      const host = hosts.get(r.settlement ?? '');
+      const opened = Math.max(t?.years[0] ?? year, host?.site.founded ?? -Infinity);
+      byId.set(r.id, { ...r, opened: Math.min(r.opened ?? opened, year) });
+    }
     for (const id of removed) byId.delete(id);
     for (const pin of input.pins) {
       const r = byId.get(pin.target);
@@ -230,6 +237,8 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
           to: 'rail',
           lengthKm: len / 1000,
           gradient: 0,
+          opened: Math.max(1830, rc.opened),
+          ...(rc.closed !== undefined ? { closed: rc.closed } : {}),
         },
       });
       ctx.checkpoint();
@@ -286,6 +295,8 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
         pinned: p.pinned,
         outcome: p.outcome,
         rotation: Math.atan2(p.frame.axis[1], p.frame.axis[0]),
+        opened: p.opened,
+        ...(p.closed !== undefined ? { closed: p.closed } : {}),
       },
     }));
     return {
@@ -301,3 +312,60 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
     };
   },
 });
+
+/** Years a closed default facility stays on the map as a brownfield before the land is redeveloped. */
+export const BROWNFIELD_YEARS = 40;
+const STEP = 5;
+
+/**
+ * The default requests of a settlement at `year`, each with the year it opened, plus the
+ * defaults it had within the last `BROWNFIELD_YEARS` that no longer apply, marked closed.
+ * Every five-year step from the host's founding (or the type's first year) is replayed with
+ * the population of that year; the latest unbroken run of a request gives its years.
+ */
+export function defaultsWithYears(
+  site: SettlementSite,
+  year: number,
+  types: ReadonlyMap<string, { years: [number, number] }>,
+): PlacementRequest[] {
+  const within = (type: string, y: number) => {
+    const t = types.get(type);
+    return !t || (y >= t.years[0] && y <= t.years[1]);
+  };
+  const now = new Map(
+    defaultRequests(site, year)
+      .filter((r) => within(r.type, year))
+      .map((r) => [r.id, r]),
+  );
+  // Replay the history on an absolute five-year grid from the founding, then the year itself,
+  // so a facility's opening year does not move when the map's year does.
+  const steps: number[] = [];
+  for (let y = Math.ceil(site.founded / STEP) * STEP; y < year; y += STEP) steps.push(y);
+  steps.push(year);
+  const runs = new Map<string, { opened: number; closed?: number; last: PlacementRequest }>();
+  for (const y of steps) {
+    const at = y === year ? site : { ...site, population: populationAt(site.history, y) };
+    const present = new Set<string>();
+    for (const r of defaultRequests(at, y)) {
+      if (!within(r.type, y)) continue;
+      present.add(r.id);
+      const run = runs.get(r.id);
+      if (!run || run.closed !== undefined) runs.set(r.id, { opened: y, last: r });
+      else run.last = r;
+    }
+    for (const [id, run] of runs)
+      if (run.closed === undefined && !present.has(id)) {
+        // A type that has run out of years closed in its last year, not at the next step.
+        const t = types.get(run.last.type);
+        run.closed = t ? Math.min(y, t.years[1]) : y;
+      }
+  }
+  const out: PlacementRequest[] = [];
+  for (const [id, r] of now) out.push({ ...r, opened: runs.get(id)?.opened ?? year });
+  for (const [id, run] of runs) {
+    if (now.has(id) || run.closed === undefined) continue;
+    if (year - run.closed >= BROWNFIELD_YEARS) continue;
+    out.push({ ...run.last, opened: run.opened, closed: run.closed });
+  }
+  return out;
+}

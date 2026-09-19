@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   StageRunner,
   contentHash,
+  populationAt,
   railServiceThreshold,
   railStage,
   sitingStage,
@@ -208,6 +209,34 @@ describe('rail stage', () => {
     });
     expect(late.tracks.features.some((t) => t.properties.class === 'disused')).toBe(true);
     expect(late.stations.features.filter((s) => s.properties.closed).length).toBeGreaterThan(0);
+    // Every line carries the year it opened (not before the railway age, not after the map's
+    // year); a disused line closed after it opened, once the 1965 threshold rose; a closed
+    // station closed with its last line, and open stations carry no closing year.
+    for (const t of late.tracks.features) {
+      expect(t.properties.opened).toBeGreaterThanOrEqual(1850);
+      expect(t.properties.opened).toBeLessThanOrEqual(1985);
+      if (t.properties.class === 'disused') {
+        expect(t.properties.closed).toBeGreaterThan(t.properties.opened);
+        expect(t.properties.closed).toBeGreaterThanOrEqual(1965);
+      } else expect(t.properties.closed).toBeUndefined();
+    }
+    const lineYears = new Map(late.tracks.features.map((t) => [t.properties.line, t.properties]));
+    for (const st of late.stations.features) {
+      expect(st.properties.opened).toBeGreaterThanOrEqual(1850);
+      if (st.properties.closed) {
+        expect(st.properties.closedYear).toBeGreaterThanOrEqual(1965);
+        const line = lineYears.get(st.properties.line);
+        if (line?.closed !== undefined) expect(st.properties.closedYear).toBe(line.closed);
+      } else expect(st.properties.closedYear).toBeUndefined();
+    }
+    // The mainline through the hub opened with the railway age; a branch to a village later.
+    const opened = late.tracks.features.map((t) => t.properties.opened);
+    expect(Math.min(...opened)).toBe(1850);
+    expect(Math.max(...opened)).toBeGreaterThan(1850);
+    const early = await railP;
+    const earlyByLine = new Map(early.tracks.features.map((t) => [t.properties.line, t.properties.opened]));
+    for (const [line, y] of lineYears)
+      if (earlyByLine.has(line)) expect(earlyByLine.get(line)).toBe(y.opened);
     expect(
       late.structures.features.some(
         (s) => s.properties.kind === 'depot' || s.properties.kind === 'intermodal',
@@ -215,6 +244,36 @@ describe('rail stage', () => {
     ).toBe(true);
     expect(late.structures.features.some((s) => s.properties.kind === 'roundhouse')).toBe(false);
     expect(railServiceThreshold(1985).active).toBeGreaterThan(railServiceThreshold(1925).active);
+    // A village that only reaches the served threshold after the closures never had a train:
+    // no line, disused or otherwise, and no station.
+    const lateSiting = await runner.run(sitingStage, {
+      seed: 'rail-hills',
+      terrain,
+      year: 2020,
+      settlements: [
+        ...specs,
+        { id: 'tiny', kind: 'village', population: 600, layout: { streetPattern: 'organic' }, features: [] },
+      ],
+      policy: { count: [3, 8], kinds: {} },
+    });
+    const tiny = lateSiting.sites.find((s) => s.id === 'tiny')!;
+    const railServiceEver = [...Array(31)].some(
+      (_, k) => populationAt(tiny.history, 1850 + k * 5) >= railServiceThreshold(1850 + k * 5).active,
+    );
+    expect(railServiceEver).toBe(false);
+    const modern = await runner.run(railStage, {
+      seed: 'x',
+      terrain,
+      sites: lateSiting.sites,
+      year: 2020,
+      eras: TEST_ERAS,
+      mainlines: 1,
+      enabled: true,
+    });
+    expect(modern.stations.features.some((st) => st.properties.settlement === 'tiny')).toBe(false);
+    expect(
+      modern.tracks.features.some((t) => t.properties.from === 'tiny' || t.properties.to === 'tiny'),
+    ).toBe(false);
     const a = await railP;
     const b = await new StageRunner().run(railStage, {
       seed: 'rail-hills',

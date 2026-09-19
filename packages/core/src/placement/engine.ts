@@ -4,6 +4,7 @@ import type { Ring } from '../raster/contours.js';
 import { pointInRing } from '../geometry/polygon.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import { landSampler } from '../terrain/land.js';
+import { populationAt } from '../settlement/history.js';
 import type { SettlementSite } from '../settlement/siting.js';
 import type { RailOutput } from '../networks/rail.js';
 import type {
@@ -215,7 +216,7 @@ export interface PlaceResult {
   failures: PlacementFailure[];
   nuisance: [number, number, number, number][];
   /** Rail connector requests: from the feature's rail edge. */
-  railConnectors: { feature: string; from: Pt; settlement: string | null }[];
+  railConnectors: { feature: string; from: Pt; settlement: string | null; opened: number; closed?: number }[];
   roadConnectors: { feature: string; from: Pt; settlement: string | null }[];
 }
 
@@ -269,16 +270,22 @@ export function placeFeatures(
       fail(`unknown feature type "${req.type}"`);
       continue;
     }
-    if (ctx.year < type.years[0] || ctx.year > type.years[1]) {
-      fail(`${type.name} is not built in ${ctx.year} (available ${type.years[0]}–${type.years[1]})`);
+    // A closed facility is drawn as it stood in the year it shut.
+    const drawnYear = req.closed ?? ctx.year;
+    if (drawnYear < type.years[0] || drawnYear > type.years[1]) {
+      fail(`${type.name} is not built in ${drawnYear} (available ${type.years[0]}–${type.years[1]})`);
       continue;
     }
     if (type.level === 'settlement' && !host) {
       fail(`${type.name} needs a settlement to belong to`);
       continue;
     }
-    const population = host?.site.population ?? 0;
-    const [realL, realW] = type.footprint(req.size, { population, year: ctx.year });
+    const population = host
+      ? req.closed !== undefined
+        ? populationAt(host.site.history, req.closed)
+        : host.site.population
+      : 0;
+    const [realL, realW] = type.footprint(req.size, { population, year: drawnYear });
     const compression = options.scaleCompression
       ? (type.scaleCompression ?? (Math.max(realL, realW) > 300 ? 0.6 : 1))
       : 1;
@@ -351,12 +358,14 @@ export function placeFeatures(
       ward: type.ward,
       pinned: !!req.pin,
       outcome,
+      opened: req.opened ?? Math.max(type.years[0], host?.site.founded ?? type.years[0]),
+      ...(req.closed !== undefined ? { closed: req.closed } : {}),
     };
     result.placed.push(placed);
     // Layout parts.
     const parts = type.layout({
       size: req.size,
-      year: ctx.year,
+      year: drawnYear,
       lengthM: frame.lengthM,
       widthM: frame.widthM,
       compression: frame.lengthM / realL,
@@ -384,7 +393,13 @@ export function placeFeatures(
         (b, e) => (ctx.distToRail(e[0], e[1]) < ctx.distToRail(b[0], b[1]) ? e : b),
         info.edges[0],
       );
-      result.railConnectors.push({ feature: req.id, from: railEdge, settlement: req.settlement ?? null });
+      result.railConnectors.push({
+        feature: req.id,
+        from: railEdge,
+        settlement: req.settlement ?? null,
+        opened: placed.opened,
+        ...(placed.closed !== undefined ? { closed: placed.closed } : {}),
+      });
     }
     if (type.connectors?.road && host) {
       const c = host.site.center;

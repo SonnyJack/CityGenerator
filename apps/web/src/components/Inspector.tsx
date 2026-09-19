@@ -84,6 +84,8 @@ export function Inspector() {
               {i.facility.part ? ` · ${i.facility.part.name ?? i.facility.part.kind}` : ''}
               {i.facility.pinned ? ' · pinned' : ''}
               {i.facility.outcome !== 'placed' ? ` · ${i.facility.outcome}` : ''}
+              {` · ${i.facility.opened}–${i.facility.closed ?? ''}`}
+              {i.facility.closed !== undefined ? ' (closed)' : ''}
               {i.facility.part?.interior && (
                 <>
                   {' '}

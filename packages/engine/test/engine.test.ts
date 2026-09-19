@@ -22,6 +22,15 @@ describe('headless engine', () => {
     const near = stats.landcover.nearTowns;
     expect(near.woodsKm2 + near.commonsKm2 + near.farmlandKm2).toBeGreaterThan(0);
     expect(near.woodsKm2).toBeLessThanOrEqual(stats.landcover.km2['forest']! + 1e-9);
+    // Every facility and rail line carries the year it opened, none in the future of the map.
+    for (const f of stats.facilities.list) {
+      expect(f.opened).toBeLessThanOrEqual(doc.spec.year);
+      if (f.closed !== undefined) expect(f.closed).toBeGreaterThanOrEqual(f.opened);
+    }
+    for (const l of stats.rail.lines) {
+      expect(l.opened).toBeLessThanOrEqual(doc.spec.year);
+      if (l.class === 'disused') expect(l.closed).toBeGreaterThan(l.opened);
+    }
     const tile = await engine.getTile(version, 0, 0, 0);
     expect(tile).toBeInstanceOf(Uint8Array);
     expect(tile!.byteLength).toBeGreaterThan(100);

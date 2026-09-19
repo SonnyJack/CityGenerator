@@ -94,8 +94,10 @@ export interface SettlementSummary {
     center: [number, number];
     pinned: boolean;
     outcome: string;
+    opened: number;
+    closed?: number;
   }[];
-  stations: { id: string; name: string; center: [number, number] }[];
+  stations: { id: string; name: string; center: [number, number]; opened: number; closed?: number }[];
   premises: number;
   businesses: { name: string; use: string; address?: string }[];
   wealth?: string;
@@ -154,6 +156,10 @@ export interface Inspection {
     outcome: string;
     center: [number, number];
     rotation: number;
+    /** Year the facility opened. */
+    opened: number;
+    /** Year it closed, for a brownfield still on the map. */
+    closed?: number;
     part?: { id: string; kind: string; name?: string; floors?: number; interior: boolean };
   };
   /** Utility lines, points and works at or under the point (sewers are GM-only). */
@@ -240,6 +246,8 @@ export interface EngineStats {
     viaducts: number;
     maxGradient: number;
     disusedKm: number;
+    /** One entry per line (mainlines, branches and closed branches) with its opening and closing years. */
+    lines: { id: string; class: string; from: string; to: string; opened: number; closed?: number }[];
     tramKm: number;
     tramLines: number;
     crossings: number;
@@ -271,6 +279,8 @@ export interface EngineStats {
       outcome: string;
       center: [number, number];
       rotation: number;
+      opened: number;
+      closed?: number;
     }[];
     failures: { id: string; type: string; settlement: string | null; reason: string }[];
     /** Buildable land inside the built-up radius with no use, as a fraction, per settlement and overall. */

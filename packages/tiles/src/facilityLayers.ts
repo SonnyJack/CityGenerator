@@ -32,7 +32,12 @@ export function facilityLayers(facilities: FacilitiesOutput | null): TileLayerIn
             type: 'Feature' as const,
             id: `${f.properties.id}-label`,
             geometry: { type: 'Point' as const, coordinates: [x / n, y / n] },
-            properties: { name: f.properties.name, category: f.properties.category, id: f.properties.id },
+            properties: {
+              name: f.properties.closed !== undefined ? `${f.properties.name} (closed)` : f.properties.name,
+              category: f.properties.category,
+              id: f.properties.id,
+              ...(f.properties.closed !== undefined ? { closed: f.properties.closed } : {}),
+            },
           };
         }),
       },

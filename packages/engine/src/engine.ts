@@ -594,6 +594,7 @@ export function createEngine(): EngineApi {
           viaducts: rail.stats.viaducts,
           maxGradient: rail.stats.maxGradient,
           disusedKm: rail.stats.disusedKm,
+          lines: railLines(rail),
           tramKm: trams.reduce((a, t) => a + t.stats.tramKm, 0),
           tramLines: trams.reduce((a, t) => a + t.stats.lines, 0),
           crossings: trams.reduce((a, t) => a + t.stats.crossings, 0),
@@ -613,6 +614,8 @@ export function createEngine(): EngineApi {
             outcome: f.properties.outcome,
             center: centroidOf(f.geometry.coordinates[0]!),
             rotation: f.properties.rotation,
+            opened: f.properties.opened,
+            ...(f.properties.closed !== undefined ? { closed: f.properties.closed } : {}),
           })),
           failures: facilities.failures,
           wasteland,
@@ -743,6 +746,8 @@ export function createEngine(): EngineApi {
           outcome: f.properties.outcome,
           center: centroidOf(f.geometry.coordinates[0]!),
           rotation: f.properties.rotation,
+          opened: f.properties.opened,
+          ...(f.properties.closed !== undefined ? { closed: f.properties.closed } : {}),
           ...(part
             ? {
                 part: {
@@ -1148,7 +1153,12 @@ export function createEngine(): EngineApi {
             name: st.properties.name ?? `${st.properties.kind} station`,
             center: [st.geometry.coordinates[0]!, st.geometry.coordinates[1]!],
             settlement: st.properties.settlement,
-            properties: { stationKind: st.properties.kind, closed: st.properties.closed },
+            properties: {
+              stationKind: st.properties.kind,
+              closed: st.properties.closed,
+              opened: st.properties.opened,
+              ...(st.properties.closedYear !== undefined ? { closedYear: st.properties.closedYear } : {}),
+            },
           });
       if (want('district'))
         for (const tn of townNames)
@@ -1302,6 +1312,8 @@ export function createEngine(): EngineApi {
             center: centroidOf(x.geometry.coordinates[0]!),
             pinned: x.properties.pinned,
             outcome: x.properties.outcome,
+            opened: x.properties.opened,
+            ...(x.properties.closed !== undefined ? { closed: x.properties.closed } : {}),
           })),
         stations: (rail?.stations.features ?? [])
           .filter((st) => st.properties.settlement === id)
@@ -1309,6 +1321,8 @@ export function createEngine(): EngineApi {
             id: String(st.id),
             name: st.properties.name ?? `${st.properties.kind} station`,
             center: [st.geometry.coordinates[0]!, st.geometry.coordinates[1]!],
+            opened: st.properties.opened,
+            ...(st.properties.closedYear !== undefined ? { closed: st.properties.closedYear } : {}),
           })),
         premises,
         businesses,
@@ -1417,6 +1431,24 @@ function buildingSummary(p: BuildingProps, id: string): Omit<DirectoryEntry, 'se
     ward: p.ward,
     ...(p.address ? { address: p.address } : {}),
   };
+}
+
+/** One entry per rail line (not yards or spurs) with its class and years. */
+function railLines(rail: RailOutput): EngineStats['rail']['lines'] {
+  const out = new Map<string, EngineStats['rail']['lines'][number]>();
+  for (const t of rail.tracks.features) {
+    const p = t.properties;
+    if (p.class === 'yard' || p.class === 'spur' || out.has(p.line)) continue;
+    out.set(p.line, {
+      id: p.line,
+      class: p.class,
+      from: p.from,
+      to: p.to,
+      opened: p.opened,
+      ...(p.closed !== undefined ? { closed: p.closed } : {}),
+    });
+  }
+  return [...out.values()];
 }
 
 function centroidOf(ring: number[][]): [number, number] {

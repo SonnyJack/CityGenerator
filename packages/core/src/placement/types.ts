@@ -182,6 +182,10 @@ export interface PlacementRequest {
   /** Point hint the app resolved ("north of the station"). */
   hint?: Pt;
   params?: Record<string, unknown>;
+  /** Year the facility opened (defaults follow the host's growth; explicit requests the type's first year). */
+  opened?: number;
+  /** Year it closed: a brownfield drawn as it stood when it shut. */
+  closed?: number;
 }
 
 export interface PlacedFeature {
@@ -200,6 +204,8 @@ export interface PlacedFeature {
   pinned: boolean;
   /** How the engine got here: 'placed', or a degraded outcome. */
   outcome: 'placed' | 'shrunk' | 'relaxed';
+  opened: number;
+  closed?: number;
 }
 
 export interface PlacementFailure {

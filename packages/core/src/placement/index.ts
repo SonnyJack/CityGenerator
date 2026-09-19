@@ -31,6 +31,8 @@ export { defaultRequests } from './defaults.js';
 export { customFeatureTypeSchema, customFeatureType, type CustomFeatureType } from './custom.js';
 export {
   facilitiesStage,
+  defaultsWithYears,
+  BROWNFIELD_YEARS,
   type FacilitiesInput,
   type FacilitiesOutput,
   type FacilityProps,

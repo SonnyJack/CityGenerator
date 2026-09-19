@@ -497,10 +497,14 @@ the port through the engine, adds a GM note and undoes from a tool card.
       toggle); glTF binary export of any frame with a terrain mesh from the
       height grid, buildings extruded on the ground, facilities, water and
       per-kind materials.
-- [ ] Deferred: rail and facility opening and closing years beyond the era
-      variants they already have; explicit growth points in the settlements
-      panel (they are settable through the spec and the assistant); a
-      textured glTF.
+- [x] Rail lines, stations and facilities carry opening and closing years
+      replayed from the settlements' growth histories (a branch opens when
+      its village reaches the threshold of its day, a default facility when
+      its town's growth first asks for it); a closed default stays as a
+      brownfield for forty years, drawn as it stood when it shut. The rail
+      stats list the lines with their years; the inspector shows them.
+- [ ] Deferred: explicit growth points in the settlements panel (they are
+      settable through the spec and the assistant); a textured glTF.
 
 Acceptance: a unit test generates one seed at 1850, 1890, 1925, 1955 and
 2020 and checks that every earlier block, street and surviving building is

@@ -102,7 +102,7 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
   fills(model.patches, (f) => t.ward[String(f.properties.ward)] ?? p.land, 'patches');
   fills(
     model.facilities,
-    () => '#ddd9d0',
+    (f) => (f.properties.closed !== undefined ? '#b9b5ad' : '#ddd9d0'),
     'facilities',
     `stroke="${p.inkMuted}" stroke-width="0.6" stroke-dasharray="4 2"`,
   );
