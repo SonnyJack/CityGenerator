@@ -373,8 +373,12 @@ export const railStage = defineStage<RailInput, RailOutput>({
       .filter((s) => s.population >= 100_000)
       .map((s) => ({ c: s.center, r: s.radiusM, rCore: Math.min(0.6 * s.radiusM, 350 + 0.35 * s.radiusM) }));
 
-    /** Ease vertices whose local curve radius is below the minimum (endpoints fixed). */
-    const relaxCurves = (pts: Ring, minRadius: number, iterations: number): void => {
+    /**
+     * Ease vertices whose local curve radius is below the minimum (endpoints fixed). Constrained,
+     * a vertex moves only onto land (half way when the full move would be wet), so the corners
+     * the land projection makes are softened without the track swinging back into the cove.
+     */
+    const relaxCurves = (pts: Ring, minRadius: number, iterations: number, constrained = false): void => {
       for (let it = 0; it < iterations; it++) {
         let moved = false;
         for (let i = 1; i < pts.length - 1; i++) {
@@ -390,7 +394,12 @@ export const railStage = defineStage<RailInput, RailOutput>({
           if (theta < 1e-4) continue;
           const radius = Math.min(l1, l2) / (2 * Math.sin(theta / 2));
           if (radius >= minRadius) continue;
-          pts[i] = [b[0] * 0.4 + ((a[0] + c[0]) / 2) * 0.6, b[1] * 0.4 + ((a[1] + c[1]) / 2) * 0.6];
+          const q: Pt = [b[0] * 0.4 + ((a[0] + c[0]) / 2) * 0.6, b[1] * 0.4 + ((a[1] + c[1]) / 2) * 0.6];
+          if (constrained && !onLand(q[0], q[1])) {
+            const h: Pt = [(b[0] + q[0]) / 2, (b[1] + q[1]) / 2];
+            if (!onLand(h[0], h[1])) continue;
+            pts[i] = h;
+          } else pts[i] = q;
           moved = true;
         }
         if (!moved) break;
@@ -404,12 +413,19 @@ export const railStage = defineStage<RailInput, RailOutput>({
       disused: 180,
     };
 
-    /** Curve easing may swing a track into a cove: points that left the land go back to the routed line. */
-    const keepOnLand = (pts: Ring, ref: Ring) => {
-      for (let i = 1; i < pts.length - 1; i++) {
-        const p = pts[i]!;
-        if (onLand(p[0], p[1])) continue;
-        let best: Pt = ref[0]!;
+    /**
+     * Curve easing may swing a track into a cove. A short span of water (an inlet a viaduct
+     * crosses in a few cells) is kept: that is how a railway takes a ragged shore. A longer run
+     * of eased points over water is replaced by the stretch of the routed line between its dry
+     * neighbours, so the track follows the route the router found there; the joints are eased
+     * on land afterwards.
+     */
+    const keepOnLand = (pts: Ring, ref: Ring, spanM: number): Ring => {
+      const refS: number[] = [0];
+      for (let k = 1; k < ref.length; k++)
+        refS.push(refS[k - 1]! + Math.hypot(ref[k]![0] - ref[k - 1]![0], ref[k]![1] - ref[k - 1]![1]));
+      const projectS = (p: Pt): number => {
+        let best = 0;
         let bestD = Infinity;
         for (let k = 1; k < ref.length; k++) {
           const a = ref[k - 1]!;
@@ -418,28 +434,73 @@ export const railStage = defineStage<RailInput, RailOutput>({
           const dy = b[1] - a[1];
           const len2 = dx * dx + dy * dy || 1;
           const t = Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
-          const q: Pt = [a[0] + dx * t, a[1] + dy * t];
-          const d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2;
-          if (d < bestD && onLand(q[0], q[1])) {
+          const d = (a[0] + dx * t - p[0]) ** 2 + (a[1] + dy * t - p[1]) ** 2;
+          if (d < bestD) {
             bestD = d;
-            best = q;
+            best = refS[k - 1]! + Math.sqrt(len2) * t;
           }
         }
-        if (bestD < Infinity) pts[i] = best;
+        return best;
+      };
+      const pointAtS = (target: number): Pt => {
+        for (let k = 1; k < ref.length; k++)
+          if (refS[k]! >= target) {
+            const a = ref[k - 1]!;
+            const b = ref[k]!;
+            const t = refS[k]! > refS[k - 1]! ? (target - refS[k - 1]!) / (refS[k]! - refS[k - 1]!) : 0;
+            return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+          }
+        return ref[ref.length - 1]!;
+      };
+      const out: Ring = [pts[0]!];
+      let i = 1;
+      while (i < pts.length - 1) {
+        const p = pts[i]!;
+        if (onLand(p[0], p[1])) {
+          out.push(p);
+          i++;
+          continue;
+        }
+        let j = i;
+        let span = Math.hypot(p[0] - out[out.length - 1]![0], p[1] - out[out.length - 1]![1]);
+        while (j < pts.length - 1 && !onLand(pts[j]![0], pts[j]![1])) {
+          j++;
+          span += Math.hypot(pts[j]![0] - pts[j - 1]![0], pts[j]![1] - pts[j - 1]![1]);
+        }
+        if (span <= spanM) {
+          for (let k = i; k < j; k++) out.push(pts[k]!);
+          i = j;
+          continue;
+        }
+        const s0 = projectS(out[out.length - 1]!);
+        const s1 = projectS(pts[j]!);
+        const lo = Math.min(s0, s1);
+        const hi = Math.max(s0, s1);
+        const mids: Pt[] = [];
+        for (let k = 0; k < ref.length; k++) if (refS[k]! > lo && refS[k]! < hi) mids.push(ref[k]!);
+        if (s0 > s1) mids.reverse();
+        if (!mids.length) mids.push(pointAtS((lo + hi) / 2));
+        out.push(...mids);
+        i = j;
       }
+      out.push(pts[pts.length - 1]!);
+      return out;
     };
 
     /** Split a routed line into mode runs and push them as track features. */
     const pushTrack = (line: Ring, cls: TrackClass, lineId: string, from: string, to: string): Ring => {
       // Ease curves at a coarse spacing first (large moves), then at the working spacing.
-      const coarse = resample(line, cellSizeM * 1.5).pts;
+      // A mainline may bridge a longer inlet than a branch or a spur.
+      const spanM = cellSizeM * (cls === 'mainline' ? 6 : 3);
+      let coarse = resample(line, cellSizeM * 1.5).pts;
       relaxCurves(coarse, MIN_RADIUS[cls], 200);
-      keepOnLand(coarse, line);
-      const fine = resample(coarse, cellSizeM * 0.5).pts;
+      coarse = keepOnLand(coarse, line, spanM);
+      relaxCurves(coarse, MIN_RADIUS[cls], 80, true);
+      let fine = resample(coarse, cellSizeM * 0.5).pts;
       relaxCurves(fine, MIN_RADIUS[cls], 200);
-      keepOnLand(fine, line);
+      fine = keepOnLand(fine, line, spanM);
+      relaxCurves(fine, MIN_RADIUS[cls], 80, true);
       const { pts, s } = resample(fine, cellSizeM * 0.5);
-      keepOnLand(pts, line);
       if (pts.length < 2) return line;
       const cap = GRADIENT_CAP[cls];
       const z = profile(pts, s, cap);
@@ -453,7 +514,13 @@ export const railStage = defineStage<RailInput, RailOutput>({
         else if (d > 3) m = 'embankment';
         else if (d < -16) m = 'tunnel';
         else if (d < -3) m = 'cutting';
-        if (water[r * width + c] === WATER.river && (m === 'surface' || m === 'embankment')) m = 'viaduct';
+        // Over water of any kind (by the drawn shoreline) the track is carried: a bridge over a
+        // river, a viaduct across an inlet.
+        if (
+          (water[r * width + c] !== WATER.land || !onLand(pts[i]![0], pts[i]![1])) &&
+          (m === 'surface' || m === 'embankment' || m === 'cutting')
+        )
+          m = 'viaduct';
         for (const k of metroCores) {
           const dist = Math.hypot(pts[i]![0] - k.c[0], pts[i]![1] - k.c[1]);
           if (cls !== 'yard' && cls !== 'spur' && year >= 1900 && dist < k.rCore) m = 'subway';

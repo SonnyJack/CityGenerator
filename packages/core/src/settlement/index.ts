@@ -8,6 +8,13 @@ export {
 export { townStage, type TownInput, type TownOutput, type BlockRecipe } from './town.js';
 export { growthFootprint, type Footprint, type FootprintOptions } from './footprint.js';
 export {
+  gridOrientation,
+  gradientBetween,
+  STEPS_GRADIENT,
+  type GridOrientation,
+  type OrientationTerrain,
+} from './orientation.js';
+export {
   generateBlock,
   subdivide,
   type BlockModel,

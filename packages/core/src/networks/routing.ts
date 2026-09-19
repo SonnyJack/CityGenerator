@@ -87,8 +87,9 @@ export function routeCells(
         const nc = col + dx;
         const nr = row + dy;
         if (nc < 0 || nr < 0 || nc >= width || nr >= rows) continue;
-        if (dx && dy && !((dx > 0 ? passE : passW) && (dy > 0 ? passS : passN))) continue;
         const v = nr * width + nc;
+        // The goal itself (an outfall in the water, a quay) may be entered from a diagonal.
+        if (dx && dy && v !== gi && !((dx > 0 ? passE : passW) && (dy > 0 ? passS : passN))) continue;
         if (closed[v]) continue;
         const mult = options.costOf(v);
         if (!Number.isFinite(mult)) continue;

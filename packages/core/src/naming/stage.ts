@@ -107,7 +107,14 @@ export interface TownNamesOutput {
 
 type Pt = [number, number];
 const key = (p: Pt) => `${Math.round(p[0] * 10)},${Math.round(p[1] * 10)}`;
-const CLASS_RANK: Record<string, number> = { artery: 4, road: 3, collector: 2, motorway: 5, street: 1 };
+const CLASS_RANK: Record<string, number> = {
+  artery: 4,
+  road: 3,
+  collector: 2,
+  motorway: 5,
+  street: 1,
+  steps: 0,
+};
 
 function lengthOf(pts: Pt[]): number {
   let l = 0;
@@ -196,7 +203,8 @@ export const townNamesStage = defineStage<TownNamesInput, TownNamesOutput>({
     const wayFeatures: TownNamesOutput['ways']['features'] = [];
     ways.forEach((w, k) => {
       const len = lengthOf(w.pts);
-      let cls: StreetClass = w.cls === 'motorway' ? 'artery' : (w.cls as StreetClass);
+      let cls: StreetClass =
+        w.cls === 'motorway' ? 'artery' : w.cls === 'steps' ? 'lane' : (w.cls as StreetClass);
       if (cls === 'street' && len < 90) cls = 'lane';
       const name = gen.street(`${k}`, cls);
       for (const m of w.members) streetNames[String(feats[m]!.id)] = name;

@@ -152,21 +152,55 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
       }
     }
     const mainland = componentArea.reduce((best, a, i) => (a > componentArea[best]! ? i : best), 0);
-    /** Land fraction on a ring of radius r around a cell. */
-    const landAround = (i: number, r: number): number => {
+    /**
+     * What the ground within radius r of a cell offers: the land share and the share that is
+     * both land and gentle (slope under 0.18), sampled on two rings and the centre. A site is
+     * judged on the footprint it will have, not on its centre cell alone.
+     */
+    const buildableAround = (i: number, r: number): { land: number; gentle: number; shoreGentle: number } => {
       const cx = i % width;
       const cy = (i / width) | 0;
-      const rc = r / cellSizeM;
       let land = 0;
-      for (let k = 0; k < 16; k++) {
-        const a = (k / 16) * Math.PI * 2;
-        const c = Math.round(cx + Math.cos(a) * rc);
-        const rr = Math.round(cy + Math.sin(a) * rc);
-        if (c < 0 || rr < 0 || c >= width || rr >= rows) continue;
-        const w = water[rr * width + c]!;
-        if (w === WATER.land || w === WATER.river) land++;
+      let gentle = 0;
+      let count = 0;
+      let shore = 0;
+      let shoreGentle = 0;
+      const probe = (c: number, rr: number) => {
+        count++;
+        if (c < 0 || rr < 0 || c >= width || rr >= rows) return;
+        const j = rr * width + c;
+        const w = water[j]!;
+        if (w !== WATER.land && w !== WATER.river) return;
+        land++;
+        if (slope[j]! <= 0.18) gentle++;
+      };
+      probe(cx, cy);
+      for (const f of [0.45, 0.85]) {
+        const rc = (r * f) / cellSizeM;
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * Math.PI * 2 + f;
+          probe(Math.round(cx + Math.cos(a) * rc), Math.round(cy + Math.sin(a) * rc));
+        }
       }
-      return land / 16;
+      // The shore itself: rings through the nearest sea and a little beyond, sampled where they
+      // run within 160 m of the water. A harbour wants a flat shore, not a cliff.
+      const dSea = distToSea[i]!;
+      if (dSea < r + 300)
+        for (const extra of [60, 200]) {
+          const rc = (dSea + extra) / cellSizeM;
+          for (let k = 0; k < 24; k++) {
+            const a = (k / 24) * Math.PI * 2;
+            const c = Math.round(cx + Math.cos(a) * rc);
+            const rr = Math.round(cy + Math.sin(a) * rc);
+            if (c < 0 || rr < 0 || c >= width || rr >= rows) continue;
+            const j = rr * width + c;
+            const w = water[j]!;
+            if ((w !== WATER.land && w !== WATER.river) || distToSea[j]! >= 160) continue;
+            shore++;
+            if (slope[j]! <= 0.1) shoreGentle++;
+          }
+        }
+      return { land: land / count, gentle: gentle / count, shoreGentle: shore ? shoreGentle / shore : 0 };
     };
 
     // Candidate cells: land, gentle, above the sea. Sampled deterministically.
@@ -204,7 +238,8 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
           const y = height.y((i / width) | 0);
           // Hard constraints.
           if (Math.abs(x) > halfW - marginR * 0.6 || Math.abs(y) > halfH - marginR * 0.6) continue;
-          if (level === 0 && wantsCoast && distToSea[i]! > radiusM * 0.9 + 300) continue;
+          // A harbour town stays on the coast until the last resort; only its room to grow relaxes.
+          if (level < 2 && wantsCoast && distToSea[i]! > radiusM * 0.9 + 300) continue;
           // Room to grow: on the mainland (or an island several times the town's area) with
           // most of the ground around the centre dry.
           const comp = component[i]!;
@@ -214,12 +249,15 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
           const islandFactor = level === 0 ? 4 : explicit ? 0 : 1.5;
           if (islandFactor && comp !== mainland && areaM2 < Math.PI * radiusM * radiusM * islandFactor)
             continue;
-          if (level < 2 && landAround(i, marginR * 0.7) < (level === 0 ? 0.6 : explicit ? 0.4 : 0.5))
-            continue;
-          let score = 1 - slope[i]! / 0.12;
+          const ground = buildableAround(i, Math.max(marginR, 150));
+          if (level < 2 && ground.land < (level === 0 ? 0.6 : explicit ? 0.4 : 0.5)) continue;
+          // A harbour town needs some flat shore within reach, or its port has nowhere to go.
+          if (level === 0 && wantsCoast && ground.shoreGentle < 0.3) continue;
+          // Flat at the centre, and gentle buildable ground across the footprint to come.
+          let score = 0.5 * (1 - slope[i]! / 0.12) + 1.2 * ground.gentle;
           const dSea = distToSea[i]!;
           const dWater = distToWater[i]!;
-          if (wantsCoast) score += 1.5 * (1 - Math.min(dSea, 1500) / 1500);
+          if (wantsCoast) score += 1.5 * (1 - Math.min(dSea, 1500) / 1500) + 1.5 * ground.shoreGentle;
           else if (wantsRiver) score += 1.5 * (1 - Math.min(dWater, 800) / 800);
           else score += 0.6 * (1 - Math.min(dWater, 2500) / 2500);
           if (spec.kind === 'city' || spec.kind === 'metropolis')

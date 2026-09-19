@@ -627,7 +627,7 @@ facility failures, settlements without blocks, no premises).
 - [ ] Deferred: a browser-side sweep of every theme at every zoom for
       rendering budgets; per-culture visual review of the generated names.
 
-## Phase 13 — Terrain fit (steps 1–3 done, 4 and 5 open)
+## Phase 13 — Terrain fit (steps 1–4 done, 5 open)
 
 Screenshots showed blocks hanging over lakes and bays and roads cutting
 coves. The cause was two shorelines: the map draws water from marching
@@ -672,11 +672,26 @@ cells the router had never entered.
       not depend on the year. The motorway ring road follows the footprint's
       outline. Towns report their extent and the share of steep ground in
       the core.
-- [ ] Step 4: terrain-aligned ring streets (grids rotated to the local
-      gradient or shoreline, collectors contour-parallel on slopes, stepped
-      lanes where a local would be too steep) and siting scored on the
-      buildable area within the eventual footprint rather than the centre
-      cell.
+- [x] Step 4, streets that see the ground (`core/settlement/orientation.ts`):
+      each growth ring's grid is turned to the terrain around its inner
+      edge, where the ground votes with a quarter-turn angle: the contour
+      direction where it slopes, the shoreline direction within 600 m of
+      the sea; weak or cancelling votes keep the artery direction. The
+      samples are fixed by the ring's inner edge, so the newest ring keeps
+      its angle while it grows with the year. On a sloped ring the
+      collectors run along the contour and the cross streets climb; any
+      minor street steeper than 15 % becomes a flight of `steps` (thin and
+      dashed in every theme and the SVG export, named as a lane, never a
+      tram route). Artery cuts use the artery's full line so a block cut
+      in one year is cut in every year. Siting scores a candidate on the
+      land and gentle ground across its eventual footprint (two rings of
+      samples and the centre) rather than on the centre cell alone. Rail
+      easing keeps a short inlet as a viaduct and follows the routed line
+      round a longer one; any track over water is carried. Two stability
+      fixes the new sites exposed: the zoning society takes its noise from
+      the anchor year's railways and works (so a block's wealth class does
+      not flip with the slider), and a sewer outfall is a shore cell the
+      trunk can reach (the router may also enter its goal diagonally).
 - [ ] Step 5: rivers through a town as hard boundaries with quays along
       the bank and bridges only where arteries cross; zoning that reads the
       terrain (industry and rail on the floodplain, wealth on the high

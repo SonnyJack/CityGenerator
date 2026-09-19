@@ -234,44 +234,41 @@ export function createEngine(): EngineApi {
       // Facilities: ports, industry, institutions and airports, placed before society
       // (they are nuisance sources) and before the towns (which reserve their land).
       const t7 = performance.now();
-      let facilities = await runner.run(
-        facilitiesStage,
-        {
-          seed,
-          terrain,
-          sites,
-          rail,
-          year: doc.spec.year,
-          extent: doc.spec.extent,
-          requests: [
-            ...doc.spec.features.map((f) => ({
-              id: f.id,
+      const facilitiesInput = (railAt: typeof rail, year: number) => ({
+        seed,
+        terrain,
+        sites,
+        rail: railAt,
+        year,
+        extent: doc.spec.extent,
+        requests: [
+          ...doc.spec.features.map((f) => ({
+            id: f.id,
+            type: f.type,
+            size: f.size ?? 'medium',
+            ...(f.pin ? { pin: f.pin } : {}),
+            ...(f.params ? { params: f.params } : {}),
+          })),
+          ...doc.spec.settlements.flatMap((st) =>
+            st.features.map((f) => ({
+              id: f.id.includes(':') ? f.id : `${st.id}:${f.id}`,
               type: f.type,
               size: f.size ?? 'medium',
+              settlement: st.id,
               ...(f.pin ? { pin: f.pin } : {}),
               ...(f.params ? { params: f.params } : {}),
             })),
-            ...doc.spec.settlements.flatMap((st) =>
-              st.features.map((f) => ({
-                id: f.id.includes(':') ? f.id : `${st.id}:${f.id}`,
-                type: f.type,
-                size: f.size ?? 'medium',
-                settlement: st.id,
-                ...(f.pin ? { pin: f.pin } : {}),
-                ...(f.params ? { params: f.params } : {}),
-              })),
-            ),
-          ],
-          removed: doc.overrides.flatMap((o) => (o.op === 'remove' ? [o.target] : [])),
-          pins: doc.overrides.flatMap((o) =>
-            o.op === 'pin' ? [{ target: o.target, x: o.x, y: o.y, rotation: o.rotation }] : [],
           ),
-          customTypes: doc.spec.customFeatureTypes,
-          scaleCompression: doc.spec.scaleCompression,
-          defaults: doc.spec.defaultFacilities,
-        },
-        { signal },
-      );
+        ],
+        removed: doc.overrides.flatMap((o) => (o.op === 'remove' ? [o.target] : [])),
+        pins: doc.overrides.flatMap((o) =>
+          o.op === 'pin' ? [{ target: o.target, x: o.x, y: o.y, rotation: o.rotation }] : [],
+        ),
+        customTypes: doc.spec.customFeatureTypes,
+        scaleCompression: doc.spec.scaleCompression,
+        defaults: doc.spec.defaultFacilities,
+      });
+      let facilities = await runner.run(facilitiesStage, facilitiesInput(rail, doc.spec.year), { signal });
       const facilitiesMs = performance.now() - t7;
       if (Object.keys(renames).length)
         facilities = {
@@ -303,33 +300,54 @@ export function createEngine(): EngineApi {
         },
         { signal },
       );
-      // Zoning of growth rings uses the society as it stood at the anchor year, so moving the year
-      // slider does not re-zone what is already built. It is the same run as `society` when the
-      // year is the anchor year.
-      const zoningSociety =
-        doc.spec.year === doc.spec.anchorYear
-          ? society
-          : await runner.run(
-              societyStage,
-              {
-                seed,
-                terrain,
-                sites: sites.map((s) => ({
-                  ...s,
-                  population: s.anchorPopulation,
-                  radiusM: radiusAt(s.history, s.history.anchorYear),
-                })),
-                year: doc.spec.anchorYear,
-                wealth: doc.spec.society.wealth,
-                density: doc.spec.society.density,
-                inequality: doc.spec.society.inequality,
-                ...(edits.length ? { edits } : {}),
-                ...(rail.nuisance.length || facilities.nuisance.length
-                  ? { nuisance: [...rail.nuisance, ...facilities.nuisance] }
-                  : {}),
-              },
-              { signal },
-            );
+      // Zoning of growth rings uses the society as it stood at the anchor year, with the noise of
+      // the anchor year's railways and works, so moving the year slider does not re-zone what is
+      // already built. It is the same run as `society` when the year is the anchor year; the
+      // anchor-year rail and works are memoised, so a scrub pays for them once.
+      let zoningSociety = society;
+      if (doc.spec.year !== doc.spec.anchorYear) {
+        // The anchor year's settlements: the same sites with the populations of that year.
+        const anchorSites = sites.map((s) => ({
+          ...s,
+          population: s.anchorPopulation,
+          radiusM: radiusAt(s.history, s.history.anchorYear),
+        }));
+        const anchorRail = await runner.run(
+          railStage,
+          {
+            seed,
+            terrain,
+            sites: anchorSites,
+            year: doc.spec.anchorYear,
+            eras,
+            mainlines: doc.spec.networks.rail.mainlines,
+            enabled: doc.spec.networks.rail.enabled,
+          },
+          { signal },
+        );
+        const anchorFacilities = await runner.run(
+          facilitiesStage,
+          { ...facilitiesInput(anchorRail, doc.spec.anchorYear), sites: anchorSites },
+          { signal },
+        );
+        zoningSociety = await runner.run(
+          societyStage,
+          {
+            seed,
+            terrain,
+            sites: anchorSites,
+            year: doc.spec.anchorYear,
+            wealth: doc.spec.society.wealth,
+            density: doc.spec.society.density,
+            inequality: doc.spec.society.inequality,
+            ...(edits.length ? { edits } : {}),
+            ...(anchorRail.nuisance.length || anchorFacilities.nuisance.length
+              ? { nuisance: [...anchorRail.nuisance, ...anchorFacilities.nuisance] }
+              : {}),
+          },
+          { signal },
+        );
+      }
       // Rail yards and facilities take town land.
       const reserved = [
         ...facilities.reserved,

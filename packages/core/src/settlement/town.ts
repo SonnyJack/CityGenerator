@@ -24,6 +24,7 @@ import { distToPolyline, type ZoneEdit } from '../document/authored.js';
 import type { RegionEvent } from '../document/schema.js';
 import { maxRadius, peakUntil, populationAt, radiusAt, yearForRadius } from './history.js';
 import { growthFootprint } from './footprint.js';
+import { gradientBetween, STEPS_GRADIENT } from './orientation.js';
 import type { Ring } from '../raster/contours.js';
 
 /**
@@ -110,7 +111,11 @@ export interface TownOutput {
   >;
   streets: FeatureCollection<
     LineString,
-    { settlement: string; class: 'artery' | 'street' | 'road' | 'collector' | 'motorway'; built?: number }
+    {
+      settlement: string;
+      class: 'artery' | 'street' | 'steps' | 'road' | 'collector' | 'motorway';
+      built?: number;
+    }
   >;
   walls: FeatureCollection<LineString, { settlement: string; kind: 'wall' }>;
   gates: FeatureCollection<Point, { settlement: string; kind: 'gate' | 'tower' }>;
@@ -568,7 +573,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
     let streetsKm = 0;
     const pushLine = (
       pts: Ring,
-      cls: 'artery' | 'street' | 'road' | 'collector' | 'motorway',
+      cls: 'artery' | 'street' | 'steps' | 'road' | 'collector' | 'motorway',
       k: number | string,
       built = history.founded,
     ) => {
@@ -593,7 +598,8 @@ export const townStage = defineStage<TownInput, TownOutput>({
         const ek = graph.edgeKey(a, b);
         if (seenEdges.has(ek) || arteryEdges.has(ek)) continue;
         seenEdges.add(ek);
-        pushLine([a, b], 'street', `${p.index}-${i}`, p.builtYear);
+        const cls = gradientBetween(height, a, b) > STEPS_GRADIENT ? 'steps' : 'street';
+        pushLine([a, b], cls, `${p.index}-${i}`, p.builtYear);
       }
     }
     const wallFeatures: TownOutput['walls']['features'] = wallRing.length

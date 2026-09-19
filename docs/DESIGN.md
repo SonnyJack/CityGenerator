@@ -491,6 +491,12 @@ medium, high, core}`. Both numeric and class values are exposed to the UI and
   of the same population but along its shore, and a hill town follows the
   valley floor. The fill is sized to the largest radius the settlement's
   history ever reaches, so a block's shape is the same at every year.
+- **Ring grids** are turned to the ground: the terrain around a ring's inner
+  edge votes with a quarter-turn angle (contour direction where it slopes,
+  shoreline direction near the sea) and the grid follows the vote, or the
+  first artery when the ground has no opinion. On a slope the collectors run
+  along the contour and the cross streets climb; a minor street steeper than
+  15 % is a flight of steps.
 - **Districts** are relaxed-Voronoi patches (organic rings) or super-block
   unions (grid rings), clipped to the buildable mask and split by rivers, rail
   and arterials.
@@ -982,9 +988,12 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   rugged ground). Phase 13 terrain fit: one drawn shoreline for every land
   test (bilinear distance field, half a cell in from the water cell
   centres, with setbacks), route smoothing constrained to the land the
-  router chose, with a sweep invariant for both, and the growth footprint
-  (a cost-weighted fill over the buildable ground in place of the disc,
-  read everywhere as an equivalent radius).
+  router chose, with a sweep invariant for both, the growth footprint (a
+  cost-weighted fill over the buildable ground in place of the disc, read
+  everywhere as an equivalent radius), and streets that see the ground
+  (ring grids turned to the shore or the contours, collectors along the
+  contour, flights of steps where a lane is too steep, siting on the
+  buildable ground of the footprint to come).
 - **v0.13** — Phase 11: utility networks (water, gas, power, sewers,
   pipelines, canals) as a region stage over the towns and facilities, with
   the shared raster router and per-network cost models (mains follow the

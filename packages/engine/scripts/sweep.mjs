@@ -171,9 +171,12 @@ for (const run of selected) {
         b.geometry.coordinates[0].map((p) => [p[0], p[1]]),
       );
       const wetCorners = (await engine.landCheck(corners, { rivers: 'water' })).filter((ok) => !ok).length;
-      const routeVertices = [...model.roads.features, ...model.rail.features].flatMap((l) =>
-        l.geometry.coordinates.slice(1, -1).map((p) => [p[0], p[1]]),
-      );
+      // Carried track (a viaduct across an inlet, a bridge, a tunnel) may cross water; the rest may not.
+      const carried = new Set(['viaduct', 'elevated', 'tunnel', 'subway']);
+      const routeVertices = [
+        ...model.roads.features,
+        ...model.rail.features.filter((f) => !carried.has(f.properties?.mode)),
+      ].flatMap((l) => l.geometry.coordinates.slice(1, -1).map((p) => [p[0], p[1]]));
       const wetVertices = (await engine.landCheck(routeVertices, { rivers: 'land', aboveSea: false })).filter(
         (ok) => !ok,
       ).length;

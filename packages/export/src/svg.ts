@@ -112,18 +112,30 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
     () => 2.2,
     'roads',
   );
+  const driven = {
+    features: model.streets.features.filter((f) => f.properties.class !== 'steps'),
+  };
+  const steps = { features: model.streets.features.filter((f) => f.properties.class === 'steps') };
   if (t.streetCasing)
     lines(
-      model.streets,
+      driven,
       () => t.streetCasing!,
       (f) => ((f.properties.class === 'artery' ? 12 : f.properties.class === 'road' ? 9 : 6) * k) / 1.2,
       'street-casing',
     );
   lines(
-    model.streets,
+    driven,
     () => t.street,
     (f) => ((f.properties.class === 'artery' ? 9 : f.properties.class === 'road' ? 7 : 4) * k) / 1.2,
     'streets',
+  );
+  // Flights of steps: thin and dashed.
+  lines(
+    steps,
+    () => t.street,
+    () => (2.5 * k) / 1.2,
+    'steps',
+    `stroke-dasharray="${num(2 * k)} ${num(2 * k)}"`,
   );
   lines(
     model.walls,

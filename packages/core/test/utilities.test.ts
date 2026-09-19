@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  landSampler,
   StageRunner,
   contentHash,
   facilitiesStage,
@@ -130,14 +131,10 @@ const BAY: SettlementSpec[] = [
   { id: 'mill', kind: 'millTown', population: 6_000, layout: { streetPattern: 'mixed' }, features: [] },
 ];
 
+/** On the drawn land (rivers count as land), by the same shoreline test the routes are built with. */
 function onLandOrRiver(terrain: TerrainOutput, line: [number, number][]): boolean {
-  const { height, water } = terrain;
-  return line.every(([x, y]) => {
-    const c = Math.min(Math.max(Math.round(height.col(x)), 0), height.width - 1);
-    const r = Math.min(Math.max(Math.round(height.row(y)), 0), height.height - 1);
-    const w = water[r * height.width + c]!;
-    return w === WATER.land || w === WATER.river;
-  });
+  const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
+  return line.every(([x, y]) => onLand(x, y));
 }
 
 describe('utilities stage', () => {

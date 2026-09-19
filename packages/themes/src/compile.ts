@@ -427,6 +427,7 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
       source: options.sourceId,
       'source-layer': 'streets',
       minzoom: 12,
+      filter: ['!=', ['get', 'class'], 'steps'],
       layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'round' },
       paint: {
         'line-color': t.streetCasing,
@@ -448,6 +449,7 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     source: options.sourceId,
     'source-layer': 'streets',
     minzoom: 11,
+    filter: ['!=', ['get', 'class'], 'steps'],
     layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'round' },
     paint: {
       'line-color': theme.sketch ? p.ink : t.street,
@@ -470,6 +472,21 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
             17,
             ['match', ['get', 'class'], 'artery', 9, 'road', 7, 4],
           ],
+    },
+  });
+  // Flights of steps where a lane is too steep to drive: thin, dashed, from the street zooms.
+  layers.push({
+    id: 'streets-steps',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'streets',
+    minzoom: 14,
+    filter: ['==', ['get', 'class'], 'steps'],
+    layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'butt' },
+    paint: {
+      'line-color': theme.sketch ? p.ink : t.street,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 17, 3.5],
+      'line-dasharray': [0.6, 0.6],
     },
   });
   layers.push({

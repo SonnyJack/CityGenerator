@@ -882,7 +882,7 @@ test('scrubbing the year keeps what already stands and adds new growth around it
   const reservedBlocks = new Set(
     patchesAt1955
       .filter((p) => reserved.has(String(p.ward)))
-      .map((p) => String(p.id).replace('-patch-', '-b')),
+      .map((p) => String(p.id).replace('-patch-', '-b').replace('-ring-', '-r')),
   );
   for (const [id, b] of at1890) {
     expect(b.props.built).toBeLessThanOrEqual(1890);

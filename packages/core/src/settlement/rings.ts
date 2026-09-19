@@ -7,6 +7,7 @@ import type { SettlementSite } from './siting.js';
 import { populationAt, radiusAt, radiusForPopulation, yearForRadius } from './history.js';
 import type { EraParams } from './eras.js';
 import type { WardId } from './wards.js';
+import { gradientBetween, gridOrientation, STEPS_GRADIENT } from './orientation.js';
 
 /**
  * Growth rings: the part of a settlement built after its organic core, in
@@ -41,7 +42,7 @@ export interface RingsResult {
   rings: GrowthRing[];
   blocks: RingBlock[];
   /** Street polylines with their class. */
-  streets: { points: Ring; cls: 'artery' | 'collector' | 'street' | 'motorway'; key: string }[];
+  streets: { points: Ring; cls: 'artery' | 'collector' | 'street' | 'steps' | 'motorway'; key: string }[];
   coreRadius: number;
 }
 
@@ -118,6 +119,8 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   // The footprint may run well past R along a shore or a valley; the grid must cover it.
   const E = Math.max(R, ctx.extent(R * 1.05));
   const box = ctx.bbox(R * 1.05);
+  // The footprint's final reach, whatever the year: artery cuts are made with the full line.
+  const EMax = Math.max(E, ctx.extent(Infinity));
 
   // Radial arteries: from gates (or evenly spaced angles) out to the edge.
   const arteryCount = Math.min(8, Math.max(3, Math.round(2 + Math.sqrt(site.anchorPopulation) / 40)));
@@ -136,20 +139,31 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   for (const a of angles) {
     const dir: Pt = [Math.cos(a), Math.sin(a)];
     const start: Pt = [cx + dir[0] * coreRadius * 0.98, cy + dir[1] * coreRadius * 0.98];
-    // Stop the artery where it would enter the sea or leave the built-up ground.
-    let end: Pt = [cx + dir[0] * E * 1.05, cy + dir[1] * E * 1.05];
-    for (let d = coreRadius; d <= E * 1.05; d += 25) {
+    // The artery's full line runs to the sea or the footprint's final edge, the same at every
+    // year, and that line makes the cuts; the drawn street stops at the built-up ground of the
+    // year (a block cut by an artery in 1890 must not be whole in 1850).
+    let endFull: Pt = [cx + dir[0] * EMax * 1.05, cy + dir[1] * EMax * 1.05];
+    let end: Pt | null = null;
+    for (let d = coreRadius; d <= EMax * 1.05; d += 25) {
       const p: Pt = [cx + dir[0] * d, cy + dir[1] * d];
-      if (!ctx.isLand(p[0], p[1]) || ctx.radiusAt(p[0], p[1]) > R * 1.05) {
-        end = [cx + dir[0] * (d - 25), cy + dir[1] * (d - 25)];
+      const re = ctx.radiusAt(p[0], p[1]);
+      if (!end && re > R * 1.05) end = [cx + dir[0] * (d - 25), cy + dir[1] * (d - 25)];
+      if (!ctx.isLand(p[0], p[1]) || !Number.isFinite(re)) {
+        endFull = [cx + dir[0] * (d - 25), cy + dir[1] * (d - 25)];
         break;
       }
     }
-    if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 60) continue;
+    end ??= endFull;
+    if (Math.hypot(endFull[0] - start[0], endFull[1] - start[1]) < 60) continue;
     // Cuts use a far point on the same line so the split arithmetic is bit-identical whatever the
     // artery's current length (the ring's outer edge moves with the year; the cuts must not).
-    arteryLines.push({ a: start, b: end, far: [start[0] + dir[0] * 50_000, start[1] + dir[1] * 50_000] });
-    streets.push({ points: [start, end], cls: 'artery', key: `artery-${arteryLines.length - 1}` });
+    arteryLines.push({
+      a: start,
+      b: endFull,
+      far: [start[0] + dir[0] * 50_000, start[1] + dir[1] * 50_000],
+    });
+    if (Math.hypot(end[0] - start[0], end[1] - start[1]) >= 60)
+      streets.push({ points: [start, end], cls: 'artery', key: `artery-${arteryLines.length - 1}` });
   }
 
   // Grid orientation: along the first artery, jittered per ring for variety.
@@ -179,6 +193,9 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     }
     return runs;
   };
+  // A minor street too steep to drive becomes a flight of steps.
+  const classOf = (a: Pt, b: Pt, cls: 'collector' | 'street'): 'collector' | 'street' | 'steps' =>
+    cls === 'street' && gradientBetween(ctx.terrain.height, a, b) > STEPS_GRADIENT ? 'steps' : cls;
   const pushEdge = (a: Pt, b: Pt, cls: 'collector' | 'street') => {
     const ka = key(a);
     const kb = key(b);
@@ -187,10 +204,32 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     edgeKeys.add(ek);
     const runs = landRuns(a, b);
     if (runs.length === 1 && runs[0]![0] === a && runs[0]![1] === b)
-      streets.push({ points: [a, b], cls, key: ek });
-    else runs.forEach(([p, q], i) => streets.push({ points: [p, q], cls, key: `${ek}#${i}` }));
+      streets.push({ points: [a, b], cls: classOf(a, b, cls), key: ek });
+    else
+      runs.forEach(([p, q], i) =>
+        streets.push({ points: [p, q], cls: classOf(p, q, cls), key: `${ek}#${i}` }),
+      );
+  };
+  // Terrain samples for a ring's orientation: a band just outside its inner edge, fixed by that
+  // edge alone so the newest ring keeps its angle while it grows with the year.
+  const orientationSamples = (rIn: number): Pt[] => {
+    const rSample = rIn * 1.6 + 300;
+    const box = ctx.bbox(rSample);
+    const cell = ctx.terrain.height.cellSizeM;
+    const step = Math.max(cell, Math.sqrt(((box.maxX - box.minX) * (box.maxY - box.minY)) / 1500));
+    const pts: Pt[] = [];
+    for (let y = box.minY; y <= box.maxY; y += step)
+      for (let x = box.minX; x <= box.maxX; x += step) {
+        const d = ctx.radiusAt(x, y);
+        if (d < rIn || d > rSample || !ctx.isLand(x, y)) continue;
+        pts.push([x, y]);
+      }
+    return pts;
   };
 
+  // A ring the ground leaves alone keeps the angle of the ring inside it, so a plain reads as
+  // one grid with the odd shift, not a patchwork.
+  let prevTheta = theta0;
   rings.forEach((ring, ringIndex) => {
     const era = ring.era;
     const pattern = era.ringPattern;
@@ -199,10 +238,11 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     const bw = era.blockSizeM.ring * 0.62 * sizeMul;
     const bh = era.blockSizeM.ring * (pattern === 'streetcar' ? 1.5 : 1) * sizeMul;
     const ringRng = rng.fork(`ring:${ringIndex}`);
-    const theta =
-      theta0 +
-      (pattern === 'grid' || pattern === 'streetcar' ? 0 : ringRng.range(-0.2, 0.2)) +
-      ringIndex * 0.02;
+    // Along the shore or the contours where the ground says so; else along the first artery.
+    const jitter = pattern === 'grid' || pattern === 'streetcar' ? 0 : ringRng.range(-0.2, 0.2);
+    const orientation = gridOrientation(ctx.terrain, orientationSamples(ring.rIn), prevTheta + jitter);
+    const theta = orientation.theta;
+    prevTheta = theta;
     const ux = Math.cos(theta);
     const uy = Math.sin(theta);
     const vx = -uy;
@@ -273,12 +313,15 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
             builtYear: yearForRadius(site.history, dist, ring.fromYear, ring.toYear),
           });
         });
-        // Streets along the cell edges (the artery cuts are drawn as arteries already).
-        const collectorI = i % 3 === 0;
-        const collectorJ = j % 3 === 0;
+        // Streets along the cell edges (the artery cuts are drawn as arteries already). On a
+        // slope the collectors run along the contour (the grid's u axis); the cross streets
+        // climb, and the steepest of them are steps.
+        const along = orientation.sloped ? 2 : 3;
+        const collectorI = !orientation.sloped && i % 3 === 0;
+        const collectorJ = j % along === 0;
         pushEdge(corners[0]!, corners[1]!, collectorJ ? 'collector' : 'street');
-        pushEdge(corners[1]!, corners[2]!, (i + 1) % 3 === 0 ? 'collector' : 'street');
-        pushEdge(corners[2]!, corners[3]!, (j + 1) % 3 === 0 ? 'collector' : 'street');
+        pushEdge(corners[1]!, corners[2]!, !orientation.sloped && (i + 1) % 3 === 0 ? 'collector' : 'street');
+        pushEdge(corners[2]!, corners[3]!, (j + 1) % along === 0 ? 'collector' : 'street');
         pushEdge(corners[3]!, corners[0]!, collectorI ? 'collector' : 'street');
       }
     }

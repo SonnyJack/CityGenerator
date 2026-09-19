@@ -291,12 +291,17 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
       return 1 + 40 * slope[i]! + (w === WATER.river ? 0.2 : 0);
     };
 
-    /** Nearest cell of a water kind to a point (world coords), searched on a coarse lattice. */
+    /**
+     * Nearest shore cell of a water kind to a point (world coords): a coarse lattice finds the
+     * water, then the cells around the hit are searched for the nearest one that touches land,
+     * so a route can reach it (a cell in open water has no dry neighbour to arrive from).
+     */
     const nearestWater = (p: Pt, kinds: number[], maxM: number): Pt | null => {
       const [c0, r0] = cellAt(terrain, p[0], p[1]);
       const reach = Math.ceil(maxM / cellSizeM);
       const step = Math.max(1, Math.floor(reach / 60));
-      let best: Pt | null = null;
+      let bestC = -1;
+      let bestR = -1;
       let bestD = Infinity;
       for (let r = Math.max(0, r0 - reach); r < Math.min(rows, r0 + reach + 1); r += step)
         for (let c = Math.max(0, c0 - reach); c < Math.min(width, c0 + reach + 1); c += step) {
@@ -304,10 +309,38 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
           const d = Math.hypot(c - c0, r - r0) * cellSizeM;
           if (d < bestD && d <= maxM) {
             bestD = d;
-            best = [height.x(c), height.y(r)];
+            bestC = c;
+            bestR = r;
           }
         }
-      return best;
+      if (bestC < 0) return null;
+      const touchesLand = (c: number, r: number) =>
+        [
+          [c - 1, r],
+          [c + 1, r],
+          [c, r - 1],
+          [c, r + 1],
+        ].some(([cc, rr]) => {
+          if (cc! < 0 || rr! < 0 || cc! >= width || rr! >= rows) return false;
+          const w = water[rr! * width + cc!]!;
+          return w === WATER.land || w === WATER.river;
+        });
+      const span = step + 2;
+      let shoreC = -1;
+      let shoreR = -1;
+      let shoreD = Infinity;
+      for (let r = Math.max(0, bestR - span); r <= Math.min(rows - 1, bestR + span); r++)
+        for (let c = Math.max(0, bestC - span); c <= Math.min(width - 1, bestC + span); c++) {
+          if (!kinds.includes(water[r * width + c]!) || !touchesLand(c, r)) continue;
+          const d = Math.hypot(c - c0, r - r0);
+          if (d < shoreD) {
+            shoreD = d;
+            shoreC = c;
+            shoreR = r;
+          }
+        }
+      if (shoreC >= 0) return [height.x(shoreC), height.y(shoreR)];
+      return [height.x(bestC), height.y(bestR)];
     };
 
     /** The last land point before a line enters water, and the water point itself. */
