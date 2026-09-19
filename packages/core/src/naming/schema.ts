@@ -56,6 +56,12 @@ export const culturePackSchema = z.object({
     modernFrom: z.number().int().default(1780),
     /** Multiplier on block sizes (medina alleys < 1 < American grids). */
     blockSizeScale: z.number().positive().default(1),
+    /**
+     * How far the streetcar suburbs string out along the tram lines, relative to the default.
+     * 0 fills a streetcar ring evenly; above 1 the growth follows the radial arteries out and
+     * bulges around the termini, leaving the ground between the lines open for the car age.
+     */
+    streetcarReach: z.number().min(0).max(3).default(1),
     /** Building kind names by generic kind. */
     buildingKinds: z.record(z.string(), z.string()).default({}),
     religious: z.array(z.string()).min(1),

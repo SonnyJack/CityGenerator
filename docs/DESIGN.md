@@ -530,7 +530,24 @@ branch, spur, siding, yard; elevated and subway variants for metropolises after
   on local streets, bridges on arterials; minimum curve radius and gradient
   cap enforced; sleepers rendered at high zoom.
 - **Tram** lines radiate from the centre along arterials in the years they
-  existed, and generate the streetcar suburbs around their termini.
+  existed, and generate the streetcar suburbs around their termini. The
+  routes all leave the same hub, so their inner stretches are the same
+  rails: each route is drawn as runs of equal sharing, every run saying how
+  many routes use it, which gives both route-kilometres and
+  track-kilometres and lets the inner trunk be drawn as the double track it
+  was. The suburbs themselves are the ring stage's work, since the trams
+  followed the radial arteries it lays down: in a streetcar ring the blocks
+  string out along those radials and bulge toward the outer end where the
+  termini stand, leaving the ground between the lines open until the car age
+  fills it in. How far they string out is `streetcarReach` in the culture
+  pack (0 fills the ring evenly; New England is 1.6, the Levant 0.3).
+- **Junctions**: a station where more than one line meets gets a crossover
+  between the platform roads at its throat, and from 1900 a station where
+  three or more meet gets a connecting curve carried over the others on a
+  viaduct rather than crossing them on the flat. **Sidings**: the freight
+  spur to a works or a terminal does not stop at the boundary; it runs on
+  into the grounds as two or three private roads along the sheds, so wagons
+  are loaded where the goods are.
 - Implementation (Phase 5): `railStage` runs after siting and before the
   society stage (its corridors and yards are nuisance sources); it routes on
   the terrain raster with a class-specific gradient cap in the cost, eases

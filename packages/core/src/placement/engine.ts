@@ -216,7 +216,16 @@ export interface PlaceResult {
   failures: PlacementFailure[];
   nuisance: [number, number, number, number][];
   /** Rail connector requests: from the feature's rail edge. */
-  railConnectors: { feature: string; from: Pt; settlement: string | null; opened: number; closed?: number }[];
+  railConnectors: {
+    feature: string;
+    from: Pt;
+    settlement: string | null;
+    opened: number;
+    closed?: number;
+    /** The facility's frame, so the stage can lay private sidings inside the grounds. */
+    frame: Frame;
+    category: FeatureType['category'];
+  }[];
   roadConnectors: { feature: string; from: Pt; settlement: string | null }[];
 }
 
@@ -397,6 +406,8 @@ export function placeFeatures(
         feature: req.id,
         from: railEdge,
         settlement: req.settlement ?? null,
+        frame,
+        category: type.category,
         opened: placed.opened,
         ...(placed.closed !== undefined ? { closed: placed.closed } : {}),
       });

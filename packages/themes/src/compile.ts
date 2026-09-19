@@ -1251,6 +1251,10 @@ function railLayers(
     0.6,
     'yard',
     0.45,
+    'siding',
+    0.4,
+    'junction',
+    0.65,
     0.6,
   ];
   const width = (z12: number, z17: number): ExpressionSpecification => [
@@ -1308,7 +1312,7 @@ function railLayers(
     type: 'line',
     source: src,
     'source-layer': 'rail',
-    filter: ['all', cls('mainline', 'branch', 'spur'), mode('viaduct', 'elevated')],
+    filter: ['all', cls('mainline', 'branch', 'spur', 'junction'), mode('viaduct', 'elevated')],
     layout: { visibility: visible('rail'), 'line-cap': 'butt' },
     paint: { 'line-color': railInk, 'line-width': width(4, 11), 'line-opacity': 0.35 },
   });
@@ -1317,7 +1321,7 @@ function railLayers(
     type: 'line',
     source: src,
     'source-layer': 'rail',
-    filter: ['all', cls('mainline', 'branch', 'spur'), mode('viaduct', 'elevated')],
+    filter: ['all', cls('mainline', 'branch', 'spur', 'junction'), mode('viaduct', 'elevated')],
     layout: { visibility: visible('rail'), 'line-cap': 'butt' },
     paint: { 'line-color': p.background, 'line-width': width(2.6, 8) },
   });
@@ -1328,7 +1332,7 @@ function railLayers(
     source: src,
     'source-layer': 'rail',
     minzoom: 12,
-    filter: ['all', cls('mainline', 'branch', 'spur'), mode('cutting')],
+    filter: ['all', cls('mainline', 'branch', 'spur', 'junction'), mode('cutting')],
     layout: { visibility: visible('rail'), 'line-cap': 'butt' },
     paint: { 'line-color': railInk, 'line-width': width(4, 12), 'line-opacity': 0.12 },
   });
@@ -1338,7 +1342,11 @@ function railLayers(
     type: 'line',
     source: src,
     'source-layer': 'rail',
-    filter: ['all', cls('mainline', 'branch', 'spur', 'yard'), ['!', mode('tunnel', 'subway')]],
+    filter: [
+      'all',
+      cls('mainline', 'branch', 'spur', 'yard', 'siding', 'junction'),
+      ['!', mode('tunnel', 'subway')],
+    ],
     layout: { visibility: visible('rail'), 'line-join': 'round', 'line-cap': 'butt' },
     paint: { 'line-color': railInk, 'line-width': width(1.6, 3.2) },
   });
@@ -1405,7 +1413,18 @@ function railLayers(
     layout: { visibility: visible('rail'), 'line-join': 'round', 'line-cap': 'round' },
     paint: {
       'line-color': theme.sketch ? p.ink : p.accent,
-      'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 14, 1.4, 17, 2.4],
+      // The inner trunk carries several routes over the same rails: draw it heavier.
+      'line-width': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        11,
+        ['*', 0.6, ['min', 2, ['coalesce', ['get', 'shared'], 1]]],
+        14,
+        ['*', 1.4, ['min', 2.2, ['coalesce', ['get', 'shared'], 1]]],
+        17,
+        ['*', 2.4, ['min', 2.4, ['coalesce', ['get', 'shared'], 1]]],
+      ] as unknown as ExpressionSpecification,
       'line-opacity': theme.sketch ? 0.9 : 0.85,
       ...(theme.sketch ? { 'line-dasharray': [6, 1.5] } : {}),
     },

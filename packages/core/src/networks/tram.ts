@@ -14,6 +14,11 @@ import type { RailOutput, StationProps } from './rail.js';
  * along arteries and collectors to termini in the outer rings, with stops,
  * a depot at the longest line's terminus, and the level crossings, bridges
  * and underpasses where the railway meets the town's streets.
+ *
+ * The lines all leave the same hub, so their inner stretches lie on the same
+ * street: each line is split into runs by the number of lines sharing the
+ * track, and every run says how many routes use it, so the inner trunk can be
+ * drawn as the double or quadruple track it was.
  */
 
 export interface TramInput {
@@ -30,11 +35,32 @@ export interface TramInput {
 export interface TramOutput {
   key: string;
   id: string;
-  lines: FeatureCollection<LineString, { settlement: string; class: 'tram'; line: number; lengthKm: number }>;
+  lines: FeatureCollection<
+    LineString,
+    {
+      settlement: string;
+      class: 'tram';
+      line: number;
+      lengthKm: number;
+      /** How many routes run over this stretch (1 = the line has it to itself). */
+      shared: number;
+      /** The routes sharing it, in order. */
+      routes: number[];
+    }
+  >;
   stops: FeatureCollection<Point, { kind: 'tramStop' | 'tramTerminus'; settlement: string; line: number }>;
   structures: FeatureCollection<Polygon, { kind: 'tramDepot'; settlement: string }>;
   crossings: FeatureCollection<Point, CrossingProps & { settlement: string }>;
-  stats: { tramKm: number; lines: number; stops: number; crossings: number };
+  stats: {
+    tramKm: number;
+    /** Route-kilometres: the length of track, counting shared track once. */
+    trackKm: number;
+    lines: number;
+    stops: number;
+    crossings: number;
+    /** Track carrying more than one route. */
+    sharedKm: number;
+  };
 }
 
 type Pt = [number, number];
@@ -130,7 +156,7 @@ const EMPTY = (key: string, id: string): TramOutput => ({
   stops: { type: 'FeatureCollection', features: [] },
   structures: { type: 'FeatureCollection', features: [] },
   crossings: { type: 'FeatureCollection', features: [] },
-  stats: { tramKm: 0, lines: 0, stops: 0, crossings: 0 },
+  stats: { tramKm: 0, trackKm: 0, lines: 0, stops: 0, crossings: 0, sharedKm: 0 },
 });
 
 export const tramStage = defineStage<TramInput, TramOutput>({
@@ -228,6 +254,23 @@ export const tramStage = defineStage<TramInput, TramOutput>({
     }
     ctx.checkpoint();
 
+    // Shared track: the routes leave the same hub over the same streets, so count the routes
+    // on every street segment and split each line into runs of equal sharing.
+    const users = new Map<string, number[]>();
+    const segKey = (a: Pt, b: Pt) => {
+      const ka = keyOf(a);
+      const kb = keyOf(b);
+      return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+    };
+    lines.forEach((line, li) => {
+      for (let i = 1; i < line.length; i++) {
+        const k = segKey(line[i - 1]!, line[i]!);
+        const list = users.get(k) ?? [];
+        if (!list.includes(li)) list.push(li);
+        users.set(k, list);
+      }
+    });
+
     // Stops every ~350 m along each line, a terminus at the end.
     const stopEvery = 350;
     const stopSeen = new Set<string>();
@@ -261,22 +304,52 @@ export const tramStage = defineStage<TramInput, TramOutput>({
         geometry: { type: 'Point', coordinates: line[line.length - 1]! },
         properties: { kind: 'tramTerminus', settlement: site.id, line: li },
       });
-      out.lines.features.push({
-        type: 'Feature',
-        id: `${site.id}-tram-${li}`,
-        geometry: { type: 'LineString', coordinates: line },
-        properties: { settlement: site.id, class: 'tram', line: li, lengthKm: len / 1000 },
-      });
-      out.stats.tramKm += len / 1000;
+      // One feature per run of equal sharing, so the trunk can be drawn heavier than the branches.
+      let start = 0;
+      let part = 0;
+      for (let i = 1; i <= line.length - 1; i++) {
+        const here = users.get(segKey(line[i - 1]!, line[i]!)) ?? [li];
+        const next = i < line.length - 1 ? (users.get(segKey(line[i]!, line[i + 1]!)) ?? [li]) : null;
+        if (next && next.length === here.length && next.every((r) => here.includes(r))) continue;
+        const run = line.slice(start, i + 1);
+        let runLen = 0;
+        for (let k = 1; k < run.length; k++)
+          runLen += Math.hypot(run[k]![0] - run[k - 1]![0], run[k]![1] - run[k - 1]![1]);
+        out.lines.features.push({
+          type: 'Feature',
+          id: `${site.id}-tram-${li}-${part++}`,
+          geometry: { type: 'LineString', coordinates: run },
+          properties: {
+            settlement: site.id,
+            class: 'tram',
+            line: li,
+            lengthKm: runLen / 1000,
+            shared: here.length,
+            routes: [...here].sort((a, b) => a - b),
+          },
+        });
+        // Route-kilometres count every route; track-kilometres count shared track once.
+        out.stats.tramKm += runLen / 1000;
+        out.stats.trackKm += runLen / 1000 / here.length;
+        if (here.length > 1) out.stats.sharedKm += runLen / 1000 / here.length;
+        start = i;
+      }
     });
 
     // Depot beside the terminus of the longest line, aligned with its last segment.
-    const longest = out.lines.features.reduce<(typeof out.lines.features)[number] | null>(
-      (m, l) => (!m || l.properties.lengthKm > m.properties.lengthKm ? l : m),
-      null,
-    );
+    const lineLen = new Map<number, number>();
+    for (const f of out.lines.features)
+      lineLen.set(f.properties.line, (lineLen.get(f.properties.line) ?? 0) + f.properties.lengthKm);
+    let longestLine = -1;
+    let longestKm = -1;
+    for (const [li, km] of lineLen)
+      if (km > longestKm) {
+        longestKm = km;
+        longestLine = li;
+      }
+    const longest = longestLine >= 0 ? (lines[longestLine] ?? null) : null;
     if (longest) {
-      const c = longest.geometry.coordinates;
+      const c = longest;
       const a = c[c.length - 2]!;
       const b = c[c.length - 1]!;
       const len = Math.hypot(b[0]! - a[0]!, b[1]! - a[1]!) || 1;
@@ -301,7 +374,7 @@ export const tramStage = defineStage<TramInput, TramOutput>({
         properties: { kind: 'tramDepot', settlement: site.id },
       });
     }
-    out.stats.lines = out.lines.features.length;
+    out.stats.lines = lines.length;
     out.stats.stops = out.stops.features.length;
     return out;
   },

@@ -25,6 +25,13 @@ export interface EraParams {
     container: boolean;
   };
   walls: boolean;
+  /**
+   * How far the streetcar suburbs of this era reached out along the radial arteries the trams
+   * ran on, relative to the default (1). Above 1 the growth of a streetcar ring strings itself
+   * along the lines and leaves the ground between them open; 0 fills the ring evenly. Culture
+   * packs set it (compact cities keep their growth continuous, new-world ones string it out).
+   */
+  streetcarReach?: number;
 }
 
 /** Nearest profile at or before the year (the earliest when the year precedes all). */

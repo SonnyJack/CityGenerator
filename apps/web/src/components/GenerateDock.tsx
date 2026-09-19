@@ -544,8 +544,10 @@ export function GenerateDock() {
             {stats.rail.trackKm.toFixed(0)} km of track · {stats.rail.stations} stations · {stats.rail.yards}{' '}
             yards · {stats.rail.tunnels} tunnels · {stats.rail.viaducts} viaducts · max gradient{' '}
             {(stats.rail.maxGradient * 100).toFixed(1)} %
+            {(stats.rail.crossovers > 0 || stats.rail.flyovers > 0 || stats.rail.sidings > 0) &&
+              ` · ${stats.rail.crossovers} crossovers · ${stats.rail.flyovers} flyovers · ${stats.rail.sidings} sidings`}
             {stats.rail.tramLines > 0 &&
-              ` · ${stats.rail.tramLines} tram lines, ${stats.rail.tramKm.toFixed(0)} km`}
+              ` · ${stats.rail.tramLines} tram lines, ${stats.rail.tramKm.toFixed(0)} km over ${stats.rail.tramTrackKm.toFixed(0)} km of track (${stats.rail.tramSharedKm.toFixed(0)} km shared)`}
             {stats.rail.disusedKm > 0 && ` · ${stats.rail.disusedKm.toFixed(0)} km disused`}
           </p>
         )}

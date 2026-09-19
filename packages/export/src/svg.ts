@@ -179,7 +179,14 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
   lines(
     model.rail,
     () => (theme.sketch ? p.ink : '#2f2a26'),
-    (f) => (f.properties.class === 'mainline' ? 2.4 : f.properties.class === 'tram' ? 1 : 1.6),
+    (f) =>
+      f.properties.class === 'mainline'
+        ? 2.4
+        : f.properties.class === 'tram'
+          ? Math.min(2.2, 1 * Number(f.properties.shared ?? 1))
+          : f.properties.class === 'siding'
+            ? 1
+            : 1.6,
     'rail',
     undefined,
   );

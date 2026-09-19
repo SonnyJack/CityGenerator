@@ -24,7 +24,7 @@ import { cellAt, routeCells } from './routing.js';
  * side of town. Metropolitan cores after 1900 take their lines underground.
  */
 
-export type TrackClass = 'mainline' | 'branch' | 'spur' | 'yard' | 'disused';
+export type TrackClass = 'mainline' | 'branch' | 'spur' | 'yard' | 'disused' | 'junction' | 'siding';
 export type TrackMode = 'surface' | 'cutting' | 'embankment' | 'viaduct' | 'tunnel' | 'subway' | 'elevated';
 
 export interface TrackProps {
@@ -94,6 +94,10 @@ export interface RailOutput {
     viaducts: number;
     maxGradient: number;
     minRadiusM: number;
+    /** Crossovers between the platform roads and connecting curves at the junctions. */
+    crossovers: number;
+    /** Connecting curves carried over the other line on a bridge. */
+    flyovers: number;
   };
 }
 
@@ -104,6 +108,8 @@ const GRADIENT_CAP: Record<TrackClass, number> = {
   spur: 0.035,
   yard: 0.01,
   disused: 0.03,
+  junction: 0.02,
+  siding: 0.01,
 };
 
 const EMPTY = (key: string): RailOutput => ({
@@ -126,6 +132,8 @@ const EMPTY = (key: string): RailOutput => ({
     viaducts: 0,
     maxGradient: 0,
     minRadiusM: Infinity,
+    crossovers: 0,
+    flyovers: 0,
   },
 });
 
@@ -399,6 +407,8 @@ export const railStage = defineStage<RailInput, RailOutput>({
       spur: 120,
       yard: 60,
       disused: 180,
+      junction: 150,
+      siding: 60,
     };
 
     /**
@@ -725,6 +735,101 @@ export const railStage = defineStage<RailInput, RailOutput>({
           }
         }
       }
+    });
+
+    // --- 5b. Junction geometry where the lines meet ----------------------------------------
+    // A station with more than one line gets a crossover between the platform roads, so a train
+    // can change road at the throat; where three or more lines meet after 1900 the busiest pair
+    // is given a connecting curve that dives under or flies over the others instead of crossing
+    // them on the flat.
+    const pushJunction = (
+      geometry: Ring,
+      cls: TrackClass,
+      mode: TrackMode,
+      lineId: string,
+      from: string,
+      to: string,
+      opened: number,
+    ) => {
+      let len = 0;
+      for (let k = 1; k < geometry.length; k++)
+        len += Math.hypot(geometry[k]![0] - geometry[k - 1]![0], geometry[k]![1] - geometry[k - 1]![1]);
+      tracks.push({
+        type: 'Feature',
+        id: `rail-${tracks.length}`,
+        geometry: { type: 'LineString', coordinates: geometry },
+        properties: {
+          class: cls,
+          mode,
+          line: lineId,
+          from,
+          to,
+          lengthKm: len / 1000,
+          gradient: 0,
+          opened,
+        },
+      });
+      stats.trackKm += len / 1000;
+      return len;
+    };
+    served.forEach((s, i) => {
+      const own = routedLines.filter((l) => (l.a === i || l.b === i) && l.cls !== 'disused');
+      if (own.length < 2) return;
+      const station = stationOf.get(s.id)!;
+      // The direction each line leaves the station in, a little way out.
+      const legs = own.map((l) => {
+        const pts = l.a === i ? l.pts : [...l.pts].reverse();
+        const q = pts[Math.min(pts.length - 1, 8)]!;
+        const d = Math.hypot(q[0] - station[0], q[1] - station[1]) || 1;
+        return { l, pts, dir: [(q[0] - station[0]) / d, (q[1] - station[1]) / d] as Pt };
+      });
+      const opened = Math.min(...own.map((l) => l.opened));
+      // Crossover: a short diagonal across the two platform roads of the busiest leg.
+      const lead = legs[0]!;
+      const along = (t: number): Pt => [station[0] + lead.dir[0] * t, station[1] + lead.dir[1] * t];
+      const nrm: Pt = [-lead.dir[1], lead.dir[0]];
+      const gauge = 9;
+      const a: Pt = [along(140)[0] - nrm[0] * gauge, along(140)[1] - nrm[1] * gauge];
+      const b: Pt = [along(200)[0] + nrm[0] * gauge, along(200)[1] + nrm[1] * gauge];
+      if (landAt(a) && landAt(b)) {
+        pushJunction([a, b], 'junction', 'surface', `${s.id}-crossover`, s.id, s.id, opened);
+        stats.crossovers++;
+      }
+      // Flying junction: from 1900, where three or more lines meet, a curve from one leg to
+      // another carried over the rest.
+      if (year >= 1900 && legs.length >= 3) {
+        const from = legs[1]!;
+        const to = legs[2]!;
+        const p0: Pt = [station[0] + from.dir[0] * 420, station[1] + from.dir[1] * 420];
+        const p2: Pt = [station[0] + to.dir[0] * 420, station[1] + to.dir[1] * 420];
+        const mid: Pt = [
+          station[0] + ((from.dir[0] + to.dir[0]) / 2) * 620,
+          station[1] + ((from.dir[1] + to.dir[1]) / 2) * 620,
+        ];
+        const curve: Ring = [];
+        for (let k = 0; k <= 12; k++) {
+          const t = k / 12;
+          const u = 1 - t;
+          curve.push([
+            u * u * p0[0] + 2 * u * t * mid[0] + t * t * p2[0],
+            u * u * p0[1] + 2 * u * t * mid[1] + t * t * p2[1],
+          ]);
+        }
+        if (curve.every(landAt)) {
+          pushJunction(
+            curve,
+            'junction',
+            'viaduct',
+            `${s.id}-flyover`,
+            `${served[from.l.a === i ? from.l.b : from.l.a]?.id ?? s.id}`,
+            `${served[to.l.a === i ? to.l.b : to.l.a]?.id ?? s.id}`,
+            Math.max(1900, opened),
+          );
+          stats.flyovers++;
+          viaducts++;
+        }
+      }
+      ctx.checkpoint();
     });
 
     // --- 6. Yards, sheds and spurs beside the big stations ---------------------------------

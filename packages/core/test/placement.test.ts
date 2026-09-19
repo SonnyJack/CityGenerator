@@ -161,7 +161,22 @@ describe('placement engine', () => {
     const { terrain, siting, rail, facilities } = await bay('bay-2', 1925);
     expect(facilities.spurs.features.length).toBeGreaterThan(0);
     expect(facilities.roads.features.length).toBeGreaterThan(0);
-    for (const s of facilities.spurs.features) expect(s.properties.class).toBe('spur');
+    // Spurs reach the works; inside the grounds they run on as private sidings along the sheds.
+    for (const s of facilities.spurs.features) expect(['spur', 'siding']).toContain(s.properties.class);
+    const sidings = facilities.spurs.features.filter((s) => s.properties.class === 'siding');
+    expect(sidings.length).toBeGreaterThan(0);
+    for (const s of sidings) {
+      const owner = s.properties.from;
+      const works = facilities.features.features.find((f) => f.properties.id === owner)!;
+      expect(works.properties.category === 'industry' || works.properties.category === 'transport').toBe(
+        true,
+      );
+      // A siding lies inside its works and is shorter than the works is long.
+      const ring = works.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]);
+      for (const c of s.geometry.coordinates) expect(pointInRing(c[0]!, c[1]!, ring)).toBe(true);
+      expect(s.properties.lengthKm * 1000).toBeLessThan(works.properties.lengthM);
+      expect(s.properties.opened).toBeGreaterThanOrEqual(1830);
+    }
     const site = siting.sites.find((s) => s.id === 'port')!;
     const society = await runner.run(societyStage, {
       seed: 'bay-2',

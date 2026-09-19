@@ -253,6 +253,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'organic',
       modernFrom: 1780,
       blockSizeScale: 1.15,
+      streetcarReach: 1.6,
       buildingKinds: {
         house: 'clapboard house',
         townhouse: 'brick townhouse',
@@ -563,6 +564,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'organic',
       modernFrom: 1780,
       blockSizeScale: 1,
+      streetcarReach: 1.1,
       buildingKinds: {
         house: 'terraced house',
         townhouse: 'town house',
@@ -863,6 +865,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'organic',
       modernFrom: 1850,
       blockSizeScale: 0.95,
+      streetcarReach: 0.7,
       buildingKinds: {
         house: 'maison',
         townhouse: 'hôtel particulier',
@@ -1137,6 +1140,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'organic',
       modernFrom: 1850,
       blockSizeScale: 1,
+      streetcarReach: 0.8,
       buildingKinds: {
         house: 'Fachwerkhaus',
         townhouse: 'Bürgerhaus',
@@ -1425,6 +1429,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'organic',
       modernFrom: 1860,
       blockSizeScale: 0.9,
+      streetcarReach: 0.6,
       buildingKinds: {
         house: 'casa de patio',
         townhouse: 'casa señorial',
@@ -1693,6 +1698,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'organic',
       modernFrom: 1880,
       blockSizeScale: 0.7,
+      streetcarReach: 0.3,
       buildingKinds: {
         house: 'courtyard house',
         townhouse: 'bayt with mashrabiya',
@@ -1964,6 +1970,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'grid',
       modernFrom: 1780,
       blockSizeScale: 0.85,
+      streetcarReach: 0.5,
       buildingKinds: {
         house: 'siheyuan courtyard house',
         townhouse: 'merchant compound',
@@ -2240,6 +2247,7 @@ const raw: CulturePack[] = [
       earlyPattern: 'grid',
       modernFrom: 1780,
       blockSizeScale: 0.8,
+      streetcarReach: 0.9,
       buildingKinds: {
         house: 'machiya',
         townhouse: 'buke-yashiki',

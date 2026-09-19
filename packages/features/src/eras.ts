@@ -191,6 +191,7 @@ export function eraParams(cultureId?: string): EraParams[] {
         ? c.earlyPattern
         : e.ringPattern,
     blockSizeM: { core: e.blockSizeM.core * c.blockSizeScale, ring: e.blockSizeM.ring * c.blockSizeScale },
+    streetcarReach: c.streetcarReach,
     transport: {
       ...e.transport,
       rail: e.year >= firstYear('rail'),

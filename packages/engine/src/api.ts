@@ -249,8 +249,15 @@ export interface EngineStats {
     /** One entry per line (mainlines, branches and closed branches) with its opening and closing years. */
     lines: { id: string; class: string; from: string; to: string; opened: number; closed?: number }[];
     tramKm: number;
+    /** Track-kilometres: shared inner track counted once, unlike the route-kilometres above. */
+    tramTrackKm: number;
+    tramSharedKm: number;
     tramLines: number;
     crossings: number;
+    /** Crossovers and flying junctions where the lines meet, and private sidings in the works. */
+    crossovers: number;
+    flyovers: number;
+    sidings: number;
   };
   blocks: number;
   utilities: {

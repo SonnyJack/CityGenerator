@@ -276,9 +276,16 @@ reseed and a year change" passes.
 - [x] Siting fix found on the way: settlements no longer land on islets; a
       site must be on the mainland (or an island several times its area)
       with dry ground around it.
-- [ ] Deferred: streetcar suburbs biased around tram termini, junction
-      geometry (crossovers, flying junctions), sidings for individual
-      industries, tram networks that share track between lines explicitly.
+- [x] Streetcar suburbs string out along the radial arteries the trams ran
+      on and bulge around the termini, by a `streetcarReach` the culture pack
+      sets (a compact city keeps its growth continuous, a new-world one
+      strings it out and leaves the ground between the lines for the car
+      age); junction geometry where the lines meet (a crossover at the throat
+      of every station with more than one line, a connecting curve on a
+      viaduct where three or more meet after 1900); private sidings running
+      on from the spur into the works and the terminals; and tram routes that
+      share track explicitly, each stretch saying how many routes run over
+      it, counted as route-kilometres and track-kilometres.
 
 Acceptance (met): on a hills preset with 0.7 relief every track segment stays
 within its class cap (max 3.5 % on spurs, 2 % on mainlines); yard ladders start

@@ -103,12 +103,25 @@ describe('tram stage', () => {
     expect(tram.stats.tramKm).toBeGreaterThan(3);
     expect(tram.stats.stops).toBeGreaterThan(tram.stats.lines * 2);
     expect(tram.structures.features.some((s) => s.properties.kind === 'tramDepot')).toBe(true);
-    // Lines start at the central station's street node and end in the outer town.
+    // Lines start at the central station's street node and end in the outer town. Each route
+    // is drawn as runs of equal sharing, in order, so joining its runs gives the whole route.
     const central = rail.stations.features.find(
       (s) => s.properties.settlement === 'metro' && s.properties.kind === 'central',
     )!;
-    for (const l of tram.lines.features) {
-      const c = l.geometry.coordinates;
+    const routes = new Map<number, [number, number][]>();
+    for (const f of tram.lines.features) {
+      const c = f.geometry.coordinates as [number, number][];
+      const run = routes.get(f.properties.line);
+      if (!run) routes.set(f.properties.line, [...c]);
+      else run.push(...c.slice(1));
+    }
+    expect(routes.size).toBe(tram.stats.lines);
+    const streetPts = new Set(
+      town.streets.features.flatMap((s) =>
+        s.geometry.coordinates.map((p) => `${Math.round(p[0]! * 10)},${Math.round(p[1]! * 10)}`),
+      ),
+    );
+    for (const c of routes.values()) {
       expect(
         Math.hypot(
           c[0]![0]! - central.geometry.coordinates[0]!,
@@ -120,14 +133,23 @@ describe('tram stage', () => {
         site.radiusM * 0.4,
       );
       // Every tram segment lies on a town street.
-      const streetPts = new Set(
-        town.streets.features.flatMap((s) =>
-          s.geometry.coordinates.map((p) => `${Math.round(p[0]! * 10)},${Math.round(p[1]! * 10)}`),
-        ),
-      );
       for (const p of c)
         expect(streetPts.has(`${Math.round(p[0]! * 10)},${Math.round(p[1]! * 10)}`)).toBe(true);
     }
+    // Shared track: the routes leave the hub over the same rails, and that inner trunk is
+    // counted once in the track-kilometres, so the route-kilometres are the larger number.
+    const shared = tram.lines.features.filter((f) => f.properties.shared > 1);
+    expect(shared.length).toBeGreaterThan(0);
+    for (const f of shared) {
+      expect(f.properties.routes.length).toBe(f.properties.shared);
+      expect(f.properties.routes).toContain(f.properties.line);
+      // Shared stretches are the inner ones: they start within the town, not at a terminus.
+      const mid = f.geometry.coordinates[0]!;
+      expect(Math.hypot(mid[0]! - site.center[0], mid[1]! - site.center[1])).toBeLessThan(site.radiusM * 1.1);
+    }
+    expect(tram.stats.sharedKm).toBeGreaterThan(0);
+    expect(tram.stats.trackKm).toBeLessThan(tram.stats.tramKm);
+    expect(tram.stats.trackKm).toBeGreaterThan(tram.stats.tramKm * 0.3);
     // The railway through a big town meets its streets somewhere.
     expect(tram.stats.crossings).toBeGreaterThan(0);
     const kinds = new Set(tram.crossings.features.map((c) => c.properties.kind));

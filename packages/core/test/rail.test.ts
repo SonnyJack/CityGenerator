@@ -80,7 +80,15 @@ describe('rail stage', () => {
   it('keeps every track within its ruling gradient on a hills preset', async () => {
     const rail = await railP;
     expect(rail.tracks.features.length).toBeGreaterThan(20);
-    const caps = { mainline: 0.02, branch: 0.03, spur: 0.035, yard: 0.01, disused: 0.03 };
+    const caps = {
+      mainline: 0.02,
+      branch: 0.03,
+      spur: 0.035,
+      yard: 0.01,
+      disused: 0.03,
+      junction: 0.02,
+      siding: 0.01,
+    };
     for (const t of rail.tracks.features)
       expect(t.properties.gradient).toBeLessThanOrEqual(caps[t.properties.class] + 1e-6);
     expect(rail.stats.maxGradient).toBeLessThanOrEqual(0.035 + 1e-6);
@@ -90,6 +98,25 @@ describe('rail stage', () => {
     expect(modes.has('viaduct')).toBe(true);
     expect(rail.portals.features.length).toBe(rail.stats.tunnels * 2);
     expect(rail.stats.minRadiusM).toBeGreaterThan(120);
+    // Junction geometry: a station where two lines meet gets a crossover between the platform
+    // roads; where three meet after 1900 a connecting curve is carried over on a viaduct.
+    const junctions = rail.tracks.features.filter((t) => t.properties.class === 'junction');
+    expect(junctions.length).toBe(rail.stats.crossovers + rail.stats.flyovers);
+    expect(rail.stats.crossovers).toBeGreaterThan(0);
+    for (const j of junctions) {
+      expect(j.properties.lengthKm).toBeLessThan(1.6);
+      expect(j.properties.opened).toBeGreaterThanOrEqual(1850);
+      if (j.properties.mode === 'viaduct') expect(j.properties.opened).toBeGreaterThanOrEqual(1900);
+      // A junction sits at the throat of the station it serves.
+      const st = rail.stations.features.find(
+        (s) => s.properties.settlement === j.properties.line.split('-')[0],
+      );
+      if (st) {
+        const [sx, sy] = st.geometry.coordinates as [number, number];
+        const near = j.geometry.coordinates.some((c) => Math.hypot(c[0]! - sx, c[1]! - sy) < 1_100);
+        expect(near).toBe(true);
+      }
+    }
   });
 
   it('gives a 1925 metropolis a central station, suburban stations, a goods yard and a marshalling yard whose ladders join the line at both throats', async () => {
@@ -111,7 +138,10 @@ describe('rail stage', () => {
     const yard = rail.tracks.features.filter((t) => t.properties.class === 'yard');
     expect(yard.length).toBeGreaterThanOrEqual(4);
     const hostPts = rail.tracks.features
-      .filter((t) => t.properties.class !== 'yard' && t.properties.class !== 'spur')
+      .filter(
+        (t) =>
+          t.properties.class !== 'yard' && t.properties.class !== 'spur' && t.properties.class !== 'junction',
+      )
       .flatMap((t) => t.geometry.coordinates);
     const onLine = (p: number[]) => hostPts.some((q) => Math.hypot(q[0]! - p[0]!, q[1]! - p[1]!) < 30);
     for (const y of yard) {

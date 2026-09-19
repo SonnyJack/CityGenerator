@@ -225,6 +225,7 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
       });
       const len = lengthOf(line);
       spurKm += len / 1000;
+      const opened = Math.max(1830, rc.opened);
       spurs.push({
         type: 'Feature',
         id: `spur-${rc.feature}`,
@@ -237,10 +238,51 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
           to: 'rail',
           lengthKm: len / 1000,
           gradient: 0,
-          opened: Math.max(1830, rc.opened),
+          opened,
           ...(rc.closed !== undefined ? { closed: rc.closed } : {}),
         },
       });
+      // Private sidings: the spur runs on into the grounds as two or three parallel roads
+      // along the works, spaced a wagon's width apart, so goods are loaded at the sheds
+      // rather than at the boundary. Ports and institutions keep to their quay or their gate.
+      if (rc.category === 'industry' || rc.category === 'transport') {
+        const { center, axis, lengthM, widthM } = rc.frame;
+        const nrm: Pt = [-axis[1], axis[0]];
+        // Enter from the end of the works nearest the spur.
+        const sign = (rc.from[0] - center[0]) * axis[0] + (rc.from[1] - center[1]) * axis[1] >= 0 ? 1 : -1;
+        const half = (lengthM / 2) * 0.82;
+        const count = widthM >= 120 ? 3 : widthM >= 70 ? 2 : 1;
+        for (let k = 0; k < count; k++) {
+          const off = (k - (count - 1) / 2) * Math.min(22, (widthM * 0.5) / Math.max(1, count));
+          const from: Pt = [
+            center[0] + axis[0] * half * sign + nrm[0] * off,
+            center[1] + axis[1] * half * sign + nrm[1] * off,
+          ];
+          const to: Pt = [
+            center[0] - axis[0] * half * sign * 0.55 + nrm[0] * off,
+            center[1] - axis[1] * half * sign * 0.55 + nrm[1] * off,
+          ];
+          if (!onLand(from[0], from[1]) || !onLand(to[0], to[1])) continue;
+          const sLen = lengthOf([from, to]);
+          spurKm += sLen / 1000;
+          spurs.push({
+            type: 'Feature',
+            id: `siding-${rc.feature}-${k}`,
+            geometry: { type: 'LineString', coordinates: [from, to] },
+            properties: {
+              class: 'siding',
+              mode: 'surface',
+              line: `${rc.feature}-siding`,
+              from: rc.feature,
+              to: rc.feature,
+              lengthKm: sLen / 1000,
+              gradient: 0,
+              opened,
+              ...(rc.closed !== undefined ? { closed: rc.closed } : {}),
+            },
+          });
+        }
+      }
       ctx.checkpoint();
     }
     for (const rd of result.roadConnectors) {

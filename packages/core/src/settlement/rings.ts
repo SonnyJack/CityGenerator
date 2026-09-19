@@ -123,6 +123,15 @@ interface RingGenContext {
   riverDistance: (x: number, y: number) => number;
 }
 
+/** Distance from a point to a segment. */
+function distToSegment(p: Pt, a: Pt, b: Pt): number {
+  const vx = b[0] - a[0];
+  const vy = b[1] - a[1];
+  const len2 = vx * vx + vy * vy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2)) : 0;
+  return Math.hypot(p[0] - (a[0] + vx * t), p[1] - (a[1] + vy * t));
+}
+
 /** Generate grid blocks and streets for all rings. */
 export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: RingGenContext): RingsResult {
   const { site, rng } = ctx;
@@ -307,6 +316,21 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
         const edgeT = (d - ring.rIn) / Math.max(1, ring.rOut - ring.rIn);
         if ((pattern === 'suburban' || pattern === 'culDeSac') && cellRng.chance(0.08 + edgeT * 0.25))
           continue;
+        // Streetcar suburbs: growth of the streetcar era followed the lines out along the
+        // radial arteries the trams ran on, and bulged around the termini at the end of each
+        // line; the ground between the lines stayed open until the car age filled it in. How
+        // far it strings out is the culture's (a compact city keeps its growth continuous).
+        if (pattern === 'streetcar' && (era.streetcarReach ?? 1) > 0 && arteryLines.length) {
+          const reach = era.streetcarReach ?? 1;
+          let dA = Infinity;
+          for (const l of arteryLines) dA = Math.min(dA, distToSegment(c, l.a, l.far));
+          // The corridor widens toward the outer end of the ring, where the termini stand.
+          const corridor = Math.max(110, ring.rIn * 0.2) * reach * (1 + 0.6 * edgeT);
+          if (dA > corridor) {
+            const t = Math.min(1, (dA - corridor) / corridor);
+            if (cellRng.chance(0.2 + 0.65 * t)) continue;
+          }
+        }
         if (!ctx.isLand(c[0], c[1])) continue;
         if (ctx.slopeAt(c[0], c[1]) > 0.28) continue;
         let poly: Ring = corners;

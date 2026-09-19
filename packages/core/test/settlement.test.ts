@@ -343,6 +343,37 @@ describe('modern town with growth rings', () => {
       );
     }
     expect(town.streets.features.some((s) => s.properties.class === 'collector')).toBe(true);
+    // Streetcar suburbs string out along the radial arteries the trams ran on: the blocks of a
+    // streetcar ring lie nearer a radial than an evenly filled ring would put them, and the
+    // ground between the lines is left open for the car age.
+    const radials = town.streets.features
+      .filter((st) => st.properties.class === 'artery' && st.properties.ring > 0)
+      .map((st) => st.geometry.coordinates as [number, number][]);
+    if (radials.length) {
+      const distToLine = (p: [number, number], line: [number, number][]) => {
+        let best = Infinity;
+        for (let i = 1; i < line.length; i++) {
+          const a = line[i - 1]!;
+          const b = line[i]!;
+          const vx = b[0] - a[0];
+          const vy = b[1] - a[1];
+          const len2 = vx * vx + vy * vy;
+          const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2)) : 0;
+          best = Math.min(best, Math.hypot(p[0] - (a[0] + vx * t), p[1] - (a[1] + vy * t)));
+        }
+        return best;
+      };
+      const ringBlocks = town.blocks.filter((b) => b.id.includes('-r'));
+      const centres = ringBlocks.map((b) => {
+        const n = b.ring.length;
+        return [b.ring.reduce((a, q) => a + q[0], 0) / n, b.ring.reduce((a, q) => a + q[1], 0) / n] as [
+          number,
+          number,
+        ];
+      });
+      const near = centres.filter((c) => Math.min(...radials.map((r) => distToLine(c, r))) < 260);
+      expect(near.length / Math.max(1, centres.length)).toBeGreaterThan(0.35);
+    }
     expect(town.blocks.length).toBeGreaterThan(town.stats.inner);
     // Ring blocks generate buildings too.
     const ringBlock = town.blocks.find((b) => b.id.includes('-r'))!;
@@ -431,4 +462,4 @@ describe('roads', () => {
 });
 
 const TOWN_GOLDEN = '5ac6f6d98879514193882ee66dbf0e4b';
-const MODERN_GOLDEN = 'cfc699402113a1bc45293b01ba54fc40';
+const MODERN_GOLDEN = 'a7351336dc96a4b5e74b1cf1b3db5a45';
