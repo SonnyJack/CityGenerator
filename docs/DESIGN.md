@@ -423,7 +423,10 @@ generator treats authored features as fixed constraints and fills around them.
   the land slope below the coast (needed for harbours and ports), tidal flats
   and marsh where slope is near zero at the coast.
 - **Derived**: slope, aspect, distance to water/sea, viewshed proxy (elevation
-  above local mean), flood risk (low and near water).
+  above local mean), flood risk (low and near water). The distance-to-water
+  field sampled bilinearly, minus half a cell, is the one shoreline every
+  land test uses: it is where the marching-squares water contour is drawn,
+  so a footprint that passes the test is clear of the drawn water.
 - **Contours** (marching squares) at theme-chosen intervals; **hillshade** and
   optional 3D terrain from Terrain-RGB tiles rendered by MapLibre.
 - **Routing**: regional roads and rail use A* on the base raster with cost =
@@ -965,7 +968,10 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 - **v1.0-rc** — Phase 12 tuning pass: the headless sweep and the two
   robustness fixes it forced (siting relaxation passes; a built core on
-  rugged ground).
+  rugged ground). Phase 13 terrain fit: one drawn shoreline for every land
+  test (bilinear distance field, half a cell in from the water cell
+  centres, with setbacks) and route smoothing constrained to the land the
+  router chose, with a sweep invariant for both.
 - **v0.13** — Phase 11: utility networks (water, gas, power, sewers,
   pipelines, canals) as a region stage over the towns and facilities, with
   the shared raster router and per-network cost models (mains follow the

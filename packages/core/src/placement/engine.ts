@@ -3,6 +3,7 @@ import { Rng } from '../random/rng.js';
 import type { Ring } from '../raster/contours.js';
 import { pointInRing } from '../geometry/polygon.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
+import { landSampler } from '../terrain/land.js';
 import type { SettlementSite } from '../settlement/siting.js';
 import type { RailOutput } from '../networks/rail.js';
 import type {
@@ -89,6 +90,7 @@ export function createContext(
   year: number,
   windFrom: number,
 ): PlacementContext {
+  const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
   const { height, water, slope, distToSea, distToWater } = terrain;
   const { width, height: rows, cellSizeM } = height;
   const idx = (x: number, y: number) => {
@@ -172,11 +174,7 @@ export function createContext(
     rail,
     windFrom,
     placed: [],
-    isLand: (x, y) => {
-      if (!inside(x, y)) return false;
-      const w = water[idx(x, y)]!;
-      return w === WATER.land || w === WATER.river;
-    },
+    isLand: (x, y) => inside(x, y) && onLand(x, y),
     isSea: (x, y) => inside(x, y) && water[idx(x, y)] === WATER.sea,
     isWater: (x, y) => !inside(x, y) || water[idx(x, y)] !== WATER.land,
     slopeAt: (x, y) => slope[idx(x, y)]!,

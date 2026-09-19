@@ -29,6 +29,11 @@ export interface EngineApi {
   exportFrame(frame: Frame): Promise<ExportModel>;
   /** Floor plans of a generated building by id (rooms, doors, windows, walls per floor), or null. */
   interior(buildingId: string): Promise<Interior | null>;
+  /** Whether each point is on land by the drawn shoreline (rivers count as water unless told otherwise). */
+  landCheck(
+    points: [number, number][],
+    options?: { setbackM?: number; rivers?: 'water' | 'land'; aboveSea?: boolean },
+  ): Promise<boolean[]>;
   /** Business and resident directory: every building of a settlement (or all), filtered by text. */
   directory(
     settlement: string | null,

@@ -1,7 +1,8 @@
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { defineStage } from '../pipeline/stage.js';
 import { Rng } from '../random/rng.js';
-import { simplifyLine, smoothLine, type Ring } from '../raster/contours.js';
+import type { Ring } from '../raster/contours.js';
+import { landSampler, smoothOnLand } from '../terrain/land.js';
 import { populationAt } from '../settlement/history.js';
 import type { SettlementSite } from '../settlement/siting.js';
 import type { TownOutput } from '../settlement/town.js';
@@ -224,6 +225,7 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
     };
     const hAt = (p: Pt) => height.data[idx(p)]!;
     const isLand = (i: number) => water[i] === WATER.land;
+    const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
 
     /** Route between two world points; returns a smoothed world line (empty when unreachable). */
     const route = (from: Pt, to: Pt, costOf: (i: number) => number, cap = 250_000): Ring => {
@@ -235,7 +237,11 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
       const raw: Ring = cells.map(([c, r]) => [height.x(c), height.y(r)]);
       raw[0] = from;
       raw[raw.length - 1] = to;
-      return simplifyLine(smoothLine(simplifyLine(raw, cellSizeM * 0.75), 2), cellSizeM * 0.2);
+      return smoothOnLand(raw, onLand, {
+        preSimplify: cellSizeM * 0.75,
+        iterations: 2,
+        tolerance: cellSizeM * 0.2,
+      });
     };
     const line = (
       geometry: Ring,

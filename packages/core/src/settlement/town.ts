@@ -13,7 +13,8 @@ import {
   type Pt,
 } from '../geometry/polygon.js';
 import { relax, unionBoundary, voronoi, type VoronoiCell } from '../geometry/voronoi.js';
-import { WATER, type TerrainOutput } from '../terrain/stage.js';
+import type { TerrainOutput } from '../terrain/stage.js';
+import { landSampler } from '../terrain/land.js';
 import type { SettlementSite } from './siting.js';
 import { FILL_WARDS, WARDS, type WardContext, type WardId } from './wards.js';
 import type { EraParams } from './eras.js';
@@ -174,7 +175,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
     const populationNow = site.population;
     const peak = peakUntil(history, year);
     const [cx, cy] = site.center;
-    const { height, water, slope } = terrain;
+    const { height, slope } = terrain;
 
     // --- Sample helpers over the terrain rasters -----------------------------
     const cellAt = (x: number, y: number) => {
@@ -182,10 +183,8 @@ export const townStage = defineStage<TownInput, TownOutput>({
       const row = Math.min(Math.max(Math.round(height.row(y)), 0), height.height - 1);
       return row * height.width + col;
     };
-    const isLand = (x: number, y: number) => {
-      const w = water[cellAt(x, y)]!;
-      return (w === WATER.land || w === WATER.river) && height.sample(x, y) >= terrain.seaLevel;
-    };
+    // The drawn shoreline (see terrain/land.ts), rivers passable: patches bridge them.
+    const isLand = landSampler(terrain, { rivers: 'land' });
 
     // --- 1. Patch sites: sunflower spiral, denser inside the town ------------
     const spacing = input.blockSizeM;
@@ -226,6 +225,9 @@ export const townStage = defineStage<TownInput, TownOutput>({
     // --- 2. Patches: keep those within the outer radius, clip to the coast ---
     const patches: Patch[] = [];
     const localCell = Math.max(8, Math.min(20, spacing / 8));
+    // Clipping rasterises at the local cell; a setback of half a cell keeps the traced edge inside
+    // the drawn shoreline rather than up to half a local cell beyond it.
+    const clipLand = landSampler(terrain, { rivers: 'land', setbackM: localCell * 0.6 });
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i]!;
       if (cell.ring.length < 3) continue;
@@ -239,7 +241,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       if (siteLand) {
         for (const [x, y] of ring) if (!isLand(x, y)) allLand = false;
         if (!allLand) {
-          const clipped = clipToLand(ring, cell.site, isLand, localCell);
+          const clipped = clipToLand(ring, cell.site, clipLand, localCell);
           if (!clipped) continue;
           ring = clipped;
           waterfront = true;
@@ -578,7 +580,8 @@ export const townStage = defineStage<TownInput, TownOutput>({
       if (!p.ward || p.ward === 'plaza' || p.ward === 'farm') continue;
       const halfWidth = arteryPatchSet.has(p) ? ARTERY_HALF_WIDTH : STREET_HALF_WIDTH;
       const ring = inset(p.ring, halfWidth);
-      if (ring.length < 3) continue;
+      // A sliver left by the shoreline clip is not a block.
+      if (ring.length < 3 || area(ring) < 50) continue;
       blocks.push({
         id: `${id}-b${p.index}`,
         settlementId: id,
@@ -600,13 +603,14 @@ export const townStage = defineStage<TownInput, TownOutput>({
         terrain,
         rng: rng.fork('rings'),
         isLand,
-        clipToLand: (ring, s) => clipToLand(ring, s, isLand, localCell),
+        clipToLand: (ring, s) => clipToLand(ring, s, clipLand, localCell),
         slopeAt: slopeAt(height, slope),
         gates,
       });
       ringCount = rings.rings.length;
       const zoneRng = rng.fork('zones');
       for (const b of rings.blocks) {
+        if (area(b.ring) < 50) continue;
         const c = centroid(b.ring);
         const f = input.society?.sample(c[0], c[1]);
         const { zone, why } = modernZone(

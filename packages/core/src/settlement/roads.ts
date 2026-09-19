@@ -1,6 +1,7 @@
 import type { FeatureCollection, LineString } from 'geojson';
 import { defineStage } from '../pipeline/stage.js';
-import { smoothLine, simplifyLine, type Ring } from '../raster/contours.js';
+import type { Ring } from '../raster/contours.js';
+import { landSampler, smoothOnLand } from '../terrain/land.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { SettlementSite } from './siting.js';
 import { roadCost, routeCells } from '../networks/routing.js';
@@ -35,6 +36,7 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
     const { height, water } = terrain;
     const { width, height: rows, cellSizeM } = height;
     const costOf = roadCost(terrain);
+    const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
     const cellOf = (x: number, y: number): [number, number] => [
       Math.min(Math.max(Math.round(height.col(x)), 0), width - 1),
       Math.min(Math.max(Math.round(height.row(y)), 0), rows - 1),
@@ -111,7 +113,7 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
           run = [];
         }
       }
-      const line = simplifyLine(smoothLine(pts, 2), cellSizeM * 0.3);
+      const line = smoothOnLand(pts, onLand, { iterations: 2, tolerance: cellSizeM * 0.3 });
       let len = 0;
       for (let i = 1; i < line.length; i++)
         len += Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]);

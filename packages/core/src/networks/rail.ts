@@ -1,7 +1,8 @@
 import type { FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { defineStage } from '../pipeline/stage.js';
 import { Rng } from '../random/rng.js';
-import { smoothLine, simplifyLine, type Ring } from '../raster/contours.js';
+import type { Ring } from '../raster/contours.js';
+import { landSampler, smoothOnLand } from '../terrain/land.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import { eraAt, type EraParams } from '../settlement/eras.js';
 import type { SettlementSite } from '../settlement/siting.js';
@@ -275,6 +276,7 @@ export const railStage = defineStage<RailInput, RailOutput>({
     let tunnels = 0;
     let viaducts = 0;
 
+    const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
     /** Route between two world points; returns a smoothed polyline or null. */
     const route = (from: Pt, to: Pt, cls: TrackClass, endpoints: Set<number>): Ring | null => {
       const cells = routeCells(terrain, cellAt(terrain, from[0], from[1]), cellAt(terrain, to[0], to[1]), {
@@ -284,9 +286,13 @@ export const railStage = defineStage<RailInput, RailOutput>({
       const raw: Ring = cells.map(([c, r]) => [height.x(c), height.y(r)]);
       raw[0] = [from[0], from[1]];
       raw[raw.length - 1] = [to[0], to[1]];
-      // Rail curves are gentle: drop the staircase first, smooth heavily, then simplify lightly.
-      const coarse = simplifyLine(raw, cellSizeM * 0.75);
-      return simplifyLine(smoothLine(coarse, cls === 'mainline' ? 5 : 4), cellSizeM * 0.2);
+      // Rail curves are gentle: drop the staircase first, smooth heavily, then simplify lightly,
+      // without the curve leaving the land the router chose (rivers are viaducts).
+      return smoothOnLand(raw, onLand, {
+        preSimplify: cellSizeM * 0.75,
+        iterations: cls === 'mainline' ? 5 : 4,
+        tolerance: cellSizeM * 0.2,
+      });
     };
 
     /** Resample a polyline at a fixed spacing (keeps the endpoints). */
@@ -398,14 +404,42 @@ export const railStage = defineStage<RailInput, RailOutput>({
       disused: 180,
     };
 
+    /** Curve easing may swing a track into a cove: points that left the land go back to the routed line. */
+    const keepOnLand = (pts: Ring, ref: Ring) => {
+      for (let i = 1; i < pts.length - 1; i++) {
+        const p = pts[i]!;
+        if (onLand(p[0], p[1])) continue;
+        let best: Pt = ref[0]!;
+        let bestD = Infinity;
+        for (let k = 1; k < ref.length; k++) {
+          const a = ref[k - 1]!;
+          const b = ref[k]!;
+          const dx = b[0] - a[0];
+          const dy = b[1] - a[1];
+          const len2 = dx * dx + dy * dy || 1;
+          const t = Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+          const q: Pt = [a[0] + dx * t, a[1] + dy * t];
+          const d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2;
+          if (d < bestD && onLand(q[0], q[1])) {
+            bestD = d;
+            best = q;
+          }
+        }
+        if (bestD < Infinity) pts[i] = best;
+      }
+    };
+
     /** Split a routed line into mode runs and push them as track features. */
     const pushTrack = (line: Ring, cls: TrackClass, lineId: string, from: string, to: string): Ring => {
       // Ease curves at a coarse spacing first (large moves), then at the working spacing.
       const coarse = resample(line, cellSizeM * 1.5).pts;
       relaxCurves(coarse, MIN_RADIUS[cls], 200);
+      keepOnLand(coarse, line);
       const fine = resample(coarse, cellSizeM * 0.5).pts;
       relaxCurves(fine, MIN_RADIUS[cls], 200);
+      keepOnLand(fine, line);
       const { pts, s } = resample(fine, cellSizeM * 0.5);
+      keepOnLand(pts, line);
       if (pts.length < 2) return line;
       const cap = GRADIENT_CAP[cls];
       const z = profile(pts, s, cap);

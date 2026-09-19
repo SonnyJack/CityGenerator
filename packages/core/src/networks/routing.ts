@@ -75,12 +75,19 @@ export function routeCells(
     if (++expanded > maxExpanded) break;
     const col = u % width;
     const row = (u / width) | 0;
+    // Orthogonal passability once per expansion; diagonals reuse it (no corner cutting: a
+    // diagonal step between two water cells would put the drawn shoreline through the path).
+    const passE = col + 1 < width && Number.isFinite(options.costOf(u + 1));
+    const passW = col > 0 && Number.isFinite(options.costOf(u - 1));
+    const passS = row + 1 < rows && Number.isFinite(options.costOf(u + width));
+    const passN = row > 0 && Number.isFinite(options.costOf(u - width));
     for (let dy = -1; dy <= 1; dy++)
       for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
         const nc = col + dx;
         const nr = row + dy;
         if (nc < 0 || nr < 0 || nc >= width || nr >= rows) continue;
+        if (dx && dy && !((dx > 0 ? passE : passW) && (dy > 0 ? passS : passN))) continue;
         const v = nr * width + nc;
         if (closed[v]) continue;
         const mult = options.costOf(v);

@@ -26,3 +26,11 @@ export {
   type LandcoverOutput,
   type LandcoverClass,
 } from './stage.js';
+export {
+  landSampler,
+  shoreDistance,
+  ringOnLand,
+  smoothOnLand,
+  type LandOptions,
+  type LandTest,
+} from './land.js';

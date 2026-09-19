@@ -17,8 +17,11 @@ const flag = (name, fallback) => {
   return i >= 0 && args[i + 1] !== undefined ? Number(args[i + 1]) : fallback;
 };
 const quick = args.includes('--quick');
+// --range a-b runs a slice of the matrix (zero-based, end exclusive), so long sweeps can go in chunks.
+const rangeArg = args[args.indexOf('--range') + 1];
+const range = args.includes('--range') && rangeArg ? rangeArg.split('-').map(Number) : null;
 const extent = flag('extent', 12_000);
-const budgetMs = flag('budget', 20_000);
+const budgetMs = flag('budget', 25_000);
 
 const PRESETS = ['plains', 'coast', 'bay', 'riverValley', 'hills', 'archipelago', 'delta', 'estuary'];
 const YEARS = quick ? [1780, 1925, 2020] : [1650, 1780, 1850, 1890, 1925, 1955, 1985, 2020];
@@ -130,7 +133,8 @@ if (!quick) edge('large/1925', { seed: 'large', widthM: 40_000, heightM: 30_000 
 
 const problems = [];
 const rows = [];
-for (const run of runs) {
+const selected = range ? runs.slice(range[0], range[1]) : runs;
+for (const run of selected) {
   const engine = createEngine();
   const t0 = performance.now();
   try {
@@ -162,6 +166,19 @@ for (const run of runs) {
       };
       const model = await engine.exportFrame(frame);
       const tile = await engine.getTile(version, 12, 2048, 2048);
+      // Terrain fit: no building over the drawn water, no road or track vertex over the sea or a lake.
+      const corners = model.buildings.features.flatMap((b) =>
+        b.geometry.coordinates[0].map((p) => [p[0], p[1]]),
+      );
+      const wetCorners = (await engine.landCheck(corners, { rivers: 'water' })).filter((ok) => !ok).length;
+      const routeVertices = [...model.roads.features, ...model.rail.features].flatMap((l) =>
+        l.geometry.coordinates.slice(1, -1).map((p) => [p[0], p[1]]),
+      );
+      const wetVertices = (await engine.landCheck(routeVertices, { rivers: 'land', aboveSea: false })).filter(
+        (ok) => !ok,
+      ).length;
+      if (wetCorners) problems.push(`${run.name}: ${wetCorners} building corners over water`);
+      if (wetVertices) problems.push(`${run.name}: ${wetVertices} route vertices over water`);
       queries = ` q:${found.length}f ${summary?.premises ?? 0}p ${entries.length}b ${interiorRooms}r ${model.buildings.features.length}xb ${tile ? tile.byteLength : 0}t`;
       if (summary && summary.premises === 0 && s.population > 1000)
         problems.push(`${run.name}: no premises in ${s.id}`);
@@ -181,7 +198,8 @@ for (const run of runs) {
     for (const st of stats.settlements)
       if (st.blocks === 0 && st.population > 300) invariants.push(`${st.id} has no blocks`);
     if (invariants.length) problems.push(`${run.name}: ${invariants.join('; ')}`);
-    const line = `${run.name.padEnd(48)} ${ms.toFixed(0).padStart(6)} ms  ${stats.settlements.length}s ${stats.blocks}bl ${stats.facilities.placed}/${stats.facilities.failed}fac ${stats.rail.trackKm.toFixed(0)}rail ${stats.utilities.powerKm.toFixed(0)}pw ${stats.utilities.canalKm.toFixed(0)}cn waste ${stats.facilities.wasteland.overall.toFixed(2)}${queries}`;
+    const rss = `${(process.memoryUsage().rss / 1048576).toFixed(0)}M`;
+    const line = `${run.name.padEnd(48)} ${ms.toFixed(0).padStart(6)} ms ${rss.padStart(6)} ${stats.settlements.length}s ${stats.blocks}bl ${stats.facilities.placed}/${stats.facilities.failed}fac ${stats.rail.trackKm.toFixed(0)}rail ${stats.utilities.powerKm.toFixed(0)}pw ${stats.utilities.canalKm.toFixed(0)}cn waste ${stats.facilities.wasteland.overall.toFixed(2)}${queries}`;
     rows.push(line);
     console.log(line);
   } catch (e) {
@@ -190,6 +208,6 @@ for (const run of runs) {
     console.log(msg);
   }
 }
-console.log(`\n${runs.length} runs, ${problems.length} problems`);
+console.log(`\n${selected.length} runs, ${problems.length} problems`);
 for (const p of problems) console.log(` - ${p}`);
 process.exit(problems.length ? 1 : 0);

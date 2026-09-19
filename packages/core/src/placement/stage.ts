@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Polygon } from 'geojson';
 import { defineStage } from '../pipeline/stage.js';
-import { simplifyLine, smoothLine, type Ring } from '../raster/contours.js';
+import type { Ring } from '../raster/contours.js';
+import { landSampler, smoothOnLand } from '../terrain/land.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { SettlementSite } from '../settlement/siting.js';
 import type { WardId } from '../settlement/wards.js';
@@ -107,6 +108,7 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
     const windFrom = input.windFrom ?? Math.PI;
     const pctx = createContext(terrain, sites, input.rail, year, windFrom);
     const types = featureTypeMap(input.customTypes.map(customFeatureType));
+    const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
     const hosts = new Map<string, HostSite>();
     for (const s of sites)
       hosts.set(s.id, { site: s, coreRadiusM: Math.min(0.8 * s.radiusM, 350 + 0.25 * s.radiusM) });
@@ -209,7 +211,11 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
       const raw: Ring = cells.map(([c, r]) => [height.x(c), height.y(r)]);
       raw[0] = rc.from;
       raw[raw.length - 1] = target;
-      const line = simplifyLine(smoothLine(simplifyLine(raw, cellSizeM * 0.75), 3), cellSizeM * 0.2);
+      const line = smoothOnLand(raw, onLand, {
+        preSimplify: cellSizeM * 0.75,
+        iterations: 3,
+        tolerance: cellSizeM * 0.2,
+      });
       const len = lengthOf(line);
       spurKm += len / 1000;
       spurs.push({
@@ -248,7 +254,7 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
       if (kept.length < 2) continue;
       const raw: Ring = kept.map(([c, r]) => [height.x(c), height.y(r)]);
       raw[0] = rd.from;
-      const line = simplifyLine(smoothLine(raw, 2), cellSizeM * 0.3);
+      const line = smoothOnLand(raw, onLand, { iterations: 2, tolerance: cellSizeM * 0.3 });
       const len = lengthOf(line);
       roadKm += len / 1000;
       roads.push({

@@ -145,13 +145,39 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   const theta0 = angles[0] ?? 0;
   const edgeKeys = new Set<string>();
   const key = (p: Pt) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+  // A grid edge is drawn only where it is on land: an edge across an inlet is trimmed to its land
+  // runs (a run shorter than a lane is dropped), so no street crosses the drawn water.
+  const landRuns = (a: Pt, b: Pt): [Pt, Pt][] => {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const n = Math.max(1, Math.ceil(len / 6));
+    const runs: [Pt, Pt][] = [];
+    let start: number | null = null;
+    for (let k = 0; k <= n; k++) {
+      const t = k / n;
+      const land = ctx.isLand(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+      if (land && start === null) start = t;
+      if ((!land || k === n) && start !== null) {
+        const end = land ? t : (k - 1) / n;
+        if ((end - start) * len >= 20)
+          runs.push([
+            [a[0] + (b[0] - a[0]) * start, a[1] + (b[1] - a[1]) * start],
+            [a[0] + (b[0] - a[0]) * end, a[1] + (b[1] - a[1]) * end],
+          ]);
+        start = null;
+      }
+    }
+    return runs;
+  };
   const pushEdge = (a: Pt, b: Pt, cls: 'collector' | 'street') => {
     const ka = key(a);
     const kb = key(b);
     const ek = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
     if (edgeKeys.has(ek)) return;
     edgeKeys.add(ek);
-    streets.push({ points: [a, b], cls, key: ek });
+    const runs = landRuns(a, b);
+    if (runs.length === 1 && runs[0]![0] === a && runs[0]![1] === b)
+      streets.push({ points: [a, b], cls, key: ek });
+    else runs.forEach(([p, q], i) => streets.push({ points: [p, q], cls, key: `${ek}#${i}` }));
   };
 
   rings.forEach((ring, ringIndex) => {

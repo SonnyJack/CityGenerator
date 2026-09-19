@@ -16,6 +16,7 @@ import {
   culturePack,
   generateInterior,
   INTERIOR_PART_KINDS,
+  landSampler,
   registerCulturePacks,
   radiusAt,
   decodeHeightmap,
@@ -478,6 +479,7 @@ export function createEngine(): EngineApi {
         block: {
           pack: culturePack(doc.spec.culture),
           address: (x, y) => streetIndex.address(x, y),
+          buildable: landSampler(terrain, { setbackM: 2, rivers: 'water' }),
           ...(Object.keys(renames).length ? { renames } : {}),
           ...(conditionStrokes.length ? { conditionEdits: conditionStrokes } : {}),
           ...(doc.spec.cultureMix
@@ -779,6 +781,16 @@ export function createEngine(): EngineApi {
         settlement,
         patch,
       };
+    },
+
+    async landCheck(points, options) {
+      if (!latest) return points.map(() => false);
+      const test = landSampler(latest.terrain, {
+        setbackM: options?.setbackM ?? 0,
+        rivers: options?.rivers ?? 'water',
+        aboveSea: options?.aboveSea ?? true,
+      });
+      return points.map(([x, y]) => test(x, y));
     },
 
     async interior(buildingId) {

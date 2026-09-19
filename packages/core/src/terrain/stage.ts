@@ -43,6 +43,8 @@ export interface TerrainOutput {
   aspect: Float32Array;
   distToWater: Float32Array;
   distToSea: Float32Array;
+  /** Distance to the sea or a lake (rivers excluded), for tests that bridge rivers. */
+  distToStillWater?: Float32Array;
   accumulation: Float32Array;
   seaLevel: number;
   rivers: RiverReach[];
@@ -204,6 +206,9 @@ export const terrainStage = defineStage<TerrainInput, TerrainOutput>({
     const anyWater = new Uint8Array(n);
     for (let i = 0; i < n; i++) anyWater[i] = water[i] === WATER.land ? 0 : 1;
     const distToWater = distanceTo(anyWater, width, rows, cellSizeM);
+    const stillWater = new Uint8Array(n);
+    for (let i = 0; i < n; i++) stillWater[i] = water[i] === WATER.sea || water[i] === WATER.lake ? 1 : 0;
+    const distToStillWater = distanceTo(stillWater, width, rows, cellSizeM);
     ctx.checkpoint();
 
     // --- 5. Vector outputs --------------------------------------------------
@@ -290,6 +295,7 @@ export const terrainStage = defineStage<TerrainInput, TerrainOutput>({
       aspect,
       distToWater,
       distToSea,
+      distToStillWater,
       accumulation: flow.accumulation,
       seaLevel,
       rivers: reaches,

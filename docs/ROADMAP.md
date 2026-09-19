@@ -1,6 +1,6 @@
 # CityGenerator — Roadmap
 
-Status: **Draft v0.3**. No calendar estimates by owner request. Phases are
+Status: **Draft v1.0-rc**. No calendar estimates by owner request. Phases are
 ordered by dependency and by risk: the riskiest architectural pieces
 (metropolitan-scale lazy generation and MapLibre rendering) are proven first.
 Every phase ends with a deployed site on GitHub Pages so there is always
@@ -22,6 +22,7 @@ CI or by a reviewer.
 | 10    | Ecosystem                               | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs             |
 | 11    | Utilities                               | Water and gas mains, power lines, sewers, pipelines and canals from the works, by era               |
 | 12    | Tuning pass                             | Headless sweep over presets, eras, cultures and edge cases; the fixes it forced                     |
+| 13    | Terrain fit                             | One drawn shoreline for every test; routes that stay on the land the router chose                   |
 
 Milestones: `v0.1` after Phase 1, `v0.2` after Phase 2, `v0.3` after Phase 3,
 `v0.5` after Phase 6, `v0.8` after Phase 8, `v1.0` after Phase 9 plus a tuning
@@ -625,3 +626,39 @@ facility failures, settlements without blocks, no premises).
       reported, not counted as a breach; every other run is clean.
 - [ ] Deferred: a browser-side sweep of every theme at every zoom for
       rendering budgets; per-culture visual review of the generated names.
+
+## Phase 13 — Terrain fit (steps 1 and 2 done, 3–5 open)
+
+Screenshots showed blocks hanging over lakes and bays and roads cutting
+coves. The cause was two shorelines: the map draws water from marching
+squares contours of the raster (the boundary runs half a cell from the water
+cell centres), while the generators tested the nearest cell, so anything
+within half a cell of the drawn line was "land" to them. The other cause was
+smoothing: Chaikin passes and curve easing pulled a routed line off the land
+the router had chosen, and a long straight segment could hop a bay whose
+cells the router had never entered.
+
+- [x] One shoreline (`landSampler` in `core/terrain/land.ts`): a bilinear
+      sample of the distance-to-water field, minus half a cell, reproduces
+      the drawn contour to sub-cell accuracy; an optional setback keeps
+      footprints clear of it, and rivers count as water (buildings) or as
+      land a road may bridge (routes). Patches, growth rings, blocks,
+      buildings and the placement engine all use it; ring streets are
+      trimmed to their land runs across an inlet; blocks left under 50 m² by
+      the clipping are dropped.
+- [x] Routes stay on land (`smoothOnLand`): every smoothed line (regional
+      roads, rail including the eased curves and the final resample, spurs,
+      access roads, utilities) is checked vertex by vertex and along each
+      segment; a wet vertex snaps back to the nearest routed point on land
+      and a wet segment gets a land corner or routed point inserted. The
+      router no longer cuts a diagonal between two water cells. Endpoints
+      are kept, so a quay or a jetty can still end in the water on purpose.
+- [x] The engine exposes `landCheck(points, options)` and the sweep asserts
+      no building corner over the drawn water and no road or track vertex
+      over the sea or a lake, on every run.
+- [ ] Step 3: contour-following streets on slopes (ring roads offset along
+      the isolines rather than concentric circles).
+- [ ] Step 4: bridges, causeways and embankments as drawn features on
+      roads over rivers and marsh, styled per theme and exported.
+- [ ] Step 5: patches that cut on the shoreline keep a promenade or a quay
+      strip instead of a ragged edge.

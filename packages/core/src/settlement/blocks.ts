@@ -8,6 +8,7 @@ import type { CulturePack } from '../naming/schema.js';
 import { NameGenerator } from '../naming/generator.js';
 import { amenityFor, materialFor } from '../naming/amenities.js';
 import { culturePack } from '../naming/packs.js';
+import { ringOnLand } from '../terrain/land.js';
 
 /** Optional context that turns generated buildings into named, addressed premises. */
 export interface BlockOptions {
@@ -21,6 +22,8 @@ export interface BlockOptions {
   renames?: Record<string, string>;
   /** Condition strokes from the editor (field 'condition'). */
   conditionEdits?: { points: Pt[]; radiusM: number; delta: number }[];
+  /** Ground test for footprints (the drawn shoreline with a setback); a building failing it is not built. */
+  buildable?: (x: number, y: number) => boolean;
 }
 
 export interface BuildingProps {
@@ -153,7 +156,7 @@ export function generateBlock(block: BlockRecipe, year: number, options: BlockOp
   // Single-structure wards.
   if (block.ward === 'cathedral' || block.ward === 'castle') {
     const footprint = inset(ring, profile.setbackM);
-    if (footprint.length >= 3) {
+    if (footprint.length >= 3 && (!options.buildable || ringOnLand(footprint, options.buildable))) {
       const b = buildingFeature(
         block,
         footprint,
@@ -198,6 +201,7 @@ export function generateBlock(block: BlockRecipe, year: number, options: BlockOp
     const wardProfile = WARDS[ward];
     const footprint = inset(lot, timeline ? wardProfile.setbackM + (setback - profile.setbackM) : setback);
     if (footprint.length < 3 || area(footprint) < 25) return;
+    if (options.buildable && !ringOnLand(footprint, options.buildable)) return;
     const floors = Math.max(
       1,
       Math.round(
