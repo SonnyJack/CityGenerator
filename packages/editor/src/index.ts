@@ -11,6 +11,9 @@ export {
   type Modifiers,
   type DraftState,
   type VertexHandle,
+  type Guide,
+  type SelectMode,
+  type SelectQuery,
   type ToolHost,
   type GeneratedFeature,
 } from './tools.js';

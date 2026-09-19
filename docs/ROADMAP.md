@@ -228,9 +228,15 @@ blocks.
       transforms), history menu (jump to any state), recent documents
       (IndexedDB, most recent first, forget), layer toggles for authored
       features, brush strokes and annotations.
-- [ ] Deferred: lasso and by-query selection, alignment guides, vegetation and
-      year brushes, layer lock/opacity/reorder, history thumbnails, derived
-      caches for instant reopen, arrows as a drawn annotation tool.
+- [x] Lasso selection (a freehand loop that takes what it encloses, or what
+      it touches when asked), selection by query (layer, kind or name, and
+      only what lies in the current view) from a Find row in the tool bar,
+      and alignment guides: while a selection is moved or a shape is drawn,
+      its edges and centres line up with those of what is already drawn and a
+      dashed guide shows the line (Alt moves freely).
+- [ ] Deferred: vegetation and year brushes, layer lock/opacity/reorder,
+      history thumbnails, derived caches for instant reopen, arrows as a
+      drawn annotation tool.
 
 Acceptance (met): Playwright covers each tool (line, rectangle + select +
 move + undo, terrain and wealth brushes + erase, annotations, freeze and

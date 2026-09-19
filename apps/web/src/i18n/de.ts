@@ -456,4 +456,24 @@ export const de: Record<string, string> = {
   Year: 'Jahr',
   'Populations are as of {year}; the slider moves along that history.':
     'Die Bevölkerungszahlen gelten für {year}; der Regler fährt diese Geschichte entlang.',
+  Lasso: 'Lasso',
+  Takes: 'Nimmt',
+  enclosed: 'umschlossene',
+  touched: 'berührte',
+  Find: 'Suchen',
+  'any layer': 'alle Ebenen',
+  'kind or name': 'Art oder Name',
+  'in view': 'im Ausschnitt',
+  '{n} selected': '{n} ausgewählt',
+  Align: 'Ausrichten',
+  'Alignment guides': 'Hilfslinien',
+  'Selection mode': 'Auswahlmodus',
+  'Query layer': 'Gesuchte Ebene',
+  'Query text': 'Suchtext',
+  'Line up with the edges and centres of what is already drawn':
+    'An Kanten und Mitten des bereits Gezeichneten ausrichten',
+  'What a box or a loop takes in': 'Was ein Rahmen oder eine Schlinge erfasst',
+  'Only what lies wholly in the current view': 'Nur was ganz im aktuellen Ausschnitt liegt',
+  'Drag a loop around what you want; Shift adds to the selection':
+    'Eine Schlinge um das Gewünschte ziehen; Umschalt erweitert die Auswahl',
 };

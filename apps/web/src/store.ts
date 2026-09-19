@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { createDocument, parseDocument, serializeDocument, type MapDocument } from '@citygen/core';
+import {
+  createDocument,
+  lonLatToMeters,
+  parseDocument,
+  serializeDocument,
+  type AuthoredLayer,
+  type MapDocument,
+} from '@citygen/core';
 import {
   CommandBus,
   ToolController,
@@ -64,6 +71,8 @@ export interface AppState {
 
   setTool(tool: ToolId): void;
   setToolOptions(patch: Partial<ToolOptions>): void;
+  /** Select every authored feature matching the query (the editor bar's Find row). */
+  selectByQuery(query: { layer?: AuthoredLayer; text?: string; inView?: boolean }): void;
   selectAnnotation(id: string | undefined): void;
   /** Ask the engine what generated feature is at a point (select tool on empty ground). */
   probeGenerated(x: number, y: number, toleranceM: number): void;
@@ -269,6 +278,26 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
     setToolOptions(patch) {
       tools.setOptions(patch);
       set({ toolOptions: { ...tools.options } });
+    },
+    selectByQuery({ layer, text, inView }) {
+      // A single box of text matches either the kind or the name, so one field does for both.
+      const map = window.__citygenMap;
+      let within: { minX: number; minY: number; maxX: number; maxY: number } | undefined;
+      if (inView && map) {
+        const b = map.getBounds();
+        const [minX, minY] = lonLatToMeters([b.getWest(), b.getSouth()]);
+        const [maxX, maxY] = lonLatToMeters([b.getEast(), b.getNorth()]);
+        within = { minX, minY, maxX, maxY };
+      }
+      const byKind = tools.selectByQuery({
+        ...(layer ? { layer } : {}),
+        ...(text ? { kind: text } : {}),
+        ...(within ? { within } : {}),
+      });
+      if (text && !byKind.length)
+        tools.selectByQuery({ ...(layer ? { layer } : {}), name: text, ...(within ? { within } : {}) });
+      set({ selection: [...tools.selection], selectedAnnotation: undefined });
+      get().dispatchEditorChanged?.();
     },
     selectAnnotation(id) {
       if (id) {

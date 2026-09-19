@@ -1527,7 +1527,7 @@ export const EDITOR_ACCENT = '#2563eb';
 /**
  * Styling for hand-authored features, the editor overlay and annotations. Authored
  * features carry `layer` (street, rail, …) and metre widths/radii; the overlay
- * carries `role` (draft, selection, handle, brush, hover).
+ * carries `role` (draft, selection, handle, brush, hover, guide).
  */
 function editorLayers(
   theme: Theme,
@@ -1825,6 +1825,15 @@ function editorLayers(
       'circle-stroke-color': EDITOR_ACCENT,
       'circle-stroke-width': 2,
     },
+  });
+  // Alignment guides: a thin dashed line where an edge or a centre lines up.
+  out.push({
+    id: 'editor-guide',
+    type: 'line',
+    source: overlay,
+    filter: ['all', isLine, role('guide')],
+    layout: { 'line-cap': 'butt' },
+    paint: { 'line-color': '#e0457b', 'line-width': 1, 'line-dasharray': [4, 3], 'line-opacity': 0.9 },
   });
   out.push({
     id: 'editor-hover',

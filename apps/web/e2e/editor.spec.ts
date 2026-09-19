@@ -406,3 +406,77 @@ test('recent documents and the history menu', async ({ page }) => {
   expect(jumped.spec.year).toBe(1920);
   await expect(page.getByRole('button', { name: /^History \(1 ↷\)/ })).toBeVisible();
 });
+
+test('the lasso takes in what it encircles and the find row selects by layer and name', async ({ page }) => {
+  await ready(page);
+  const [cx, cy] = await townCenter(page);
+  await jumpTo(page, cx, cy, 16);
+
+  // Three buildings in a row, drawn with the rectangle tool.
+  await page.keyboard.press('r');
+  await page.getByLabel('Layer').selectOption('building');
+  await page.getByLabel('Kind').selectOption('warehouse');
+  for (const dx of [-150, 0, 150]) {
+    const a = await screen(page, cx + dx - 40, cy - 30);
+    const b = await screen(page, cx + dx + 40, cy + 30);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 4 });
+    await page.mouse.up();
+  }
+  let d = await doc(page);
+  expect(d.authored.features).toHaveLength(3);
+  // Name the middle one so the find row has something to match.
+  await page.keyboard.press('v');
+  const middle = await screen(page, cx, cy);
+  await page.mouse.click(middle.x, middle.y);
+  await page.getByLabel('Feature name').fill('Marsh Wharf');
+  await page.getByLabel('Feature name').blur();
+
+  // Lasso a loop around the left two buildings only.
+  await page.keyboard.press('s');
+  expect(await page.evaluate(() => window.__citygen.tool())).toBe('lasso');
+  const loop: [number, number][] = [
+    [cx - 230, cy - 120],
+    [cx + 60, cy - 120],
+    [cx + 60, cy + 120],
+    [cx - 230, cy + 120],
+  ];
+  const first = await screen(page, loop[0]![0], loop[0]![1]);
+  await page.mouse.move(first.x, first.y);
+  await page.mouse.down();
+  for (const [lx, ly] of loop.slice(1)) {
+    const p = await screen(page, lx, ly);
+    await page.mouse.move(p.x, p.y, { steps: 4 });
+  }
+  await page.mouse.up();
+  expect(await page.evaluate(() => window.__citygen.selection().length)).toBe(2);
+
+  // The find row: every building in view, then just the named one.
+  await page.getByLabel('Query layer').selectOption('building');
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  expect(await page.evaluate(() => window.__citygen.selection().length)).toBe(3);
+  await page.getByLabel('Query text').fill('Marsh');
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  expect(await page.evaluate(() => window.__citygen.selection().length)).toBe(1);
+  await expect(page.getByTestId('select-query')).toContainText('1 selected');
+
+  // The three buildings were drawn on one line, so a fourth drawn a few metres past that line
+  // is pulled onto it by the alignment guides.
+  await page.keyboard.press('r');
+  const ga = await screen(page, cx - 40, cy + 170);
+  const gb = await screen(page, cx + 40, cy + 34);
+  await page.mouse.move(ga.x, ga.y);
+  await page.mouse.down();
+  await page.mouse.move(gb.x, gb.y, { steps: 6 });
+  await page.mouse.up();
+  d = await doc(page);
+  expect(d.authored.features).toHaveLength(4);
+  // Alignment: the corner was dragged a few metres past the row's line and landed exactly on it.
+  const ys = (d.authored.features[3]!.geometry.coordinates as unknown as number[][][])[0]!.map((p) => p[1]!);
+  const rowYs = (d.authored.features[0]!.geometry.coordinates as unknown as number[][][])[0]!.map(
+    (p) => p[1]!,
+  );
+  // The rectangle was dragged upward, so its top edge is the corner that was aligned.
+  expect(Math.min(...ys)).toBeCloseTo(Math.max(...rowYs), 6);
+});

@@ -296,3 +296,143 @@ describe('ToolController', () => {
     expect(Math.min(...ys)).toBeCloseTo(-10);
   });
 });
+
+describe('lasso, queries and alignment guides', () => {
+  /** Three buildings: two in a row at y = 0, one off on its own. */
+  function withBuildings() {
+    const h = harness();
+    const square = (x: number, y: number, s = 20): [number, number][] => [
+      [x, y],
+      [x + s, y],
+      [x + s, y + s],
+      [x, y + s],
+      [x, y],
+    ];
+    h.bus.dispatch({
+      type: 'authored.add',
+      features: [
+        {
+          type: 'Feature',
+          id: 'a',
+          geometry: { type: 'Polygon', coordinates: [square(0, 0)] },
+          properties: { layer: 'building', origin: 'authored', kind: 'house', name: 'Ash Cottage' },
+        },
+        {
+          type: 'Feature',
+          id: 'b',
+          geometry: { type: 'Polygon', coordinates: [square(100, 0)] },
+          properties: { layer: 'building', origin: 'authored', kind: 'warehouse' },
+        },
+        {
+          type: 'Feature',
+          id: 'c',
+          geometry: { type: 'Polygon', coordinates: [square(1000, 1000)] },
+          properties: { layer: 'zone', origin: 'authored', kind: 'park' },
+        },
+      ],
+    });
+    return h;
+  }
+
+  it('lassoes what it encircles, and only what it encloses unless asked for what it touches', () => {
+    const h = withBuildings();
+    h.tools.setTool('lasso');
+    // A loop around the two buildings in the row, clear of the third.
+    const loop: [number, number][] = [
+      [-40, -40],
+      [160, -40],
+      [160, 60],
+      [-40, 60],
+    ];
+    h.tools.pointerDown(loop[0]!);
+    for (const p of loop.slice(1)) h.tools.pointerMove(p);
+    expect(h.tools.draft.geometry?.type).toBe('Polygon');
+    h.tools.pointerUp(loop[loop.length - 1]!);
+    expect([...h.tools.selection].sort()).toEqual(['a', 'b']);
+    expect(h.tools.draft.geometry).toBeNull();
+
+    // A loop that only clips the first building takes nothing while it must contain,
+    // and takes it once it need only touch.
+    h.tools.selection.clear();
+    const clip: [number, number][] = [
+      [-40, -40],
+      [10, -40],
+      [10, 10],
+      [-40, 10],
+    ];
+    const run = () => {
+      h.tools.pointerDown(clip[0]!);
+      for (const p of clip.slice(1)) h.tools.pointerMove(p);
+      h.tools.pointerUp(clip[clip.length - 1]!);
+    };
+    run();
+    expect(h.tools.selection.size).toBe(0);
+    h.tools.setOptions({ selectMode: 'intersects' });
+    run();
+    expect([...h.tools.selection]).toEqual(['a']);
+  });
+
+  it('selects by layer, kind, name and view, and adds to the selection when asked', () => {
+    const h = withBuildings();
+    expect(h.tools.selectByQuery({ layer: 'building' }).sort()).toEqual(['a', 'b']);
+    expect(h.tools.selectByQuery({ kind: 'ware' })).toEqual(['b']);
+    expect(h.tools.selectByQuery({ name: 'ash' })).toEqual(['a']);
+    expect(h.tools.selectByQuery({ layer: 'zone' })).toEqual(['c']);
+    // Each query replaces the selection unless it adds to it.
+    expect([...h.tools.selection]).toEqual(['c']);
+    h.tools.selectByQuery({ layer: 'building', add: true });
+    expect([...h.tools.selection].sort()).toEqual(['a', 'b', 'c']);
+    // Within a view: only what lies wholly inside it.
+    expect(h.tools.selectByQuery({ within: { minX: -50, minY: -50, maxX: 200, maxY: 200 } }).sort()).toEqual([
+      'a',
+      'b',
+    ]);
+    expect(h.tools.selectByQuery({ layer: 'building', kind: 'nothing' })).toEqual([]);
+    expect(h.tools.selection.size).toBe(0);
+  });
+
+  it('lines a moved feature up with the others and reports the guide, and Alt moves it freely', () => {
+    const h = withBuildings();
+    h.tools.setTool('select');
+    h.tools.hitToleranceM = 6;
+    h.tools.selection = new Set(['c']);
+    // Drag the lone zone until its left edge is a few metres from the row's left edge.
+    h.tools.pointerDown([1010, 1010]);
+    h.tools.pointerMove([13, 1010]);
+    const guides = h.tools.draft.guides;
+    expect(guides.some((g) => g.axis === 'x' && g.value === 0)).toBe(true);
+    h.tools.pointerUp([13, 1010]);
+    const moved = h.doc().authored.features.find((f) => f.id === 'c')!;
+    const xs = (moved.geometry as { coordinates: number[][][] }).coordinates[0]!.map((p) => p[0]!);
+    expect(Math.min(...xs)).toBe(0);
+
+    // With Alt the move is free: the feature lands where the pointer put it.
+    h.tools.pointerDown([10, 1010], { alt: true });
+    h.tools.pointerMove([23, 1010], { alt: true });
+    expect(h.tools.draft.guides).toHaveLength(0);
+    h.tools.pointerUp([23, 1010], { alt: true });
+    const again = h.doc().authored.features.find((f) => f.id === 'c')!;
+    const xs2 = (again.geometry as { coordinates: number[][][] }).coordinates[0]!.map((p) => p[0]!);
+    expect(Math.min(...xs2)).toBe(13);
+  });
+
+  it('lines a drawn point up with what is already there', () => {
+    const h = withBuildings();
+    h.tools.setTool('rectangle');
+    h.tools.setOptions({ layer: 'building', kind: 'house', snapToVertices: false });
+    h.tools.hitToleranceM = 6;
+    h.tools.pointerDown([200, 200]);
+    // The far corner lands a couple of metres off the row's right edge and snaps onto it.
+    h.tools.pointerMove([118, 260]);
+    expect(h.tools.draft.guides.some((g) => g.axis === 'x' && g.value === 120)).toBe(true);
+    h.tools.pointerUp([118, 260]);
+    const drawn = h.doc().authored.features.find((f) => f.id.startsWith('building'))!;
+    const xs = (drawn.geometry as { coordinates: number[][][] }).coordinates[0]!.map((p) => p[0]!);
+    expect(Math.min(...xs)).toBe(120);
+    // Switching alignment off leaves the drawn point alone.
+    h.tools.setOptions({ snapAlign: false });
+    h.tools.pointerDown([300, 300]);
+    h.tools.pointerMove([118, 360]);
+    expect(h.tools.draft.guides).toHaveLength(0);
+  });
+});

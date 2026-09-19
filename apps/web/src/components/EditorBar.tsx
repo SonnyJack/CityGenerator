@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { AuthoredLayer } from '@citygen/core';
 import type { BrushKind, ToolId } from '@citygen/editor';
 import { useApp } from '../store.js';
@@ -10,6 +11,12 @@ const TOOLS: { id: ToolId; label: string; key: string; hint: string }[] = [
     label: 'Select',
     key: 'V',
     hint: 'Click or drag a box to select; drag to move; drag handles to edit vertices; double-click a segment to add a vertex',
+  },
+  {
+    id: 'lasso',
+    label: 'Lasso',
+    key: 'S',
+    hint: 'Drag a loop around what you want; Shift adds to the selection',
   },
   {
     id: 'line',
@@ -347,11 +354,13 @@ export function EditorBar() {
               </label>
             </>
           )}
+          {(tool === 'select' || tool === 'lasso') && <SelectOptions />}
           {(tool === 'line' ||
             tool === 'polygon' ||
             tool === 'rectangle' ||
             tool === 'point' ||
-            tool === 'select') && (
+            tool === 'select' ||
+            tool === 'lasso') && (
             <>
               <label
                 className="flex items-center gap-1"
@@ -379,6 +388,18 @@ export function EditorBar() {
               </label>
               <label
                 className="flex items-center gap-1"
+                title={t('Line up with the edges and centres of what is already drawn')}
+              >
+                <input
+                  type="checkbox"
+                  aria-label={t('Alignment guides')}
+                  checked={o.snapAlign}
+                  onChange={(e) => setOptions({ snapAlign: e.target.checked })}
+                />
+                {t('Align')}
+              </label>
+              <label
+                className="flex items-center gap-1"
                 title={t('Snap to a metre grid (0 = off); hold Alt to bypass snapping')}
               >
                 <span className="text-stone-600">{t('Grid')}</span>
@@ -401,6 +422,78 @@ export function EditorBar() {
     </div>
   );
 }
+
+/**
+ * Options shared by the select and lasso tools: what a box or a loop takes in, and a query
+ * that selects everything matching a layer, a kind or a name, optionally only what is in view.
+ */
+function SelectOptions() {
+  const t = useT();
+  const o = useApp((s) => s.toolOptions);
+  const setOptions = useApp((s) => s.setToolOptions);
+  const selectByQuery = useApp((s) => s.selectByQuery);
+  const selection = useApp((s) => s.selection);
+  const [layer, setLayer] = useState<'' | AuthoredLayer>('');
+  const [text, setText] = useState('');
+  const [inView, setInView] = useState(true);
+
+  return (
+    <>
+      <label className="flex items-center gap-1" title={t('What a box or a loop takes in')}>
+        <span className="text-stone-600">{t('Takes')}</span>
+        <select
+          aria-label={t('Selection mode')}
+          className={sel}
+          value={o.selectMode}
+          onChange={(e) => setOptions({ selectMode: e.target.value as 'contains' | 'intersects' })}
+        >
+          <option value="contains">{t('enclosed')}</option>
+          <option value="intersects">{t('touched')}</option>
+        </select>
+      </label>
+      <span className="flex items-center gap-1" data-testid="select-query">
+        <span className="text-stone-600">{t('Find')}</span>
+        <select
+          aria-label={t('Query layer')}
+          className={sel}
+          value={layer}
+          onChange={(e) => setLayer(e.target.value as '' | AuthoredLayer)}
+        >
+          <option value="">{t('any layer')}</option>
+          {ALL_LAYERS.map((l) => (
+            <option key={l.id} value={l.id}>
+              {t(l.label)}
+            </option>
+          ))}
+        </select>
+        <input
+          aria-label={t('Query text')}
+          placeholder={t('kind or name')}
+          className="w-28 rounded border border-stone-300 px-1 py-0.5"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <label className="flex items-center gap-1" title={t('Only what lies wholly in the current view')}>
+          <input type="checkbox" checked={inView} onChange={(e) => setInView(e.target.checked)} />
+          {t('in view')}
+        </label>
+        <button
+          className="rounded border border-stone-300 bg-white px-2 py-0.5 hover:bg-stone-100"
+          onClick={() => selectByQuery({ layer: layer || undefined, text: text || undefined, inView })}
+        >
+          {t('Select')}
+        </button>
+        <span className="text-stone-500">{t('{n} selected', { n: selection.length })}</span>
+      </span>
+    </>
+  );
+}
+
+const ALL_LAYERS: { id: AuthoredLayer; label: string }[] = [
+  ...LINE_LAYERS.map((l) => ({ id: l.id, label: l.label })),
+  ...AREA_LAYERS.map((l) => ({ id: l.id, label: l.label })),
+  { id: 'poi', label: 'Point of interest' },
+];
 
 function defaultAmount(brush: BrushKind): number {
   switch (brush) {

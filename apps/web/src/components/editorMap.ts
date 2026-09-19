@@ -23,6 +23,7 @@ export const ANNOTATION_SOURCE = 'annotations';
 const SHORTCUTS: Record<string, ToolId> = {
   h: 'navigate',
   v: 'select',
+  s: 'lasso',
   l: 'line',
   p: 'polygon',
   r: 'rectangle',
@@ -115,6 +116,17 @@ export function attachEditor(map: MapLibreMap): () => void {
         geometry: geometryToLonLat(tools.draft.geometry),
         properties: { role: 'draft' },
       });
+    // Alignment guides: a long line on the axis that lined up, clipped to the pair of boxes.
+    for (const g of tools.draft.guides) {
+      const pad = 40;
+      const a: [number, number] = g.axis === 'x' ? [g.value, g.from - pad] : [g.from - pad, g.value];
+      const b: [number, number] = g.axis === 'x' ? [g.value, g.to + pad] : [g.to + pad, g.value];
+      overlay.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [metersToLonLat(a), metersToLonLat(b)] },
+        properties: { role: 'guide' },
+      });
+    }
     if (tools.draft.brushRadiusM && (tools.draft.cursor ?? lastCursor)) {
       overlay.push({
         type: 'Feature',
@@ -240,7 +252,7 @@ export function attachEditor(map: MapLibreMap): () => void {
     const p = toXY(e);
     lastCursor = p;
     if (tools.pointerMove(p, mods(e))) return;
-    if (s.tool === 'select') {
+    if (s.tool === 'select' || s.tool === 'lasso') {
       const f = tools.hit(p);
       const next = f
         ? ({ type: 'Feature', id: f.id, geometry: geometryToLonLat(f.geometry), properties: {} } as Feature<

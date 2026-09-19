@@ -1,4 +1,4 @@
-import type { Geometry } from 'geojson';
+import type { Geometry, Position } from 'geojson';
 import type { AuthoredFeature, AuthoredLayer, MapDocument } from '@citygen/core';
 import type { Command } from './commands.js';
 import {
@@ -6,6 +6,7 @@ import {
   featureBBox,
   insertVertex,
   mirror,
+  pointInRing,
   removeVertex,
   rotate,
   scale,
@@ -19,11 +20,41 @@ import {
  * Framework-agnostic editing tools. The host feeds pointer events in world
  * metres; the controller keeps tool state, produces draft geometry for
  * rendering, and emits commands for the command bus. Snapping considers
- * authored vertices, an optional grid and, when asked, 15° angle steps.
+ * authored vertices, an optional grid, alignment with what is already drawn
+ * and, when asked, 15° angle steps.
  */
 
 export type ToolId =
-  'navigate' | 'select' | 'line' | 'polygon' | 'rectangle' | 'point' | 'brush' | 'annotate';
+  'navigate' | 'select' | 'lasso' | 'line' | 'polygon' | 'rectangle' | 'point' | 'brush' | 'annotate';
+
+/**
+ * A line the host draws while an edge or a centre of what is being moved or
+ * drawn lines up with something already on the map. `value` is the world
+ * coordinate on `axis`; `from` and `to` bound the line on the other axis.
+ */
+export interface Guide {
+  axis: 'x' | 'y';
+  value: number;
+  from: number;
+  to: number;
+}
+
+/** What a box or a lasso takes in: everything wholly inside, or everything it touches. */
+export type SelectMode = 'contains' | 'intersects';
+
+/** A query for `selectByQuery`: the terms given are all required. */
+export interface SelectQuery {
+  layer?: AuthoredLayer;
+  /** Substring of the feature's kind, case-insensitive. */
+  kind?: string;
+  /** Substring of the feature's name, case-insensitive. */
+  name?: string;
+  origin?: 'authored' | 'frozen';
+  /** Only features whose bounding box lies within this one (the current view, say). */
+  within?: { minX: number; minY: number; maxX: number; maxY: number };
+  /** Add to the current selection instead of replacing it. */
+  add?: boolean;
+}
 
 export type BrushKind =
   | 'raise'
@@ -54,6 +85,10 @@ export interface ToolOptions {
   snapGridM: number;
   snapToVertices: boolean;
   snapAngles: boolean;
+  /** Line up with the edges and centres of what is already drawn, and show a guide. */
+  snapAlign: boolean;
+  /** What a box or lasso selection takes in. */
+  selectMode: SelectMode;
 }
 
 export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
@@ -69,6 +104,8 @@ export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   snapGridM: 0,
   snapToVertices: true,
   snapAngles: false,
+  snapAlign: true,
+  selectMode: 'contains',
 };
 
 export interface Modifiers {
@@ -84,6 +121,8 @@ export interface DraftState {
   cursor: XY | null;
   /** Brush footprint radius for rendering. */
   brushRadiusM: number | null;
+  /** Alignment guides to draw for the current move or draw. */
+  guides: Guide[];
 }
 
 export interface VertexHandle {
@@ -115,7 +154,7 @@ export class ToolController {
   tool: ToolId = 'navigate';
   options: ToolOptions = { ...DEFAULT_TOOL_OPTIONS };
   selection = new Set<string>();
-  draft: DraftState = { geometry: null, cursor: null, brushRadiusM: null };
+  draft: DraftState = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
   private preview: Map<string, AuthoredFeature['geometry']> = new Map();
   /** World-metre tolerance for hit tests; the host sets it from the current zoom. */
   hitToleranceM = 6;
@@ -126,6 +165,7 @@ export class ToolController {
     | { kind: 'move'; start: XY; last: XY; moved: boolean }
     | { kind: 'vertex'; handle: VertexHandle; moved: boolean }
     | { kind: 'box'; start: XY }
+    | { kind: 'lasso'; points: XY[] }
     | { kind: 'rect'; start: XY }
     | { kind: 'brush'; points: XY[] } = null;
 
@@ -139,6 +179,7 @@ export class ToolController {
       geometry: null,
       cursor: null,
       brushRadiusM: tool === 'brush' ? this.options.brushRadiusM : null,
+      guides: [],
     };
     this.host.changed();
   }
@@ -182,8 +223,12 @@ export class ToolController {
 
   // --- Snapping ---------------------------------------------------------------
 
+  /** True when the last `snap` landed on an existing vertex (alignment then stands aside). */
+  private snappedToVertex = false;
+
   snap(p: XY, mods: Modifiers = {}, exclude?: string): XY {
     let out: XY = [p[0], p[1]];
+    this.snappedToVertex = false;
     if (mods.alt) return out;
     if (this.options.snapToVertices) {
       let best: XY | null = null;
@@ -199,7 +244,10 @@ export class ToolController {
           }
         }
       }
-      if (best) return best;
+      if (best) {
+        this.snappedToVertex = true;
+        return best;
+      }
     }
     if (this.options.snapGridM > 0) {
       const g = this.options.snapGridM;
@@ -217,6 +265,187 @@ export class ToolController {
       }
     }
     return out;
+  }
+
+  // --- Alignment ----------------------------------------------------------------
+
+  /** Features the tools act on: the drawn ones, not the brush strokes that edit fields. */
+  private editable(): AuthoredFeature[] {
+    return this.host
+      .document()
+      .authored.features.filter(
+        (f) => f.properties.layer !== 'terrainEdit' && f.properties.layer !== 'fieldEdit',
+      );
+  }
+
+  /** Edges and centres of everything else, as candidate lines to line up with. */
+  private alignCandidates(exclude: Set<string>): {
+    x: { value: number; minY: number; maxY: number }[];
+    y: { value: number; minX: number; maxX: number }[];
+  } {
+    const x: { value: number; minY: number; maxY: number }[] = [];
+    const y: { value: number; minX: number; maxX: number }[] = [];
+    for (const f of this.editable()) {
+      if (exclude.has(f.id)) continue;
+      const b = featureBBox(f);
+      for (const v of [b.minX, (b.minX + b.maxX) / 2, b.maxX])
+        x.push({ value: v, minY: b.minY, maxY: b.maxY });
+      for (const v of [b.minY, (b.minY + b.maxY) / 2, b.maxY])
+        y.push({ value: v, minX: b.minX, maxX: b.maxX });
+    }
+    return { x, y };
+  }
+
+  /**
+   * Line a point up with the edges and centres of what is already drawn. Returns the
+   * adjusted point and a guide per axis that moved.
+   */
+  private alignPoint(p: XY, exclude: Set<string>): { p: XY; guides: Guide[] } {
+    if (!this.options.snapAlign) return { p, guides: [] };
+    const tol = this.hitToleranceM * 1.5;
+    const cand = this.alignCandidates(exclude);
+    const guides: Guide[] = [];
+    let [px, py] = p;
+    let bestX: { value: number; minY: number; maxY: number } | null = null;
+    for (const c of cand.x)
+      if (Math.abs(c.value - px) <= tol && (!bestX || Math.abs(c.value - px) < Math.abs(bestX.value - px)))
+        bestX = c;
+    if (bestX) {
+      px = bestX.value;
+      guides.push({
+        axis: 'x',
+        value: bestX.value,
+        from: Math.min(bestX.minY, py),
+        to: Math.max(bestX.maxY, py),
+      });
+    }
+    let bestY: { value: number; minX: number; maxX: number } | null = null;
+    for (const c of cand.y)
+      if (Math.abs(c.value - py) <= tol && (!bestY || Math.abs(c.value - py) < Math.abs(bestY.value - py)))
+        bestY = c;
+    if (bestY) {
+      py = bestY.value;
+      guides.push({
+        axis: 'y',
+        value: bestY.value,
+        from: Math.min(bestY.minX, px),
+        to: Math.max(bestY.maxX, px),
+      });
+    }
+    return { p: [px, py], guides };
+  }
+
+  /**
+   * Line the moving selection up by its own edges and centres: the box the selection would
+   * land in is compared with everything else, and the move is nudged onto the nearest match.
+   */
+  private alignMove(dx: number, dy: number): { dx: number; dy: number; guides: Guide[] } {
+    const feats = this.selected();
+    if (!this.options.snapAlign || !feats.length) return { dx, dy, guides: [] };
+    const tol = this.hitToleranceM * 1.5;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const f of feats) {
+      const g = this.preview.get(f.id) ?? f.geometry;
+      const b = featureBBox({ ...f, geometry: g });
+      minX = Math.min(minX, b.minX);
+      minY = Math.min(minY, b.minY);
+      maxX = Math.max(maxX, b.maxX);
+      maxY = Math.max(maxY, b.maxY);
+    }
+    const cand = this.alignCandidates(new Set(feats.map((f) => f.id)));
+    const guides: Guide[] = [];
+    let outDx = dx;
+    let outDy = dy;
+    let bestX: { shift: number; guide: Guide } | null = null;
+    for (const edge of [minX + dx, (minX + maxX) / 2 + dx, maxX + dx])
+      for (const c of cand.x) {
+        const shift = c.value - edge;
+        if (Math.abs(shift) <= tol && (!bestX || Math.abs(shift) < Math.abs(bestX.shift)))
+          bestX = {
+            shift,
+            guide: {
+              axis: 'x',
+              value: c.value,
+              from: Math.min(c.minY, minY + dy),
+              to: Math.max(c.maxY, maxY + dy),
+            },
+          };
+      }
+    if (bestX) {
+      outDx = dx + bestX.shift;
+      guides.push(bestX.guide);
+    }
+    let bestY: { shift: number; guide: Guide } | null = null;
+    for (const edge of [minY + dy, (minY + maxY) / 2 + dy, maxY + dy])
+      for (const c of cand.y) {
+        const shift = c.value - edge;
+        if (Math.abs(shift) <= tol && (!bestY || Math.abs(shift) < Math.abs(bestY.shift)))
+          bestY = {
+            shift,
+            guide: {
+              axis: 'y',
+              value: c.value,
+              from: Math.min(c.minX, minX + outDx),
+              to: Math.max(c.maxX, maxX + outDx),
+            },
+          };
+      }
+    if (bestY) {
+      outDy = dy + bestY.shift;
+      guides.push(bestY.guide);
+    }
+    return { dx: outDx, dy: outDy, guides };
+  }
+
+  // --- Selection by query ---------------------------------------------------------
+
+  /**
+   * Select every feature matching the query: by layer, kind, name, origin, and within a box
+   * (the current view, say). Returns the ids selected.
+   */
+  selectByQuery(query: SelectQuery): string[] {
+    const kind = query.kind?.toLowerCase();
+    const name = query.name?.toLowerCase();
+    const hit: string[] = [];
+    for (const f of this.editable()) {
+      const p = f.properties;
+      if (query.layer && p.layer !== query.layer) continue;
+      if (query.origin && (p.origin ?? 'authored') !== query.origin) continue;
+      if (
+        kind &&
+        !String(p.kind ?? '')
+          .toLowerCase()
+          .includes(kind)
+      )
+        continue;
+      if (
+        name &&
+        !String(p.name ?? '')
+          .toLowerCase()
+          .includes(name)
+      )
+        continue;
+      if (query.within) {
+        const b = featureBBox(f);
+        const w = query.within;
+        if (b.minX < w.minX || b.maxX > w.maxX || b.minY < w.minY || b.maxY > w.maxY) continue;
+      }
+      hit.push(f.id);
+    }
+    if (!query.add) this.selection.clear();
+    for (const id of hit) this.selection.add(id);
+    this.host.changed();
+    return hit;
+  }
+
+  /** A point to draw with: snapped, then lined up with what is drawn (unless Alt is held). */
+  private drawPoint(raw: XY, mods: Modifiers): { p: XY; guides: Guide[] } {
+    const p = this.snap(raw, mods);
+    if (mods.alt || this.snappedToVertex) return { p, guides: [] };
+    return this.alignPoint(p, new Set());
   }
 
   // --- Hit testing --------------------------------------------------------------
@@ -282,22 +511,30 @@ export class ToolController {
         this.host.changed();
         return true;
       }
+      case 'lasso': {
+        if (!mods.shift) this.selection.clear();
+        this.dragging = { kind: 'lasso', points: [raw] };
+        this.draft = { geometry: null, cursor: raw, brushRadiusM: null, guides: [] };
+        this.host.changed();
+        return true;
+      }
       case 'line':
       case 'polygon': {
+        const drawn = this.drawPoint(raw, mods);
         const last = this.points[this.points.length - 1];
-        if (last && Math.hypot(last[0] - p[0], last[1] - p[1]) < this.hitToleranceM) {
+        if (last && Math.hypot(last[0] - drawn.p[0], last[1] - drawn.p[1]) < this.hitToleranceM) {
           this.finish();
           return true;
         }
-        this.points.push(p);
-        this.updateDraft(p);
+        this.points.push(drawn.p);
+        this.updateDraft(drawn.p);
         return true;
       }
       case 'rectangle':
-        this.dragging = { kind: 'rect', start: p };
+        this.dragging = { kind: 'rect', start: this.drawPoint(raw, mods).p };
         return true;
       case 'point':
-        this.commitPoint(p);
+        this.commitPoint(this.drawPoint(raw, mods).p);
         return true;
       case 'brush':
         this.dragging = { kind: 'brush', points: [p] };
@@ -305,6 +542,7 @@ export class ToolController {
           geometry: { type: 'LineString', coordinates: [p, p] },
           cursor: p,
           brushRadiusM: this.options.brushRadiusM,
+          guides: [],
         };
         this.host.changed();
         return true;
@@ -325,12 +563,17 @@ export class ToolController {
     if (this.dragging) {
       switch (this.dragging.kind) {
         case 'move': {
-          const dx = p[0] - this.dragging.last[0];
-          const dy = p[1] - this.dragging.last[1];
-          if (dx || dy) {
+          const rawDx = p[0] - this.dragging.last[0];
+          const rawDy = p[1] - this.dragging.last[1];
+          if (rawDx || rawDy) {
             this.dragging.last = p;
             this.dragging.moved = true;
+            const { dx, dy, guides } = mods.alt
+              ? { dx: rawDx, dy: rawDy, guides: [] }
+              : this.alignMove(rawDx, rawDy);
             this.previewMove(dx, dy);
+            this.draft = { ...this.draft, guides };
+            this.host.changed();
           }
           return true;
         }
@@ -340,13 +583,42 @@ export class ToolController {
           return true;
         }
         case 'box':
-          this.draft = { geometry: rectGeometry(this.dragging.start, raw), cursor: raw, brushRadiusM: null };
+          this.draft = {
+            geometry: rectGeometry(this.dragging.start, raw),
+            cursor: raw,
+            brushRadiusM: null,
+            guides: [],
+          };
           this.host.changed();
           return true;
-        case 'rect':
-          this.draft = { geometry: rectGeometry(this.dragging.start, p), cursor: p, brushRadiusM: null };
+        case 'lasso': {
+          const last = this.dragging.points[this.dragging.points.length - 1]!;
+          if (Math.hypot(last[0] - raw[0], last[1] - raw[1]) > this.hitToleranceM * 0.5)
+            this.dragging.points.push(raw);
+          const ring = this.dragging.points;
+          this.draft = {
+            geometry:
+              ring.length >= 3
+                ? { type: 'Polygon', coordinates: [[...ring, ring[0]!]] }
+                : { type: 'LineString', coordinates: ring.length > 1 ? ring : [raw, raw] },
+            cursor: raw,
+            brushRadiusM: null,
+            guides: [],
+          };
           this.host.changed();
           return true;
+        }
+        case 'rect': {
+          const drawn = this.drawPoint(raw, mods);
+          this.draft = {
+            geometry: rectGeometry(this.dragging.start, drawn.p),
+            cursor: drawn.p,
+            brushRadiusM: null,
+            guides: drawn.guides,
+          };
+          this.host.changed();
+          return true;
+        }
         case 'brush': {
           const last = this.dragging.points[this.dragging.points.length - 1]!;
           if (Math.hypot(last[0] - p[0], last[1] - p[1]) > this.options.brushRadiusM * 0.25)
@@ -358,6 +630,7 @@ export class ToolController {
             },
             cursor: p,
             brushRadiusM: this.options.brushRadiusM,
+            guides: [],
           };
           this.host.changed();
           return true;
@@ -365,11 +638,12 @@ export class ToolController {
       }
     }
     if (this.tool === 'line' || this.tool === 'polygon') {
-      this.updateDraft(p);
+      const drawn = this.drawPoint(raw, mods);
+      this.updateDraft(drawn.p, drawn.guides);
       return true;
     }
     if (this.tool === 'brush') {
-      this.draft = { geometry: null, cursor: p, brushRadiusM: this.options.brushRadiusM };
+      this.draft = { geometry: null, cursor: p, brushRadiusM: this.options.brushRadiusM, guides: [] };
       this.host.changed();
       return true;
     }
@@ -392,21 +666,47 @@ export class ToolController {
       case 'box': {
         const box = normalizeBox(d.start, raw);
         if (box.maxX - box.minX > this.hitToleranceM && box.maxY - box.minY > this.hitToleranceM) {
-          for (const f of this.host.document().authored.features) {
-            if (f.properties.layer === 'terrainEdit' || f.properties.layer === 'fieldEdit') continue;
+          for (const f of this.editable()) {
             const b = featureBBox(f);
-            if (b.minX >= box.minX && b.maxX <= box.maxX && b.minY >= box.minY && b.maxY <= box.maxY)
-              this.selection.add(f.id);
+            const contained =
+              b.minX >= box.minX && b.maxX <= box.maxX && b.minY >= box.minY && b.maxY <= box.maxY;
+            const touches =
+              b.minX <= box.maxX && b.maxX >= box.minX && b.minY <= box.maxY && b.maxY >= box.minY;
+            if (this.options.selectMode === 'contains' ? contained : touches) this.selection.add(f.id);
           }
         }
-        this.draft = { geometry: null, cursor: null, brushRadiusM: null };
+        this.draft = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
+        this.host.changed();
+        return true;
+      }
+      case 'lasso': {
+        const ring = [...d.points, d.points[0]!];
+        this.draft = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
+        if (d.points.length >= 3) {
+          for (const f of this.editable()) {
+            const b = featureBBox(f);
+            const corners: XY[] = [
+              [b.minX, b.minY],
+              [b.maxX, b.minY],
+              [b.maxX, b.maxY],
+              [b.minX, b.maxY],
+            ];
+            const inside = corners.filter((c) => pointInRing(c, ring as unknown as Position[])).length;
+            const centre: XY = [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
+            const take =
+              this.options.selectMode === 'contains'
+                ? inside === 4
+                : inside > 0 || pointInRing(centre, ring as unknown as Position[]);
+            if (take) this.selection.add(f.id);
+          }
+        }
         this.host.changed();
         return true;
       }
       case 'rect': {
-        const p = this.snap(raw, mods);
+        const p = this.drawPoint(raw, mods).p;
         const g = rectGeometry(d.start, p);
-        this.draft = { geometry: null, cursor: null, brushRadiusM: null };
+        this.draft = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
         if (g && Math.abs((p[0] - d.start[0]) * (p[1] - d.start[1])) > 4)
           this.commitFeature(g, this.options.layer === 'street' ? 'building' : this.options.layer);
         else this.host.changed();
@@ -414,7 +714,7 @@ export class ToolController {
       }
       case 'brush':
         this.commitBrush(d.points);
-        this.draft = { geometry: null, cursor: raw, brushRadiusM: this.options.brushRadiusM };
+        this.draft = { geometry: null, cursor: raw, brushRadiusM: this.options.brushRadiusM, guides: [] };
         this.host.changed();
         return true;
     }
@@ -430,6 +730,7 @@ export class ToolController {
         geometry: null,
         cursor: null,
         brushRadiusM: this.tool === 'brush' ? this.options.brushRadiusM : null,
+        guides: [],
       };
       this.host.changed();
       return true;
@@ -448,7 +749,7 @@ export class ToolController {
   finish(): void {
     const pts = this.points;
     this.points = [];
-    this.draft = { geometry: null, cursor: null, brushRadiusM: null };
+    this.draft = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
     if (this.tool === 'line' && pts.length >= 2)
       this.commitFeature({ type: 'LineString', coordinates: pts }, this.options.layer);
     else if (this.tool === 'polygon' && pts.length >= 3)
@@ -637,14 +938,14 @@ export class ToolController {
     this.host.changed();
   }
 
-  private updateDraft(cursor: XY): void {
+  private updateDraft(cursor: XY, guides: Guide[] = []): void {
     const pts = [...this.points, cursor];
     let geometry: Geometry | null = null;
     if (this.tool === 'line' && pts.length >= 2) geometry = { type: 'LineString', coordinates: pts };
     else if (this.tool === 'polygon' && pts.length >= 3)
       geometry = { type: 'Polygon', coordinates: [[...pts, pts[0]!]] };
     else if (pts.length >= 2) geometry = { type: 'LineString', coordinates: pts };
-    this.draft = { geometry, cursor, brushRadiusM: null };
+    this.draft = { geometry, cursor, brushRadiusM: null, guides };
     this.host.changed();
   }
 

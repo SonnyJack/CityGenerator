@@ -458,4 +458,24 @@ export const es: Record<string, string> = {
   Year: 'Año',
   'Populations are as of {year}; the slider moves along that history.':
     'Las poblaciones son las de {year}; el control recorre esa historia.',
+  Lasso: 'Lazo',
+  Takes: 'Toma',
+  enclosed: 'encerrados',
+  touched: 'tocados',
+  Find: 'Buscar',
+  'any layer': 'cualquier capa',
+  'kind or name': 'tipo o nombre',
+  'in view': 'en la vista',
+  '{n} selected': '{n} seleccionados',
+  Align: 'Alinear',
+  'Alignment guides': 'Guías de alineación',
+  'Selection mode': 'Modo de selección',
+  'Query layer': 'Capa buscada',
+  'Query text': 'Texto buscado',
+  'Line up with the edges and centres of what is already drawn':
+    'Alinear con los bordes y centros de lo ya dibujado',
+  'What a box or a loop takes in': 'Lo que abarca un marco o un lazo',
+  'Only what lies wholly in the current view': 'Solo lo que cabe entero en la vista actual',
+  'Drag a loop around what you want; Shift adds to the selection':
+    'Arrastre un lazo alrededor de lo que quiera; Mayús añade a la selección',
 };
