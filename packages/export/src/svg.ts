@@ -129,6 +129,15 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
     (f) => ((f.properties.class === 'artery' ? 9 : f.properties.class === 'road' ? 7 : 4) * k) / 1.2,
     'streets',
   );
+  // Bridges: a bold ink bar over the water under the street.
+  if (model.bridges)
+    lines(
+      model.bridges,
+      () => p.ink,
+      () => (10 * k) / 1.2,
+      'bridges',
+      'stroke-opacity="0.8" stroke-linecap="butt"',
+    );
   // Flights of steps: thin and dashed.
   lines(
     steps,

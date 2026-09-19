@@ -97,7 +97,14 @@ export function settlementLayers(
     },
     {
       name: 'bridges',
-      features: (roads?.bridges ?? { type: 'FeatureCollection', features: [] }) as unknown as AnyFc,
+      features: {
+        type: 'FeatureCollection',
+        features: [
+          ...((roads?.bridges.features ?? []) as unknown as AnyFc['features']),
+          ...merge((t) => (t.bridges ?? { type: 'FeatureCollection', features: [] }) as unknown as AnyFc)
+            .features,
+        ],
+      },
       minZoom: 11,
     },
     {

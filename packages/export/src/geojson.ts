@@ -22,6 +22,7 @@ export function exportGeoJson(
     ['streets', model.streets],
     ['walls', model.walls],
     ['roads', model.roads],
+    ['bridges', (model.bridges ?? { type: 'FeatureCollection', features: [] }) as typeof model.roads],
     ['rail', model.rail],
     ['stations', model.stations],
     ['railStructures', model.railStructures],

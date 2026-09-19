@@ -34,6 +34,10 @@ export interface RingBlock {
   era: EraParams;
   onArtery: boolean;
   waterfront: boolean;
+  /** Low ground by a river. */
+  floodplain: boolean;
+  /** Well above the old town: the hill with the view. */
+  highGround: boolean;
   /** Year the block was laid out, from the settlement's growth curve. */
   builtYear: number;
 }
@@ -43,6 +47,8 @@ export interface RingsResult {
   blocks: RingBlock[];
   /** Street polylines with their class. */
   streets: { points: Ring; cls: 'artery' | 'collector' | 'street' | 'steps' | 'motorway'; key: string }[];
+  /** Spans where a radial artery bridges a river. */
+  bridges: [Pt, Pt][];
   coreRadius: number;
 }
 
@@ -106,6 +112,15 @@ interface RingGenContext {
   outline: (r: number) => Ring | null;
   /** Bounding box of the footprint within equivalent radius r. */
   bbox: (r: number) => { minX: number; minY: number; maxX: number; maxY: number };
+  /** Clip a block back from the water behind a quay strip. */
+  clipQuay: (ring: Ring, site: Pt) => Ring | null;
+  /** Width of that strip and the grid it is traced on, metres. */
+  quayM: number;
+  localCell: number;
+  /** Typical height of the old town, metres. */
+  coreElevationM: number;
+  /** Distance to the nearest river or other water, negative in it. */
+  riverDistance: (x: number, y: number) => number;
 }
 
 /** Generate grid blocks and streets for all rings. */
@@ -114,7 +129,8 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   const [cx, cy] = site.center;
   const blocks: RingBlock[] = [];
   const streets: RingsResult['streets'] = [];
-  if (!rings.length) return { rings, blocks, streets, coreRadius };
+  const bridges: [Pt, Pt][] = [];
+  if (!rings.length) return { rings, blocks, streets, bridges, coreRadius };
   const R = rings[rings.length - 1]!.rOut;
   // The footprint may run well past R along a shore or a valley; the grid must cover it.
   const E = Math.max(R, ctx.extent(R * 1.05));
@@ -142,18 +158,38 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     // The artery's full line runs to the sea or the footprint's final edge, the same at every
     // year, and that line makes the cuts; the drawn street stops at the built-up ground of the
     // year (a block cut by an artery in 1890 must not be whole in 1850).
+    // A river in the way is bridged (a short span of water); the sea or a lake ends the artery.
+    const maxBridgeM = Math.max(80, ctx.terrain.height.cellSizeM * 3);
     let endFull: Pt = [cx + dir[0] * EMax * 1.05, cy + dir[1] * EMax * 1.05];
     let end: Pt | null = null;
-    for (let d = coreRadius; d <= EMax * 1.05; d += 25) {
+    let wetFrom: number | null = null;
+    const arteryBridges: [Pt, Pt][] = [];
+    for (let d = coreRadius; d <= EMax * 1.05; d += 5) {
       const p: Pt = [cx + dir[0] * d, cy + dir[1] * d];
       const re = ctx.radiusAt(p[0], p[1]);
-      if (!end && re > R * 1.05) end = [cx + dir[0] * (d - 25), cy + dir[1] * (d - 25)];
-      if (!ctx.isLand(p[0], p[1]) || !Number.isFinite(re)) {
-        endFull = [cx + dir[0] * (d - 25), cy + dir[1] * (d - 25)];
+      if (!end && re > R * 1.05) end = [cx + dir[0] * (d - 5), cy + dir[1] * (d - 5)];
+      const wet = !ctx.isLand(p[0], p[1]);
+      if (wet && wetFrom === null) wetFrom = d;
+      if (!wet && wetFrom !== null) {
+        arteryBridges.push([
+          [cx + dir[0] * (wetFrom - 5), cy + dir[1] * (wetFrom - 5)],
+          [cx + dir[0] * d, cy + dir[1] * d],
+        ]);
+        wetFrom = null;
+      }
+      const longWet = wetFrom !== null && d - wetFrom > maxBridgeM;
+      if (longWet || !Number.isFinite(re)) {
+        const stop = (wetFrom ?? d) - 5;
+        endFull = [cx + dir[0] * stop, cy + dir[1] * stop];
+        if (end && Math.hypot(end[0] - start[0], end[1] - start[1]) > stop - coreRadius) end = endFull;
         break;
       }
     }
     end ??= endFull;
+    // Only bridges within the drawn artery count for the year.
+    const endD = Math.hypot(end[0] - start[0], end[1] - start[1]);
+    for (const [a, b] of arteryBridges)
+      if (Math.hypot(b[0] - start[0], b[1] - start[1]) <= endD + 1) bridges.push([a, b]);
     if (Math.hypot(endFull[0] - start[0], endFull[1] - start[1]) < 60) continue;
     // Cuts use a far point on the same line so the split arithmetic is bit-identical whatever the
     // artery's current length (the ring's outer edge moves with the year; the cuts must not).
@@ -281,6 +317,9 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
           poly = clipped;
           waterfront = true;
         }
+        const hBlock = ctx.terrain.height.sample(c[0], c[1]);
+        const floodplain = hBlock - ctx.coreElevationM < 2 && ctx.riverDistance(c[0], c[1]) < 250;
+        const highGround = hBlock - ctx.coreElevationM > 15;
         // Cut by radial arteries passing through the block.
         let pieces: Ring[] = [poly];
         let onArtery = false;
@@ -299,7 +338,14 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
           pieces = next;
         }
         pieces.forEach((piece, pieceIndex) => {
-          const shrunk = inset(ccw(open(piece)), halfWidth);
+          let shrunk = inset(ccw(open(piece)), halfWidth);
+          const nearWater =
+            waterfront || shrunk.some(([x, y]) => ctx.riverDistance(x, y) < ctx.quayM + ctx.localCell);
+          if (nearWater && shrunk.length >= 3) {
+            const back = ctx.clipQuay(shrunk, centroid(shrunk));
+            if (!back) return;
+            shrunk = back;
+          }
           if (shrunk.length < 3 || area(shrunk) < 150) return;
           const pc = centroid(shrunk);
           const dist = Math.min(ctx.radiusAt(pc[0], pc[1]), ring.rOut);
@@ -310,6 +356,8 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
             era,
             onArtery,
             waterfront,
+            floodplain,
+            highGround,
             builtYear: yearForRadius(site.history, dist, ring.fromYear, ring.toYear),
           });
         });
@@ -347,7 +395,7 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
       if (pts.length >= 2) streets.push({ points: pts, cls: 'motorway', key: `motorway-${ringIndex}-end` });
     }
   });
-  return { rings, blocks, streets, coreRadius };
+  return { rings, blocks, streets, bridges, coreRadius };
 }
 
 /** Points every `stepM` along a closed ring, ending back at the start. */
@@ -399,7 +447,7 @@ export function modernZone(
   era: EraParams,
   wealth: WealthClass,
   density: DensityClass,
-  block: { onArtery: boolean; waterfront: boolean },
+  block: { onArtery: boolean; waterfront: boolean; floodplain?: boolean; highGround?: boolean },
   rng: Rng,
 ): { zone: WardId; why: string } {
   const y = era.year;
@@ -411,6 +459,12 @@ export function modernZone(
   });
   if (block.waterfront && w <= 1 && y >= 1850 && y < 1985)
     return pick('warehouse', 'poor waterfront in an industrial era');
+  // The ground has a say: works and yards take the floodplain in the industrial city, the rich
+  // take the hill with the view.
+  if (block.floodplain && w <= 2 && y >= 1850 && y < 1985)
+    return pick('warehouse', 'works and yards on the floodplain');
+  if (block.highGround && w >= 4 && !block.onArtery)
+    return pick(y < 1890 ? 'patriciate' : 'gardenSuburb', 'the rich take the hill with the view');
   if (block.onArtery && d >= 3 && rng.chance(0.45))
     return pick('retailStrip', 'artery frontage in a dense area');
   if (y < 1890) {

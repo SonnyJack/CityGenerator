@@ -14,7 +14,7 @@ import {
 } from '../geometry/polygon.js';
 import { relax, unionBoundary, voronoi, type VoronoiCell } from '../geometry/voronoi.js';
 import type { TerrainOutput } from '../terrain/stage.js';
-import { landSampler } from '../terrain/land.js';
+import { landSampler, shoreDistance } from '../terrain/land.js';
 import type { SettlementSite } from './siting.js';
 import { FILL_WARDS, WARDS, type WardContext, type WardId } from './wards.js';
 import type { EraParams } from './eras.js';
@@ -119,6 +119,8 @@ export interface TownOutput {
   >;
   walls: FeatureCollection<LineString, { settlement: string; kind: 'wall' }>;
   gates: FeatureCollection<Point, { settlement: string; kind: 'gate' | 'tower' }>;
+  /** Where a street crosses a river: an artery's bridge in the core, a radial's in the rings. */
+  bridges: FeatureCollection<LineString, { settlement: string; kind: 'bridge' }>;
   blocks: BlockRecipe[];
   stats: {
     patches: number;
@@ -202,8 +204,9 @@ export const townStage = defineStage<TownInput, TownOutput>({
       const row = Math.min(Math.max(Math.round(height.row(y)), 0), height.height - 1);
       return row * height.width + col;
     };
-    // The drawn shoreline (see terrain/land.ts), rivers passable: patches bridge them.
-    const isLand = landSampler(terrain, { rivers: 'land' });
+    // The drawn shoreline (see terrain/land.ts). A river is water to a patch: the town stops at
+    // the bank and crosses only where an artery takes a bridge.
+    const isLand = landSampler(terrain, { rivers: 'water' });
 
     // --- 1. Patch sites: sunflower spiral, denser inside the town ------------
     const spacing = input.blockSizeM;
@@ -265,7 +268,11 @@ export const townStage = defineStage<TownInput, TownOutput>({
     const localCell = Math.max(8, Math.min(20, spacing / 8));
     // Clipping rasterises at the local cell; a setback of half a cell keeps the traced edge inside
     // the drawn shoreline rather than up to half a local cell beyond it.
-    const clipLand = landSampler(terrain, { rivers: 'land', setbackM: localCell * 0.6 });
+    const clipLand = landSampler(terrain, { rivers: 'water', setbackM: localCell * 0.6 });
+    // A block by the water stands back behind a quay or a promenade.
+    const QUAY_M = 10;
+    // The clip is traced on the local grid, half a cell outside the last cell centre that passes.
+    const quayLand = landSampler(terrain, { rivers: 'water', setbackM: QUAY_M + localCell * 0.6 });
     for (let i = 0; i < cells.length; i++) {
       const cell = cells[i]!;
       if (cell.ring.length < 3) continue;
@@ -385,6 +392,48 @@ export const townStage = defineStage<TownInput, TownOutput>({
 
     // --- 4. Streets: arteries from gates to the centre along patch edges -----
     const graph = buildEdgeGraph(patches);
+    // Bridges: a river through the town is crossed only where an artery or a road takes a bridge.
+    // Candidate spans join a bank vertex to the nearest vertex on the far bank (a different
+    // component of the patch-edge graph) across the river, at three times the cost of a street.
+    {
+      const maxSpan = Math.max(60, height.cellSizeM * 3);
+      const riverBank = (v: Pt) =>
+        shoreDistance(terrain, v[0], v[1], 'water') < localCell * 1.5 &&
+        shoreDistance(terrain, v[0], v[1], 'land') > localCell * 1.5;
+      const overRiver = (a: Pt, b: Pt) => {
+        for (const t of [0.35, 0.5, 0.65]) {
+          const x = a[0] + (b[0] - a[0]) * t;
+          const y = a[1] + (b[1] - a[1]) * t;
+          if (shoreDistance(terrain, x, y, 'water') > 0 || shoreDistance(terrain, x, y, 'land') <= 0)
+            return false;
+        }
+        return true;
+      };
+      const bank: { p: Pt; k: string; comp: number }[] = [];
+      const seenBank = new Set<string>();
+      for (const p of patches)
+        for (const v of p.ring) {
+          const k = graph.key(v);
+          if (seenBank.has(k) || !riverBank(v)) continue;
+          seenBank.add(k);
+          bank.push({ p: v, k, comp: graph.componentOf(k) });
+        }
+      const spans = new Map<string, [Pt, Pt]>();
+      for (const a of bank) {
+        let best: (typeof bank)[number] | null = null;
+        let bestD = Infinity;
+        for (const b of bank) {
+          if (b.comp === a.comp) continue;
+          const d = Math.hypot(a.p[0] - b.p[0], a.p[1] - b.p[1]);
+          if (d < 8 || d > maxSpan || d >= bestD || !overRiver(a.p, b.p)) continue;
+          bestD = d;
+          best = b;
+        }
+        if (best) spans.set(graph.edgeKey(a.p, best.p), [a.p, best.p]);
+      }
+      for (const [a, b] of spans.values()) graph.addBridge(a, b);
+    }
+    const bridgeFactor = (ek: string) => (graph.bridgeKeys.has(ek) ? 3 : 1);
     const centrePatch = inner.reduce<Patch | null>((best, p) => {
       if (!best) return p;
       const db = Math.hypot(best.centroid[0] - cx, best.centroid[1] - cy);
@@ -398,7 +447,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       const path = graph.shortestPath(
         graph.key(g),
         new Set(centreVertices),
-        (edgeKey) => (arteryEdges.has(edgeKey) ? 0.45 : 1),
+        (edgeKey) => (arteryEdges.has(edgeKey) ? 0.45 : 1) * bridgeFactor(edgeKey),
         slopeAt(height, slope),
       );
       if (path.length < 2) continue;
@@ -420,8 +469,20 @@ export const townStage = defineStage<TownInput, TownOutput>({
         if (dA < 0.6) targets.add(k);
       }
       if (!targets.size) continue;
-      const path = graph.shortestPath(graph.key(g), targets, () => 1, slopeAt(height, slope));
+      const path = graph.shortestPath(graph.key(g), targets, bridgeFactor, slopeAt(height, slope));
       if (path.length >= 2) roads.push(path);
+    }
+    // The bridges the arteries and roads took.
+    const bridgeSpans: [Pt, Pt][] = [];
+    {
+      const seen = new Set<string>();
+      for (const path of [...arteries, ...roads])
+        for (let i = 1; i < path.length; i++) {
+          const ek = graph.edgeKey(path[i - 1]!, path[i]!);
+          if (!graph.bridgeKeys.has(ek) || seen.has(ek)) continue;
+          seen.add(ek);
+          bridgeSpans.push([path[i - 1]!, path[i]!]);
+        }
     }
     ctx.checkpoint();
 
@@ -445,6 +506,16 @@ export const townStage = defineStage<TownInput, TownOutput>({
     const medianArea = median(inner.map((p) => area(p.ring))) || 1;
     // The distances and shape measures never change while wards are assigned; only the
     // adjacency to the plaza and the castle does. Scoring asks for every patch once per ward.
+    // Terrain for the wards: where a patch stands in the core's range of heights, and whether
+    // it sits low by a river (the floodplain the rich avoid and the mills want).
+    const innerHeights = inner.map((p) => p.elevation);
+    const minH = innerHeights.length ? Math.min(...innerHeights) : 0;
+    const maxH = innerHeights.length ? Math.max(...innerHeights) : 0;
+    const elevationRank = (p: Patch) => (maxH - minH > 2 ? (p.elevation - minH) / (maxH - minH) : 0.5);
+    const floodplainOf = (p: Patch) => {
+      const dRiver = shoreDistance(terrain, p.centroid[0], p.centroid[1], 'water');
+      return p.elevation - minH < 4 && dRiver < 250 ? 1 - dRiver / 250 : 0;
+    };
     const fixedContext = new Map<
       Patch,
       { dC: number; dG: number; dW: number; compact: number; relativeArea: number }
@@ -475,6 +546,8 @@ export const townStage = defineStage<TownInput, TownOutput>({
         relativeArea: fixed.relativeArea,
         slope: p.slope,
         waterfront: p.waterfront,
+        elevation: elevationRank(p),
+        floodplain: floodplainOf(p),
       };
     }
     if (walled && site.anchorPopulation >= 2000) {
@@ -630,7 +703,15 @@ export const townStage = defineStage<TownInput, TownOutput>({
     for (const p of patches) {
       if (!p.ward || p.ward === 'plaza' || p.ward === 'farm') continue;
       const halfWidth = arteryPatchSet.has(p) ? ARTERY_HALF_WIDTH : STREET_HALF_WIDTH;
-      const ring = inset(p.ring, halfWidth);
+      let ring = inset(p.ring, halfWidth);
+      // A block on the water stands back behind a quay strip (clipped or merely close to it).
+      const nearWater =
+        p.waterfront || ring.some(([x, y]) => shoreDistance(terrain, x, y, 'water') < QUAY_M + localCell);
+      if (nearWater && ring.length >= 3) {
+        const back = clipToLand(ring, centroid(ring), quayLand, localCell);
+        if (!back) continue;
+        ring = back;
+      }
       // A sliver left by the shoreline clip is not a block.
       if (ring.length < 3 || area(ring) < 50) continue;
       blocks.push({
@@ -661,8 +742,14 @@ export const townStage = defineStage<TownInput, TownOutput>({
         extent: (r) => footprint.extent(r),
         outline: (r) => footprint.outline(r),
         bbox: (r) => footprint.bbox(r),
+        clipQuay: (ring, s) => clipToLand(ring, s, quayLand, localCell),
+        quayM: QUAY_M,
+        localCell,
+        coreElevationM: innerHeights.length ? median(innerHeights) : height.sample(cx, cy),
+        riverDistance: (x, y) => shoreDistance(terrain, x, y, 'water'),
       });
       ringCount = rings.rings.length;
+      bridgeSpans.push(...rings.bridges);
       const zoneRng = rng.fork('zones');
       for (const b of rings.blocks) {
         if (area(b.ring) < 50) continue;
@@ -809,6 +896,15 @@ export const townStage = defineStage<TownInput, TownOutput>({
       streets: { type: 'FeatureCollection', features: streetFeatures },
       walls: { type: 'FeatureCollection', features: wallFeatures },
       gates: { type: 'FeatureCollection', features: gateFeatures },
+      bridges: {
+        type: 'FeatureCollection',
+        features: bridgeSpans.map(([a, b], k) => ({
+          type: 'Feature' as const,
+          id: `${id}-bridge-${k}`,
+          geometry: { type: 'LineString' as const, coordinates: [a, b] },
+          properties: { settlement: id, kind: 'bridge' as const },
+        })),
+      },
       blocks,
       stats: {
         patches: patchFeatures.length,
@@ -917,9 +1013,40 @@ function buildEdgeGraph(patches: Patch[]) {
     const kb = key(b);
     return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
   };
+  // Connected components of the patch edges (a river's two banks share no vertex), taken before
+  // any bridge is added.
+  let components: Map<string, number> | null = null;
+  const componentOf = (k: string): number => {
+    if (!components) {
+      components = new Map();
+      let id = 0;
+      for (const start of points.keys()) {
+        if (components.has(start)) continue;
+        const stack = [start];
+        components.set(start, id);
+        while (stack.length) {
+          const u = stack.pop()!;
+          for (const v of adj.get(u)?.keys() ?? [])
+            if (!components.has(v)) {
+              components.set(v, id);
+              stack.push(v);
+            }
+        }
+        id++;
+      }
+    }
+    return components.get(k) ?? -1;
+  };
+  const bridgeKeys = new Set<string>();
   return {
     key,
     edgeKey,
+    componentOf,
+    bridgeKeys,
+    addBridge(a: Pt, b: Pt) {
+      addEdge(a, b);
+      bridgeKeys.add(edgeKey(a, b));
+    },
     point: (k: string) => points.get(k)!,
     shortestPath(
       from: string,

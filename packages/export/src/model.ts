@@ -32,6 +32,8 @@ export interface ExportModel {
   ways: FeatureCollection<LineString, Props>;
   walls: FeatureCollection<LineString, Props>;
   roads: FeatureCollection<LineString, Props>;
+  /** Bridges: regional roads over rivers and town streets across them. */
+  bridges?: FeatureCollection<LineString, Props>;
   rail: FeatureCollection<LineString, Props>;
   stations: FeatureCollection<Point, Props>;
   railStructures: FeatureCollection<Polygon, Props>;

@@ -7,22 +7,22 @@ Every phase ends with a deployed site on GitHub Pages so there is always
 something to try, and each phase lists acceptance criteria that are testable in
 CI or by a reviewer.
 
-| Phase | Theme                                   | Outcome                                                                                             |
-| ----- | --------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 0     | Foundation                              | Repo, CI, empty editor deployed, engine skeleton, document format v2                                |
-| 1     | Terrain, tiles, rendering               | Region-scale terrain rendered by MapLibre through in-browser tiles; ink spike                       |
-| 2     | Settlements, districts, classic town    | Organic towns with walls, wards, streets on terrain; lazy blocks; reference parity                  |
-| 3     | Years, society, modern streets          | Year-based eras, wealth/density fields and overlays, road hierarchy, mixed-era rings                |
-| 4     | Editor                                  | Full editing: draw, edit, brushes, freeze, regenerate-in-scope, annotations, autosave               |
-| 5     | Rail and tram                           | Regional and settlement rail, stations, spurs, yards; tram lines and streetcar suburbs              |
-| 6     | Placement engine, ports, industry       | Generic placement, ports by era, dry docks, industry, institutions, fill passes                     |
-| 7     | Naming, POIs, directory, themes, export | Culture packs, businesses and residents, period/Sanborn themes, PNG/SVG/GeoJSON/VTT, handout frames |
-| 8     | LLM assistant                           | Chat drawer, tools over the command API, BYOK, evals                                                |
-| 9     | Timeline, 3D, condition                 | Growth scrubber, extrusion view, decay/flood/fire overlays                                          |
-| 10    | Ecosystem                               | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs             |
-| 11    | Utilities                               | Water and gas mains, power lines, sewers, pipelines and canals from the works, by era               |
-| 12    | Tuning pass                             | Headless sweep over presets, eras, cultures and edge cases; the fixes it forced                     |
-| 13    | Terrain fit                             | One drawn shoreline for every test; routes that stay on land; towns shaped by a growth fill         |
+| Phase | Theme                                   | Outcome                                                                                                             |
+| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 0     | Foundation                              | Repo, CI, empty editor deployed, engine skeleton, document format v2                                                |
+| 1     | Terrain, tiles, rendering               | Region-scale terrain rendered by MapLibre through in-browser tiles; ink spike                                       |
+| 2     | Settlements, districts, classic town    | Organic towns with walls, wards, streets on terrain; lazy blocks; reference parity                                  |
+| 3     | Years, society, modern streets          | Year-based eras, wealth/density fields and overlays, road hierarchy, mixed-era rings                                |
+| 4     | Editor                                  | Full editing: draw, edit, brushes, freeze, regenerate-in-scope, annotations, autosave                               |
+| 5     | Rail and tram                           | Regional and settlement rail, stations, spurs, yards; tram lines and streetcar suburbs                              |
+| 6     | Placement engine, ports, industry       | Generic placement, ports by era, dry docks, industry, institutions, fill passes                                     |
+| 7     | Naming, POIs, directory, themes, export | Culture packs, businesses and residents, period/Sanborn themes, PNG/SVG/GeoJSON/VTT, handout frames                 |
+| 8     | LLM assistant                           | Chat drawer, tools over the command API, BYOK, evals                                                                |
+| 9     | Timeline, 3D, condition                 | Growth scrubber, extrusion view, decay/flood/fire overlays                                                          |
+| 10    | Ecosystem                               | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs                             |
+| 11    | Utilities                               | Water and gas mains, power lines, sewers, pipelines and canals from the works, by era                               |
+| 12    | Tuning pass                             | Headless sweep over presets, eras, cultures and edge cases; the fixes it forced                                     |
+| 13    | Terrain fit                             | One shoreline for every test; routes on land; towns shaped by a growth fill; streets and wards that read the ground |
 
 Milestones: `v0.1` after Phase 1, `v0.2` after Phase 2, `v0.3` after Phase 3,
 `v0.5` after Phase 6, `v0.8` after Phase 8, `v1.0` after Phase 9 plus a tuning
@@ -627,7 +627,7 @@ facility failures, settlements without blocks, no premises).
 - [ ] Deferred: a browser-side sweep of every theme at every zoom for
       rendering budgets; per-culture visual review of the generated names.
 
-## Phase 13 — Terrain fit (steps 1–4 done, 5 open)
+## Phase 13 — Terrain fit (done)
 
 Screenshots showed blocks hanging over lakes and bays and roads cutting
 coves. The cause was two shorelines: the map draws water from marching
@@ -692,8 +692,19 @@ cells the router had never entered.
       the anchor year's railways and works (so a block's wealth class does
       not flip with the slider), and a sewer outfall is a shore cell the
       trunk can reach (the router may also enter its goal diagonally).
-- [ ] Step 5: rivers through a town as hard boundaries with quays along
-      the bank and bridges only where arteries cross; zoning that reads the
-      terrain (industry and rail on the floodplain, wealth on the high
-      ground, fishing quarters on the shore); a promenade or quay strip
-      where a patch cuts on the shoreline.
+- [x] Step 5, water as a feature: a river through a town is a hard
+      boundary. Patches and ring blocks stop at the bank; the two banks are
+      separate components of the patch-edge graph, joined only by bridge
+      edges (the nearest far-bank vertex across the water, at three times a
+      street's cost) that arteries and roads may take, and a radial artery
+      in the rings bridges a short span of water and stops at a long one.
+      Bridges are town features drawn in the bridges layer, the SVG and the
+      GeoJSON, and counted in the settlement stats. Every block within reach
+      of the water is clipped back behind a ten-metre quay strip. Wards read
+      the terrain: the patriciate takes the high ground and shuns the
+      floodplain, slums and craftsmen take the low ground by the river; in
+      the rings, works and yards take the floodplain in the industrial city
+      and the rich take the hill with the view.
+- [ ] Deferred: fishing quarters as a ward of their own (the culture packs
+      would each need its names and building kinds); rail yards steered to
+      the floodplain by the placement engine.

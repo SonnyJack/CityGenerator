@@ -491,6 +491,12 @@ medium, high, core}`. Both numeric and class values are exposed to the UI and
   of the same population but along its shore, and a hill town follows the
   valley floor. The fill is sized to the largest radius the settlement's
   history ever reaches, so a block's shape is the same at every year.
+- **Rivers** through a town are hard boundaries: patches and blocks stop
+  at the bank, the banks are joined only by bridge edges an artery or a
+  road may take, and every block by the water stands back behind a quay
+  strip. Wards read the ground (the patriciate on the high ground, slums
+  and craftsmen on the floodplain); modern zones put works and yards on
+  the floodplain and the rich on the hill with the view.
 - **Ring grids** are turned to the ground: the terrain around a ring's inner
   edge votes with a quarter-turn angle (contour direction where it slopes,
   shoreline direction near the sea) and the grid follows the vote, or the
@@ -993,7 +999,10 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   everywhere as an equivalent radius), and streets that see the ground
   (ring grids turned to the shore or the contours, collectors along the
   contour, flights of steps where a lane is too steep, siting on the
-  buildable ground of the footprint to come).
+  buildable ground of the footprint to come), and water as a feature (a
+  river through a town is a boundary crossed only on bridges, blocks stand
+  back behind a quay strip, wards and zones read the high ground and the
+  floodplain).
 - **v0.13** — Phase 11: utility networks (water, gas, power, sewers,
   pipelines, canals) as a region stage over the towns and facilities, with
   the shared raster router and per-network cost models (mains follow the

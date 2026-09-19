@@ -68,6 +68,10 @@ export interface WardContext {
   slope: number;
   /** Whether the cell touches water. */
   waterfront: boolean;
+  /** Where the cell stands in the core's range of heights (0 lowest, 1 highest). */
+  elevation: number;
+  /** How much the cell sits low by a river (0 dry, 1 on the bank of the floodplain). */
+  floodplain: number;
 }
 
 export interface WardProfile {
@@ -156,7 +160,9 @@ const MEDIEVAL_WARDS: Record<
       (c.onArtery ? -0.6 : 0.3) +
       c.gateDist * 0.6 -
       c.centreDist * 0.4 -
-      c.slope * 2,
+      c.slope * 2 +
+      c.elevation * 0.8 -
+      c.floodplain * 0.6,
   },
   craftsmen: {
     id: 'craftsmen',
@@ -166,7 +172,8 @@ const MEDIEVAL_WARDS: Record<
     setbackM: 0.6,
     floors: [1, 3],
     fillWeight: 6,
-    score: () => 0.5,
+    // Mills and tanneries want the river.
+    score: (c) => 0.5 + c.floodplain * 0.3,
   },
   slum: {
     id: 'slum',
@@ -176,7 +183,13 @@ const MEDIEVAL_WARDS: Record<
     setbackM: 0.3,
     floors: [1, 2],
     fillWeight: 2,
-    score: (c) => c.centreDist + (1 - c.wallDist) * 0.8 + c.slope * 2 - (c.onArtery ? 0.3 : 0),
+    score: (c) =>
+      c.centreDist +
+      (1 - c.wallDist) * 0.8 +
+      c.slope * 2 -
+      (c.onArtery ? 0.3 : 0) +
+      c.floodplain * 0.8 -
+      c.elevation * 0.4,
   },
   military: {
     id: 'military',

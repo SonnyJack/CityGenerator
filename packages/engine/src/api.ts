@@ -199,6 +199,8 @@ export interface EngineStats {
     steepShare: number;
     patches: number;
     walled: boolean;
+    /** Street bridges over rivers in the town. */
+    bridges: number;
     blocks: number;
     rings: number;
     coreRadiusM: number;

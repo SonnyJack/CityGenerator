@@ -568,6 +568,7 @@ export function createEngine(): EngineApi {
           steepShare: t.stats.steepShare,
           patches: t.stats.patches,
           walled: t.stats.walled,
+          bridges: t.bridges.features.length,
           blocks: t.blocks.length,
           rings: t.stats.rings,
           coreRadiusM: t.stats.coreRadiusM,
@@ -992,6 +993,10 @@ export function createEngine(): EngineApi {
         roads: fc([
           ...(latest.roads?.roads.features ?? []),
           ...facilities.roads.features,
+        ] as unknown as Feature<LineString, Record<string, unknown>>[]),
+        bridges: fc([
+          ...(latest.roads?.bridges.features ?? []),
+          ...towns.flatMap((t) => t.bridges.features),
         ] as unknown as Feature<LineString, Record<string, unknown>>[]),
         rail: fc([
           ...(latest.rail?.tracks.features ?? []),
