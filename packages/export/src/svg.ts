@@ -197,13 +197,27 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
     features: (fc?.features ?? []).filter((f) => pred(f) && (!options.player || !f.properties.gmOnly)),
   });
   const utilColour: Record<string, string> = theme.sketch
-    ? { waterMain: p.ink, gasMain: p.ink, powerLine: p.ink, sewer: p.inkMuted, pipeline: p.ink }
+    ? {
+        waterMain: p.ink,
+        gasMain: p.ink,
+        powerLine: p.ink,
+        sewer: p.inkMuted,
+        pipeline: p.ink,
+        aqueduct: p.waterLine,
+        heatMain: p.ink,
+        telegraph: p.inkMuted,
+        telephone: p.inkMuted,
+      }
     : {
         waterMain: '#2f7bbf',
         gasMain: '#b8860b',
         powerLine: '#3a3a3a',
         sewer: '#7a4b2a',
         pipeline: '#8b2e2e',
+        aqueduct: '#3c6f9c',
+        heatMain: '#c4581c',
+        telegraph: '#5a5a5a',
+        telephone: '#3f7a44',
       };
   fills(
     util(model.utilityAreas, () => true),
@@ -235,14 +249,30 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
     ['pipeline', '6 3'],
     ['sewer', '1 2'],
     ['powerLine', ''],
+    ['heatMain', '3 1'],
+    ['telephone', '1 1'],
+    ['telegraph', ''],
+    ['aqueduct', ''],
   ] as const)
     lines(
       util(model.utilities, (f) => f.properties.class === klass),
       () => utilColour[klass]!,
-      (f) => (f.properties.kind === 'distribution' || f.properties.kind === 'branch' ? 0.6 : 1.2),
+      (f) =>
+        f.properties.kind === 'arches'
+          ? 2.2
+          : f.properties.kind === 'distribution' || f.properties.kind === 'branch' || klass === 'telegraph'
+            ? 0.6
+            : 1.2,
       `utility-${klass}`,
       dash ? `stroke-dasharray="${dash}"` : '',
     );
+  // A failed line is picked out in red over its own colour.
+  lines(
+    util(model.utilities, (f) => f.properties.status === 'failed'),
+    () => '#c81e1e',
+    () => 1.8,
+    'utility-failed',
+  );
   for (const s of util(model.utilityPoints, (f) => f.properties.kind !== 'pylon').features) {
     const [x, y] = tx(s.geometry.coordinates[0]!, s.geometry.coordinates[1]!);
     parts.push(

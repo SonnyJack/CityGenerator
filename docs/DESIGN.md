@@ -556,6 +556,24 @@ branch, spur, siding, yard; elevated and subway variants for metropolises after
 - **Water**: shipping approach along deepest bathymetry; ferries where a
   crossing lacks a bridge; canals (1760–1900) as straight cuts with locks where
   terrain requires, with wharves and warehouses along them.
+- **Utilities** (`utilitiesStage`, after the towns and the facilities): water
+  mains from the waterworks or a reservoir on high ground, gas mains from the
+  gasworks, transmission lines on pylons chained town to town from the power
+  station or the grid, GM-only sewers to an outfall, pipelines, canals. On
+  top of those: an aqueduct for a city that passed fifteen thousand people
+  before 1850, from a spring on high ground along a steadily falling water
+  line, on arches wherever the ground drops more than three metres below it;
+  telegraph wires on poles along the running railway lines from 1845 until
+  1975; a telephone exchange on the central artery of every town over three
+  thousand from 1880, with lines under the arteries and trunk lines chained
+  between the exchanges from 1895; district heating for a city over sixty
+  thousand from 1955, from the power station or a plant beside the
+  substation, with mains under the central arteries. Every line carries its
+  `built` year (replayed from the settlement's growth history). Failures are
+  events on the timeline like the disasters: a `burst` takes out the water
+  mains it reached, a `blackout` the power lines, an `explosion` the gas
+  mains, each for its duration; they are drawn as overlays, the failed lines
+  in red, and an explosion takes lots like a small fire.
 
 ### 6.5 Placement engine (Goal 5)
 
@@ -963,6 +981,8 @@ roadmap items rather than a wish list; see ROADMAP.md for where they land.
 - **Points of interest and institutions** as first-class feature types.
 - **Utility networks** (delivered in Phase 11): power lines, pipelines,
   canals with locks, sewers as a GM-only layer; aqueducts remain open.
+  Delivered in v1.1 on top: aqueducts on arches for pre-industrial cities,
+  telegraph and telephone lines, district heating, and failures as events.
 - **3D view** via extrusion (cheap given MapLibre) and later a glTF export.
 - **Culture/style packs** beyond the initial five; naming grammars.
 - **OSM import** as a starting document; **DEM import**.
@@ -1022,7 +1042,10 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   the engine reports land cover and the woods and commons near the towns;
   rail lines, stations and facilities carry opening and closing years
   replayed from the settlements' growth histories, and a closed default
-  facility stays as a brownfield for forty years.
+  facility stays as a brownfield for forty years; the utilities stage adds
+  aqueducts on arches, telegraph wires along the railway, telephone
+  exchanges and trunks, district heating, and failures (`burst`,
+  `blackout`, `explosion` events) that mark the lines they reached.
 - **v1.0-rc** — Phase 12 tuning pass: the headless sweep and the two
   robustness fixes it forced (siting relaxation passes; a built core on
   rugged ground). Phase 13 terrain fit: one drawn shoreline for every land

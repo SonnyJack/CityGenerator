@@ -433,6 +433,35 @@ export function createEngine(): EngineApi {
           year: doc.spec.year,
           enabled: doc.spec.networks.utilities.enabled,
           canals: doc.spec.networks.water.canals,
+          // The telegraph follows the running lines (not the yards, spurs or the tunnels).
+          railLines: rail.tracks.features
+            .filter(
+              (t) =>
+                (t.properties.class === 'mainline' ||
+                  t.properties.class === 'branch' ||
+                  t.properties.class === 'disused') &&
+                t.properties.mode !== 'tunnel' &&
+                t.properties.mode !== 'subway',
+            )
+            .map((t) => ({
+              id: String(t.id),
+              from: t.properties.from,
+              to: t.properties.to,
+              line: t.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number]),
+              opened: t.properties.opened,
+              ...(t.properties.closed !== undefined ? { closed: t.properties.closed } : {}),
+            })),
+          ...(doc.spec.events.length
+            ? {
+                events: doc.spec.events.map((e) => ({
+                  kind: e.kind,
+                  year: e.year,
+                  center: e.center,
+                  radiusM: e.radiusM,
+                  durationYears: e.durationYears,
+                })),
+              }
+            : {}),
         },
         { signal },
       );

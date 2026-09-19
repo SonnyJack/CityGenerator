@@ -519,6 +519,24 @@ export function GenerateDock() {
                   locks: stats.utilities.locks,
                 },
               )}
+              {stats.utilities.aqueductKm +
+                stats.utilities.telephoneKm +
+                stats.utilities.telegraphKm +
+                stats.utilities.heatKm +
+                stats.utilities.failed >
+                0 &&
+                ' · ' +
+                  t(
+                    'aqueducts {aqueduct} km · telephone {telephone} km ({exchanges} exchanges) · telegraph {telegraph} km · heating {heat} km · {failed} lines failed',
+                    {
+                      aqueduct: stats.utilities.aqueductKm.toFixed(0),
+                      telephone: stats.utilities.telephoneKm.toFixed(0),
+                      exchanges: stats.utilities.exchanges,
+                      telegraph: stats.utilities.telegraphKm.toFixed(0),
+                      heat: stats.utilities.heatKm.toFixed(0),
+                      failed: stats.utilities.failed,
+                    },
+                  )}
             </p>
           )}
         {stats && stats.rail.trackKm > 0 && (

@@ -289,6 +289,30 @@ describe('one seed, one history', () => {
     expect(rebuilt.length).toBeGreaterThanOrEqual(standingBefore - 1);
     expect(rebuilt.filter((b) => (b.properties.built ?? 0) > 1900).length).toBeGreaterThan(0);
 
+    // A gas explosion takes its lots like a small fire; a power cut leaves the lots untouched.
+    const blast = { ...fire, id: 'g', kind: 'explosion' as const, radiusM: 120 };
+    const blasted = (await run(1900, [blast])).blocks.filter((b) =>
+      b.disasters?.some((d) => d.kind === 'explosion'),
+    );
+    expect(blasted.length).toBeGreaterThan(0);
+    expect(blasted.length).toBeLessThan(burnt.length);
+    expect(
+      blasted.some(
+        (b) =>
+          generateBlock(b, 1900).buildings.length === 0 &&
+          generateBlock(
+            before.blocks.find((x) => x.id === b.id)!,
+            1899,
+          ).buildings.length > 0,
+      ),
+    ).toBe(true);
+    const cut = { ...fire, id: 'p', kind: 'blackout' as const };
+    const dark = (await run(1900, [cut])).blocks.find((b) =>
+      b.disasters?.some((d) => d.kind === 'blackout'),
+    )!;
+    const lit = (await run(1900, [])).blocks.find((b) => b.id === dark.id)!;
+    expect(generateBlock(dark, 1900).buildings.length).toBe(generateBlock(lit, 1900).buildings.length);
+
     const storm = { ...fire, id: 's', kind: 'storm' as const, magnitude: 0.8 };
     const hit = (await run(1901, [storm])).blocks.find((b) => b.disasters?.some((d) => d.kind === 'storm'))!;
     const calm = (await run(1901, [])).blocks.find((b) => b.id === hit.id)!;

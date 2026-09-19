@@ -116,7 +116,9 @@ function lotEpisodes(block: BlockRecipe, parcelRng: Rng): Episode[] {
     else last.ward = t.ward;
   }
   for (const d of block.disasters ?? []) {
-    if (d.kind !== 'fire' || !parcelRng.chance(d.magnitude)) continue;
+    // Fires and gas explosions take lots and rebuild them; a power cut leaves no mark on the lots.
+    const burns = d.kind === 'fire' || d.kind === 'explosion';
+    if (!burns || !parcelRng.chance(d.magnitude)) continue;
     const standing = episodes.filter((e) => e.built <= d.year).pop();
     if (!standing) continue;
     standing.demolished = d.year;
@@ -233,7 +235,7 @@ function conditionOf(model: BlockModel, block: BlockRecipe, year: number, option
       p.abandoned = block.abandonedYear;
     }
     for (const d of block.disasters ?? []) {
-      if (d.kind === 'fire' || built > d.year) continue;
+      if (d.kind === 'fire' || d.kind === 'explosion' || d.kind === 'blackout' || built > d.year) continue;
       const since = year - d.year;
       if (since < 0) continue;
       c -= d.magnitude * 0.5 * Math.max(0, 1 - since / 25);

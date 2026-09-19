@@ -608,8 +608,16 @@ inspectable.
       lines with pylon dots, dotted sewers, canals as water), SVG and GeoJSON
       export, inspector "Services" row, `find_features` kind `utility`,
       region summary and statistics, a Networks panel toggle and stats line.
-- [ ] Deferred: aqueducts on arches for pre-industrial cities, district
-      heating, telephone and telegraph lines, and utility failures as events.
+- [x] Aqueducts on arches for cities that grew large before the waterworks
+      age (a spring on high ground, a conduit falling steadily, arches where
+      the ground drops below the water line); telegraph wires and poles along
+      the railway from 1845 until the 1970s; telephone exchanges with lines
+      under the arteries from 1880 and trunks between the towns from 1895;
+      district heating with a plant beside the power station or the
+      substation of a big post-war city; and utility failures as timeline
+      events (a burst main, a power cut, a gas explosion) that mark the lines
+      they reached as failed while they last, drawn in red, with the
+      explosion taking lots like a small fire.
 
 ---
 

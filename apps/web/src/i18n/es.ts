@@ -323,6 +323,11 @@ export const es: Record<string, string> = {
   Stations: 'Estaciones',
   Stop: 'Detener',
   Storm: 'Tormenta',
+  'Main burst': 'Rotura de tubería',
+  'Power cut': 'Apagón',
+  'Gas explosion': 'Explosión de gas',
+  'aqueducts {aqueduct} km · telephone {telephone} km ({exchanges} exchanges) · telegraph {telegraph} km · heating {heat} km · {failed} lines failed':
+    'acueductos {aqueduct} km · teléfono {telephone} km ({exchanges} centrales) · telégrafo {telegraph} km · calefacción {heat} km · {failed} líneas averiadas',
   Street: 'Calle',
   'Stroke amount': 'Intensidad del trazo',
   'Stroke delta': 'Delta del trazo',

@@ -137,9 +137,13 @@ export const featureRequestSchema = z.object({
 });
 export type FeatureRequest = z.infer<typeof featureRequestSchema>;
 
+/** Disasters and utility failures: a burst main, a power cut, a gas explosion. */
+export const eventKindSchema = z.enum(['fire', 'storm', 'flood', 'burst', 'blackout', 'explosion']);
+export type EventKind = z.infer<typeof eventKindSchema>;
+
 export const eventSchema = z.object({
   id: z.string(),
-  kind: z.enum(['fire', 'storm', 'flood']),
+  kind: eventKindSchema,
   year: z.number().int().min(1100).max(2100),
   center: z.tuple([z.number(), z.number()]),
   radiusM: z.number().positive().max(20_000),
@@ -147,7 +151,7 @@ export const eventSchema = z.object({
   magnitude: z.number().min(0).max(1).default(0.7),
   /** Floods: water level in metres above the datum; ground below it is under water. */
   levelM: z.number().optional(),
-  /** Floods: years the water stays. */
+  /** Floods: years the water stays; failures: years the service is out (a power cut lasts a year on the map). */
   durationYears: z.number().int().min(1).max(200).default(1),
 });
 export type RegionEvent = z.infer<typeof eventSchema>;

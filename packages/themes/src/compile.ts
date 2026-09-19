@@ -428,6 +428,35 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     layout: { visibility: visible('events') },
     paint: { 'line-color': p.inkMuted, 'line-width': 2, 'line-dasharray': [3, 2], 'line-opacity': 0.8 },
   });
+  // Utility failures: a burst floods the streets it reached, a power cut darkens its area,
+  // an explosion scorches a small circle.
+  layers.push({
+    id: 'events-burst',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'events',
+    filter: ['==', ['get', 'kind'], 'burst'],
+    layout: { visibility: visible('events') },
+    paint: { 'fill-color': p.water, 'fill-opacity': 0.35, 'fill-outline-color': p.waterLine },
+  });
+  layers.push({
+    id: 'events-blackout',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'events',
+    filter: ['==', ['get', 'kind'], 'blackout'],
+    layout: { visibility: visible('events') },
+    paint: { 'fill-color': '#1a1a24', 'fill-opacity': 0.3, 'fill-outline-color': '#1a1a24' },
+  });
+  layers.push({
+    id: 'events-explosion',
+    type: 'fill',
+    source: options.sourceId,
+    'source-layer': 'events',
+    filter: ['==', ['get', 'kind'], 'explosion'],
+    layout: { visibility: visible('events') },
+    paint: { 'fill-color': '#7a2e12', 'fill-opacity': 0.5, 'fill-outline-color': '#7a2e12' },
+  });
   // Optional 3D: extrude buildings by their floors (ruins stay low).
   layers.push({
     id: 'buildings-3d',

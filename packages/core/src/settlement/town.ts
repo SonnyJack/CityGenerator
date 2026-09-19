@@ -22,7 +22,7 @@ import type { EraParams } from './eras.js';
 import type { SocietyOutput } from '../society/stage.js';
 import { generateRings, growthRings, modernCoreZone, modernZone } from './rings.js';
 import { distToPolyline, type ZoneEdit } from '../document/authored.js';
-import type { RegionEvent } from '../document/schema.js';
+import type { EventKind, RegionEvent } from '../document/schema.js';
 import { maxRadius, peakUntil, populationAt, radiusAt, yearForRadius } from './history.js';
 import { growthFootprint } from './footprint.js';
 import { gradientBetween, STEPS_GRADIENT } from './orientation.js';
@@ -63,9 +63,9 @@ export interface WardTransition {
   ward: WardId;
 }
 
-/** A disaster that touched a block. */
+/** A disaster that touched a block (a gas explosion is a small fire; a burst main a short flood). */
 export interface BlockDisaster {
-  kind: 'fire' | 'storm' | 'flood';
+  kind: EventKind;
   year: number;
   magnitude: number;
 }

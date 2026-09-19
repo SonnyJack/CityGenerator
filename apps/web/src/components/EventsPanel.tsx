@@ -3,7 +3,14 @@ import type { RegionEvent } from '@citygen/core';
 import { newId, useApp } from '../store.js';
 import { useT } from '../i18n/index.js';
 
-const KIND_LABELS: Record<RegionEvent['kind'], string> = { fire: 'Fire', storm: 'Storm', flood: 'Flood' };
+const KIND_LABELS: Record<RegionEvent['kind'], string> = {
+  fire: 'Fire',
+  storm: 'Storm',
+  flood: 'Flood',
+  burst: 'Main burst',
+  blackout: 'Power cut',
+  explosion: 'Gas explosion',
+};
 
 /**
  * Disasters on the timeline. Each is a circle at a point with a year; the
@@ -32,7 +39,7 @@ export function EventsPanel() {
       center: [Math.round(center[0]), Math.round(center[1])],
       radiusM,
       magnitude,
-      durationYears: kind === 'flood' ? duration : 1,
+      durationYears: kind === 'flood' || kind === 'blackout' ? duration : 1,
       ...(kind === 'flood' ? { levelM } : {}),
     };
     dispatch({ type: 'spec.patch', ops: [{ op: 'add', path: '/events/-', value: event }] });

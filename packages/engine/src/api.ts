@@ -265,6 +265,14 @@ export interface EngineStats {
     pylons: number;
     outfalls: number;
     locks: number;
+    aqueductKm: number;
+    heatKm: number;
+    telegraphKm: number;
+    telephoneKm: number;
+    exchanges: number;
+    poles: number;
+    /** Lines out of service because of a failure on the timeline. */
+    failed: number;
   };
   facilities: {
     placed: number;

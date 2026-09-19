@@ -13,6 +13,11 @@ export function utilityColours(theme: Theme): Record<string, string> {
       sewer: p.inkMuted,
       pipeline: p.ink,
       canal: p.waterLine,
+      aqueduct: p.waterLine,
+      heatMain: p.ink,
+      telegraph: p.inkMuted,
+      telephone: p.inkMuted,
+      failed: p.ink,
     };
   const dark = theme.id === 'dark';
   return {
@@ -22,6 +27,11 @@ export function utilityColours(theme: Theme): Record<string, string> {
     sewer: dark ? '#c99a6b' : '#7a4b2a',
     pipeline: dark ? '#e07070' : '#8b2e2e',
     canal: p.waterLine,
+    aqueduct: dark ? '#8fc4ea' : '#3c6f9c',
+    heatMain: dark ? '#f0965a' : '#c4581c',
+    telegraph: dark ? '#b0b0b0' : '#5a5a5a',
+    telephone: dark ? '#9fd0a0' : '#3f7a44',
+    failed: dark ? '#ff6b6b' : '#c81e1e',
   };
 }
 
@@ -83,7 +93,7 @@ export function utilityLayers(
         ['get', 'kind'],
         ['reservoir', 'canalBasin'],
         p.water,
-        'substation',
+        ['substation', 'heatPlant'],
         theme.sketch ? p.background : '#b9b9b9',
         'sewageWorks',
         theme.sketch ? p.background : '#cdc5a9',
@@ -148,6 +158,65 @@ export function utilityLayers(
   dashed('utility-gas', 'gasMain', [2, 2], c.gasMain!);
   dashed('utility-pipeline', 'pipeline', [6, 3], c.pipeline!);
   dashed('utility-sewer', 'sewer', [1, 2], c.sewer!, 10);
+  dashed('utility-heat', 'heatMain', [3, 1], c.heatMain!, 11);
+  dashed('utility-telephone', 'telephone', [1, 1], c.telephone!, 12);
+  // Telegraph wires: a hairline beside the railway.
+  out.push({
+    id: 'utility-telegraph',
+    type: 'line',
+    source: src,
+    'source-layer': 'utilities',
+    minzoom: 12,
+    filter: cls('telegraph'),
+    layout: { visibility: visible('utilities') },
+    paint: {
+      'line-color': c.telegraph!,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 17, 1],
+      'line-offset': ['interpolate', ['linear'], ['zoom'], 12, 1.5, 17, 6],
+      'line-opacity': 0.8,
+    },
+  });
+  // Aqueducts: a water channel with a casing; the arches run as a heavier, ticked line.
+  out.push({
+    id: 'utility-aqueduct-casing',
+    type: 'line',
+    source: src,
+    'source-layer': 'utilities',
+    filter: cls('aqueduct'),
+    layout: { visibility: visible('utilities'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': c.aqueduct!,
+      'line-width': width(['match', ['get', 'kind'], 'arches', 1.6, 1], 3, 7),
+      'line-opacity': 0.9,
+    },
+  });
+  out.push({
+    id: 'utility-aqueduct',
+    type: 'line',
+    source: src,
+    'source-layer': 'utilities',
+    filter: cls('aqueduct'),
+    layout: { visibility: visible('utilities'), 'line-cap': 'butt' },
+    paint: {
+      'line-color': p.water,
+      'line-width': width(1, 1.4, 3.5),
+      'line-dasharray': ['match', ['get', 'kind'], 'arches', ['literal', [1, 1]], ['literal', [1, 0]]],
+    },
+  });
+  // Failures: a line out of service is picked out in red while the failure lasts.
+  out.push({
+    id: 'utility-failed',
+    type: 'line',
+    source: src,
+    'source-layer': 'utilities',
+    filter: gm(['==', ['get', 'status'], 'failed']),
+    layout: { visibility: visible('utilities') },
+    paint: {
+      'line-color': c.failed!,
+      'line-width': width(byKind(1.6, 1), 2.4, 4.5),
+      'line-opacity': 0.85,
+    },
+  });
   out.push({
     id: 'utility-power',
     type: 'line',
@@ -177,12 +246,26 @@ export function utilityLayers(
     },
   });
   out.push({
+    id: 'utility-poles',
+    type: 'circle',
+    source: src,
+    'source-layer': 'utilityPoints',
+    minzoom: 14,
+    filter: ['==', ['get', 'kind'], 'pole'],
+    layout: { visibility: visible('utilities') },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 0.8, 17, 2],
+      'circle-color': c.telegraph!,
+      'circle-opacity': 0.8,
+    },
+  });
+  out.push({
     id: 'utility-points',
     type: 'circle',
     source: src,
     'source-layer': 'utilityPoints',
     minzoom: 11,
-    filter: gm(['!=', ['get', 'kind'], 'pylon']),
+    filter: gm(['!', ['in', ['get', 'kind'], ['literal', ['pylon', 'pole']]]]),
     layout: { visibility: visible('utilities') },
     paint: {
       'circle-radius': [
@@ -209,6 +292,12 @@ export function utilityLayers(
         c.pipeline!,
         'canal',
         c.canal!,
+        'aqueduct',
+        c.aqueduct!,
+        'heatMain',
+        c.heatMain!,
+        'telephone',
+        c.telephone!,
         p.ink,
       ],
       'circle-stroke-color': p.background,

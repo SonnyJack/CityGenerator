@@ -27,23 +27,45 @@ import { cellAt, routeCells } from './routing.js';
  * - Canals: a canal-age town away from navigable water gets a cut to the
  *   nearest river or sea, with locks where the ground changes and a basin in
  *   town; disused once the railway age has passed.
+ * - Aqueducts: a city that grew large before the waterworks age brought a
+ *   conduit from a spring on high ground, on arches where the ground drops
+ *   below the falling water line; it stays open.
+ * - Telegraph: wires on poles along the railway from 1845 until they came
+ *   down in the 1970s; telephone: an exchange in each town from 1880 with
+ *   lines under the arteries, trunk lines between the towns from 1895.
+ * - District heating: a heat plant beside the power station or the
+ *   substation of a big post-war city, with mains under the central arteries.
+ * - Failures: a burst main, a power cut or a gas explosion on the timeline
+ *   marks the lines it reached as failed while it lasts.
  *
  * Everything is a pure function of the terrain, the sites, the towns'
- * arteries and the placed facilities, so the output is stable across runs.
+ * arteries, the placed facilities and the railway, so the output is stable
+ * across runs.
  */
 
-export type UtilityClass = 'waterMain' | 'gasMain' | 'powerLine' | 'sewer' | 'pipeline' | 'canal';
+export type UtilityClass =
+  | 'waterMain'
+  | 'gasMain'
+  | 'powerLine'
+  | 'sewer'
+  | 'pipeline'
+  | 'canal'
+  | 'aqueduct'
+  | 'heatMain'
+  | 'telegraph'
+  | 'telephone';
 
 export interface UtilityLineProps {
   class: UtilityClass;
-  /** trunk | distribution | transmission | branch | oil | cut. */
+  /** trunk | distribution | transmission | branch | oil | cut | channel | arches | wire. */
   kind: string;
   settlement: string | null;
   from: string;
   to: string;
   lengthKm: number;
   built: number;
-  status: 'open' | 'disused';
+  /** `failed` while a burst, a power cut or an explosion on the timeline reaches the line. */
+  status: 'open' | 'disused' | 'failed';
   /** Hidden on player exports. */
   gmOnly: boolean;
 }
@@ -58,7 +80,12 @@ export type UtilityPointKind =
   | 'sewageWorks'
   | 'lock'
   | 'canalBasin'
-  | 'gridSupply';
+  | 'gridSupply'
+  | 'spring'
+  | 'cistern'
+  | 'pole'
+  | 'exchange'
+  | 'heatPlant';
 
 export interface UtilityPointProps {
   class: UtilityClass;
@@ -71,7 +98,7 @@ export interface UtilityPointProps {
 
 export interface UtilityAreaProps {
   class: UtilityClass;
-  kind: 'reservoir' | 'substation' | 'sewageWorks' | 'canalBasin';
+  kind: 'reservoir' | 'substation' | 'sewageWorks' | 'canalBasin' | 'heatPlant';
   settlement: string | null;
   name?: string;
   built: number;
@@ -86,6 +113,25 @@ export interface UtilityFacility {
   center: [number, number];
 }
 
+/** A railway line the telegraph follows: its geometry and years. */
+export interface UtilityRailLine {
+  id: string;
+  from: string;
+  to: string;
+  line: Ring;
+  opened: number;
+  closed?: number;
+}
+
+/** A disaster or failure on the timeline (the document's events). */
+export interface UtilityEvent {
+  kind: string;
+  year: number;
+  center: [number, number];
+  radiusM: number;
+  durationYears: number;
+}
+
 export interface UtilitiesInput {
   seed: string;
   terrain: TerrainOutput;
@@ -97,6 +143,10 @@ export interface UtilitiesInput {
   enabled?: boolean;
   /** Cut canals in the canal age (default true). */
   canals?: boolean;
+  /** Railway lines (mainlines and branches) for the telegraph to follow. */
+  railLines?: UtilityRailLine[];
+  /** Events on the timeline; bursts, power cuts and explosions mark lines as failed. */
+  events?: UtilityEvent[];
 }
 
 export interface UtilitiesOutput {
@@ -116,6 +166,14 @@ export interface UtilitiesOutput {
     pylons: number;
     outfalls: number;
     locks: number;
+    aqueductKm: number;
+    heatKm: number;
+    telegraphKm: number;
+    telephoneKm: number;
+    exchanges: number;
+    poles: number;
+    /** Lines out of service because of a failure on the timeline. */
+    failed: number;
   };
 }
 
@@ -123,16 +181,33 @@ type Pt = [number, number];
 
 /** First years of each network in a region (towns get them when large enough). */
 export const UTILITY_YEARS = {
+  aqueduct: 1100,
   canal: 1760,
   canalDisused: 1900,
   gas: 1820,
+  telegraph: 1845,
   water: 1850,
   sewer: 1860,
   waterTower: 1880,
+  telephone: 1880,
   power: 1890,
+  telephoneTrunk: 1895,
   pipeline: 1905,
   sewageWorks: 1920,
+  heat: 1955,
+  telegraphRemoved: 1975,
 } as const;
+
+/** Population at which a pre-industrial city built an aqueduct. */
+export const AQUEDUCT_POPULATION = 15_000;
+/** Population at which a post-war city gets district heating. */
+export const HEATING_POPULATION = 60_000;
+/** Utility class each failure kind takes out. */
+export const FAILURE_CLASS: Record<string, UtilityClass> = {
+  burst: 'waterMain',
+  blackout: 'powerLine',
+  explosion: 'gasMain',
+};
 
 const EMPTY = (key: string): UtilitiesOutput => ({
   key,
@@ -151,8 +226,22 @@ const EMPTY = (key: string): UtilitiesOutput => ({
     pylons: 0,
     outfalls: 0,
     locks: 0,
+    aqueductKm: 0,
+    heatKm: 0,
+    telegraphKm: 0,
+    telephoneKm: 0,
+    exchanges: 0,
+    poles: 0,
+    failed: 0,
   },
 });
+
+/** First five-year step from `from` at which the settlement had `pop` people; `year` when never. */
+function firstYearWith(site: SettlementSite, from: number, pop: number, year: number): number {
+  for (let y = Math.max(from, Math.ceil(site.founded / 5) * 5); y < year; y += 5)
+    if (populationAt(site.history, y) >= pop) return y;
+  return year;
+}
 
 const lengthOf = (pts: Ring): number => {
   let l = 0;
@@ -203,10 +292,12 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
   seedOf: (i) => i.seed,
   keyOf: (i) =>
     `${i.terrain.key}|${i.seed}|${i.year}|${i.enabled ?? true}|${i.canals ?? true}|${i.sites
-      .map((s) => `${s.id}:${s.population}:${s.radiusM.toFixed(0)}`)
+      .map((s) => `${s.id}:${s.population}:${s.radiusM.toFixed(0)}:${s.founded}`)
       .join(',')}|${i.towns.map((t) => t.key).join(',')}|${i.facilities
       .map((f) => `${f.id}@${f.center[0].toFixed(0)},${f.center[1].toFixed(0)}`)
-      .join(',')}`,
+      .join(',')}|${(i.railLines ?? [])
+      .map((l) => `${l.id}:${l.opened}:${l.closed ?? ''}:${l.line.length}`)
+      .join(',')}|${JSON.stringify(i.events ?? [])}`,
   run(input, ctx) {
     const { terrain, sites, towns, facilities, year } = input;
     if (input.enabled === false || !sites.length) return EMPTY(ctx.key);
@@ -371,7 +462,44 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
       return best;
     };
 
-    // --- Water, gas and sewers per town ---------------------------------------------------
+    /** The highest gentle ground in a ring `rMin`..`rMin + span` around a centre, at least `rise` above it. */
+    const highGround = (centre: Pt, rMin: number, span: number, rise: number): Pt | null => {
+      let best: Pt | null = null;
+      let bestScore = -Infinity;
+      const rMax = rMin + span;
+      for (let k = 0; k < 48; k++) {
+        const a = (k / 48) * Math.PI * 2 + rng.next() * 0.05;
+        const d = rMin + ((rMax - rMin) * ((k * 7) % 12)) / 12;
+        const p: Pt = [centre[0] + Math.cos(a) * d, centre[1] + Math.sin(a) * d];
+        const [c, r] = cellAt(terrain, p[0], p[1]);
+        if (c <= 1 || r <= 1 || c >= width - 2 || r >= rows - 2) continue;
+        const ci = r * width + c;
+        if (!isLand(ci) || slope[ci]! > 0.25) continue;
+        const score = height.data[ci]! - d * 0.004;
+        if (score > bestScore) {
+          bestScore = score;
+          best = p;
+        }
+      }
+      return best && hAt(best) > hAt(centre) + rise ? best : null;
+    };
+    /** The artery vertex nearest a point within `maxM`, or the point itself. */
+    const onArtery = (arteries: Ring[], p: Pt, maxM: number): Pt => {
+      let best = p;
+      let bestD = maxM;
+      for (const a of arteries)
+        for (const q of a) {
+          const d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          if (d < bestD) {
+            bestD = d;
+            best = q;
+          }
+        }
+      return best;
+    };
+    const exchanges = new Map<string, { p: Pt; built: number }>();
+
+    // --- Aqueducts, water, gas, telephone and sewers per town ------------------------------
     sites.forEach((site, i) => {
       const town = towns[i];
       if (!town) return;
@@ -379,6 +507,60 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
       const big = pop >= 20_000;
       const centre = site.center;
       const arteries = arteriesOf(town, big);
+
+      // Aqueduct: a city that passed the threshold before the waterworks age brought water
+      // from a spring on high ground; the conduit falls steadily and rides on arches wherever
+      // the ground drops away beneath that line.
+      const aqueductYear = firstYearWith(site, UTILITY_YEARS.aqueduct, AQUEDUCT_POPULATION, year);
+      if (aqueductYear < Math.min(year, UTILITY_YEARS.water)) {
+        const spring = highGround(centre, site.radiusM * 1.2 + 300, 3_000, 15);
+        const channel = spring ? route(spring, centre, mainCost) : [];
+        if (spring && channel.length >= 2) {
+          const total = lengthOf(channel);
+          const h0 = hAt(spring);
+          const h1 = hAt(centre) + 6;
+          const modes: ('channel' | 'arches')[] = [];
+          let walked = 0;
+          for (let k = 0; k < channel.length; k++) {
+            if (k > 0)
+              walked += Math.hypot(channel[k]![0] - channel[k - 1]![0], channel[k]![1] - channel[k - 1]![1]);
+            const waterLine = h0 - (h0 - h1) * (walked / total);
+            modes.push(waterLine - hAt(channel[k]!) > 3 ? 'arches' : 'channel');
+          }
+          // Short runs adopt their neighbour's mode so the arches come in stretches.
+          for (let k = 1; k < modes.length - 1; k++)
+            if (modes[k] !== modes[k - 1] && modes[k] !== modes[k + 1]) modes[k] = modes[k - 1]!;
+          let start = 0;
+          for (let k = 1; k <= channel.length; k++) {
+            if (k < channel.length && modes[k] === modes[start]) continue;
+            line(
+              channel.slice(start, k + 1 > channel.length ? channel.length : k + 1),
+              {
+                class: 'aqueduct',
+                kind: modes[start]!,
+                settlement: site.id,
+                from: `${site.id}-spring`,
+                to: site.id,
+                built: aqueductYear,
+                status: 'open',
+                gmOnly: false,
+              },
+              'aqueduct',
+            );
+            start = k;
+          }
+          point(
+            spring,
+            { class: 'aqueduct', kind: 'spring', settlement: site.id, built: aqueductYear, gmOnly: false },
+            'spring',
+          );
+          point(
+            channel[channel.length - 1]!,
+            { class: 'aqueduct', kind: 'cistern', settlement: site.id, built: aqueductYear, gmOnly: false },
+            'cistern',
+          );
+        }
+      }
 
       // Water supply.
       if (year >= UTILITY_YEARS.water && pop >= 5_000) {
@@ -392,25 +574,8 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
           sourceId = works.id;
         } else {
           // A reservoir on the highest ground in a ring beyond the built-up area.
-          let best: Pt | null = null;
-          let bestScore = -Infinity;
-          const rMin = site.radiusM * 1.2 + 300;
-          const rMax = rMin + 2_000;
-          for (let k = 0; k < 48; k++) {
-            const a = (k / 48) * Math.PI * 2 + rng.next() * 0.05;
-            const d = rMin + ((rMax - rMin) * ((k * 7) % 12)) / 12;
-            const p: Pt = [centre[0] + Math.cos(a) * d, centre[1] + Math.sin(a) * d];
-            const [c, r] = cellAt(terrain, p[0], p[1]);
-            if (c <= 1 || r <= 1 || c >= width - 2 || r >= rows - 2) continue;
-            const ci = r * width + c;
-            if (!isLand(ci) || slope[ci]! > 0.25) continue;
-            const score = height.data[ci]! - d * 0.004;
-            if (score > bestScore) {
-              bestScore = score;
-              best = p;
-            }
-          }
-          if (best && hAt(best) > hAt(centre) + 5) {
+          const best = highGround(centre, site.radiusM * 1.2 + 300, 2_000, 5);
+          if (best) {
             source = best;
             sourceId = `${site.id}-reservoir`;
             area(
@@ -536,6 +701,33 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
         }
       }
 
+      // Telephone: an exchange on the central artery, lines under the arteries.
+      if (year >= UTILITY_YEARS.telephone && pop >= 3_000) {
+        const built = firstYearWith(site, UTILITY_YEARS.telephone, 3_000, year);
+        const exchange = onArtery(arteries, centre, 250);
+        exchanges.set(site.id, { p: exchange, built });
+        point(
+          exchange,
+          { class: 'telephone', kind: 'exchange', settlement: site.id, built, gmOnly: false },
+          'exchange',
+        );
+        for (const a of arteries)
+          line(
+            a,
+            {
+              class: 'telephone',
+              kind: 'distribution',
+              settlement: site.id,
+              from: site.id,
+              to: site.id,
+              built,
+              status: 'open',
+              gmOnly: false,
+            },
+            'telephone',
+          );
+      }
+
       // Sewers (GM only): downhill to the nearest water.
       if (year >= UTILITY_YEARS.sewer && (pop >= 5_000 || (year >= 1920 && pop >= 2_000))) {
         const target = nearestWater(centre, [WATER.sea, WATER.river, WATER.lake], 6_000);
@@ -629,6 +821,7 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
     });
 
     // --- Electricity: a chain of transmission lines from the source ------------------------
+    const subOf = new Map<string, Pt>();
     if (year >= UTILITY_YEARS.power) {
       const served = sites
         .map((s, i) => ({ s, i }))
@@ -638,7 +831,6 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
         const hub = served[0]!.s;
         const station = nearestFacility('industry.power', hub.center, 40_000);
         // Substation sites: at the edge of each town, facing the source.
-        const subOf = new Map<string, Pt>();
         const substationFor = (s: SettlementSite, towards: Pt): Pt => {
           const cached = subOf.get(s.id);
           if (cached) return cached;
@@ -757,6 +949,137 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
       ctx.checkpoint();
     }
 
+    // --- District heating: a plant by the power station or the substation of a big city ------
+    if (year >= UTILITY_YEARS.heat)
+      sites.forEach((site, i) => {
+        const town = towns[i];
+        if (!town || site.population < HEATING_POPULATION) return;
+        const centre = site.center;
+        const built = Math.max(
+          UTILITY_YEARS.heat,
+          firstYearWith(site, UTILITY_YEARS.heat, HEATING_POPULATION, year),
+        );
+        const station = nearestFacility('industry.power', centre, site.radiusM + 3_000);
+        let plant: Pt | null = null;
+        let plantId = '';
+        if (station) {
+          plant = station.center;
+          plantId = station.id;
+        } else {
+          const sub = subOf.get(site.id);
+          if (!sub) return;
+          const d = Math.hypot(sub[0] - centre[0], sub[1] - centre[1]) || 1;
+          const dir: Pt = [(sub[0] - centre[0]) / d, (sub[1] - centre[1]) / d];
+          const p: Pt = [sub[0] + dir[0] * 160, sub[1] + dir[1] * 160];
+          if (!isLand(idx(p))) return;
+          plant = p;
+          plantId = `${site.id}-heat-plant`;
+          area(
+            rect(p, 110, 70, Math.atan2(dir[1], dir[0])),
+            { class: 'heatMain', kind: 'heatPlant', settlement: site.id, built, gmOnly: false },
+            'heat',
+          );
+          point(
+            p,
+            { class: 'heatMain', kind: 'heatPlant', settlement: site.id, built, gmOnly: false },
+            'heat',
+          );
+        }
+        line(
+          route(plant, centre, mainCost),
+          {
+            class: 'heatMain',
+            kind: 'trunk',
+            settlement: site.id,
+            from: plantId,
+            to: site.id,
+            built,
+            status: 'open',
+            gmOnly: false,
+          },
+          'heat',
+        );
+        // Mains under the arteries of the dense centre only.
+        for (const a of arteriesOf(town, true)) {
+          const mid = a[Math.floor(a.length / 2)]!;
+          if (Math.hypot(mid[0] - centre[0], mid[1] - centre[1]) > site.radiusM * 0.55) continue;
+          line(
+            a,
+            {
+              class: 'heatMain',
+              kind: 'distribution',
+              settlement: site.id,
+              from: site.id,
+              to: site.id,
+              built,
+              status: 'open',
+              gmOnly: false,
+            },
+            'heat',
+          );
+        }
+        ctx.checkpoint();
+      });
+
+    // --- Telephone trunks: a chain from the biggest exchange over the others ------------------
+    if (year >= UTILITY_YEARS.telephoneTrunk && exchanges.size >= 2) {
+      const order = sites.filter((s) => exchanges.has(s.id)).sort((a, b) => b.population - a.population);
+      const nodes = [order[0]!];
+      const pending = order.slice(1);
+      while (pending.length) {
+        let best: { from: SettlementSite; to: SettlementSite; d: number } | null = null;
+        for (const a of nodes)
+          for (const b of pending) {
+            const d = Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1]);
+            if (!best || d < best.d) best = { from: a, to: b, d };
+          }
+        if (!best) break;
+        pending.splice(pending.indexOf(best.to), 1);
+        nodes.push(best.to);
+        const ea = exchanges.get(best.from.id)!;
+        const eb = exchanges.get(best.to.id)!;
+        line(
+          route(ea.p, eb.p, mainCost),
+          {
+            class: 'telephone',
+            kind: 'trunk',
+            settlement: best.to.id,
+            from: best.from.id,
+            to: best.to.id,
+            built: Math.max(UTILITY_YEARS.telephoneTrunk, ea.built, eb.built),
+            status: 'open',
+            gmOnly: false,
+          },
+          'telephone',
+        );
+      }
+      ctx.checkpoint();
+    }
+
+    // --- Telegraph: wires on poles along the railway, until they came down ----------------
+    if (year >= UTILITY_YEARS.telegraph && year < UTILITY_YEARS.telegraphRemoved)
+      for (const rl of input.railLines ?? []) {
+        if (rl.closed !== undefined && rl.closed <= year) continue;
+        const built = Math.max(UTILITY_YEARS.telegraph, rl.opened);
+        const f = line(
+          rl.line,
+          {
+            class: 'telegraph',
+            kind: 'wire',
+            settlement: null,
+            from: rl.from,
+            to: rl.to,
+            built,
+            status: 'open',
+            gmOnly: false,
+          },
+          'telegraph',
+        );
+        if (f)
+          for (const p of alongLine(rl.line, 150, 60))
+            point(p, { class: 'telegraph', kind: 'pole', settlement: null, built, gmOnly: false }, 'pole');
+      }
+
     // --- Pipelines: refinery to the nearest port -------------------------------------------
     if (year >= UTILITY_YEARS.pipeline)
       for (const refinery of facilitiesOf('industry.refinery')) {
@@ -860,6 +1183,21 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
         }
       });
 
+    // --- Failures on the timeline: the lines a burst, a cut or an explosion reached ----------
+    for (const e of input.events ?? []) {
+      const cls = FAILURE_CLASS[e.kind];
+      if (!cls || year < e.year || year >= e.year + e.durationYears) continue;
+      for (const l of lines) {
+        if (l.properties.class !== cls) continue;
+        if (
+          l.geometry.coordinates.some(
+            (c) => Math.hypot(c[0]! - e.center[0], c[1]! - e.center[1]) <= e.radiusM,
+          )
+        )
+          l.properties.status = 'failed';
+      }
+    }
+
     const km = (cls: UtilityClass) =>
       lines.filter((l) => l.properties.class === cls).reduce((a, l) => a + l.properties.lengthKm, 0);
     const count = (kind: UtilityPointKind) => points.filter((p) => p.properties.kind === kind).length;
@@ -880,6 +1218,13 @@ export const utilitiesStage = defineStage<UtilitiesInput, UtilitiesOutput>({
         pylons: count('pylon'),
         outfalls: count('outfall'),
         locks: count('lock'),
+        aqueductKm: km('aqueduct'),
+        heatKm: km('heatMain'),
+        telegraphKm: km('telegraph'),
+        telephoneKm: km('telephone'),
+        exchanges: count('exchange'),
+        poles: count('pole'),
+        failed: lines.filter((l) => l.properties.status === 'failed').length,
       },
     };
   },

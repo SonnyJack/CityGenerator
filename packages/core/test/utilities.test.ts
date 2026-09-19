@@ -15,6 +15,7 @@ import {
   type SettlementSpec,
   type TerrainOutput,
   type UtilitiesOutput,
+  type UtilityEvent,
   type UtilityFacility,
 } from '../src/index.js';
 
@@ -45,7 +46,13 @@ const eras: EraParams[] = [
 
 const runner = new StageRunner();
 
-async function region(seed: string, year: number, preset: 'bay' | 'plains', specs: SettlementSpec[]) {
+async function region(
+  seed: string,
+  year: number,
+  preset: 'bay' | 'plains',
+  specs: SettlementSpec[],
+  events: UtilityEvent[] = [],
+) {
   const extent = { widthM: 16_000, heightM: 12_000 };
   const terrain = await runner.run(terrainStage, {
     seed,
@@ -115,6 +122,15 @@ async function region(seed: string, year: number, preset: 'bay' | 'plains', spec
       center: [x / (ring.length - 1), y / (ring.length - 1)],
     };
   });
+  const railLines = rail.tracks.features
+    .filter((t) => t.properties.class === 'mainline' || t.properties.class === 'branch')
+    .map((t) => ({
+      id: String(t.id),
+      from: t.properties.from,
+      to: t.properties.to,
+      line: t.geometry.coordinates as [number, number][],
+      opened: t.properties.opened,
+    }));
   const utilities = await runner.run(utilitiesStage, {
     seed,
     terrain,
@@ -122,8 +138,10 @@ async function region(seed: string, year: number, preset: 'bay' | 'plains', spec
     towns,
     facilities: list,
     year,
+    railLines,
+    ...(events.length ? { events } : {}),
   });
-  return { terrain, siting, towns, facilities: list, utilities };
+  return { terrain, siting, towns, facilities: list, utilities, railLines };
 }
 
 const BAY: SettlementSpec[] = [
@@ -194,9 +212,18 @@ describe('utilities stage', () => {
     ).toBe(false);
     // Every feature has a class, and points are inside the region.
     for (const p of u.points.features) {
-      expect(['waterMain', 'gasMain', 'powerLine', 'sewer', 'pipeline', 'canal']).toContain(
-        p.properties.class,
-      );
+      expect([
+        'waterMain',
+        'gasMain',
+        'powerLine',
+        'sewer',
+        'pipeline',
+        'canal',
+        'aqueduct',
+        'heatMain',
+        'telegraph',
+        'telephone',
+      ]).toContain(p.properties.class);
       expect(Math.abs(p.geometry.coordinates[0]!)).toBeLessThanOrEqual(8_000);
     }
   });
@@ -210,6 +237,7 @@ describe('utilities stage', () => {
       towns: a.towns,
       facilities: a.facilities,
       year: 1925,
+      railLines: a.railLines,
     });
     expect(contentHash(b.lines)).toBe(contentHash(a.utilities.lines));
     expect(contentHash(b.points)).toBe(contentHash(a.utilities.points));
@@ -227,6 +255,107 @@ describe('utilities stage', () => {
     const s = early.utilities.stats;
     expect(s.waterKm + s.gasKm + s.powerKm + s.sewerKm + s.pipelineKm).toBe(0);
   });
+
+  it('brings an aqueduct on arches to a pre-industrial city, wires the railway age, heats a post-war city and marks failures', async () => {
+    // 1780: a city that passed the aqueduct threshold centuries before the waterworks age.
+    const old = await region('util-old', 1780, 'plains', [
+      { id: 'city', kind: 'city', population: 40_000, layout: { streetPattern: 'mixed' }, features: [] },
+    ]);
+    const city = old.siting.sites[0]!;
+    const aq = old.utilities.lines.features.filter((l) => l.properties.class === 'aqueduct');
+    expect(aq.length).toBeGreaterThanOrEqual(2);
+    expect(aq.some((l) => l.properties.kind === 'arches')).toBe(true);
+    expect(aq.some((l) => l.properties.kind === 'channel')).toBe(true);
+    for (const l of aq) {
+      expect(l.properties.built).toBeGreaterThanOrEqual(city.founded);
+      expect(l.properties.built).toBeLessThan(1780);
+      expect(l.properties.status).toBe('open');
+      expect(onLandOrRiver(old.terrain, l.geometry.coordinates as [number, number][])).toBe(true);
+    }
+    const spring = old.utilities.points.features.find((p) => p.properties.kind === 'spring')!;
+    const cistern = old.utilities.points.features.find((p) => p.properties.kind === 'cistern')!;
+    const hAt = (p: number[]) => {
+      const c = Math.round(old.terrain.height.col(p[0]!));
+      const r = Math.round(old.terrain.height.row(p[1]!));
+      return old.terrain.height.data[r * old.terrain.height.width + c]!;
+    };
+    expect(hAt(spring.geometry.coordinates)).toBeGreaterThan(hAt(cistern.geometry.coordinates) + 10);
+    expect(
+      Math.hypot(
+        cistern.geometry.coordinates[0]! - city.center[0],
+        cistern.geometry.coordinates[1]! - city.center[1],
+      ),
+    ).toBeLessThan(50);
+    const s0 = old.utilities.stats;
+    expect(s0.aqueductKm).toBeGreaterThan(1);
+    expect(s0.telegraphKm + s0.telephoneKm + s0.heatKm).toBe(0);
+
+    // 1925: telegraph wires and poles along the railway, an exchange per town and a trunk between them.
+    const mid = await region('util-bay', 1925, 'bay', BAY);
+    const s1 = mid.utilities.stats;
+    expect(mid.railLines.length).toBeGreaterThan(0);
+    expect(s1.telegraphKm).toBeGreaterThan(5);
+    expect(s1.poles).toBeGreaterThan(20);
+    for (const l of mid.utilities.lines.features.filter((l) => l.properties.class === 'telegraph'))
+      expect(l.properties.built).toBeGreaterThanOrEqual(1845);
+    expect(s1.exchanges).toBe(2);
+    const trunks = mid.utilities.lines.features.filter(
+      (l) => l.properties.class === 'telephone' && l.properties.kind === 'trunk',
+    );
+    expect(trunks).toHaveLength(1);
+    expect(trunks[0]!.properties.built).toBeGreaterThanOrEqual(1895);
+    expect(onLandOrRiver(mid.terrain, trunks[0]!.geometry.coordinates as [number, number][])).toBe(true);
+    expect(s1.heatKm).toBe(0);
+    // Everything the failures could touch is in service.
+    expect(s1.failed).toBe(0);
+
+    // 2020: district heating for a big city; a burst main in 2019 lasting three years takes out
+    // the mains it reached; a power cut in 2010 is over.
+    const now = await region(
+      'util-new',
+      2020,
+      'plains',
+      [
+        { id: 'city', kind: 'city', population: 150_000, layout: { streetPattern: 'mixed' }, features: [] },
+        { id: 'town', kind: 'town', population: 8_000, layout: { streetPattern: 'mixed' }, features: [] },
+      ],
+      [
+        { kind: 'burst', year: 2019, center: [0, 0], radiusM: 600, durationYears: 3 },
+        { kind: 'blackout', year: 2010, center: [0, 0], radiusM: 3000, durationYears: 1 },
+      ],
+    );
+    const s2 = now.utilities.stats;
+    expect(s2.heatKm).toBeGreaterThan(5);
+    expect(s2.telegraphKm).toBe(0);
+    const heat = now.utilities.lines.features.filter((l) => l.properties.class === 'heatMain');
+    expect(heat.some((l) => l.properties.kind === 'trunk')).toBe(true);
+    expect(heat.every((l) => l.properties.settlement === 'city' && l.properties.built >= 1955)).toBe(true);
+    const failed = now.utilities.lines.features.filter((l) => l.properties.status === 'failed');
+    expect(failed.length).toBeGreaterThan(0);
+    expect(s2.failed).toBe(failed.length);
+    expect(failed.every((l) => l.properties.class === 'waterMain')).toBe(true);
+    for (const l of failed)
+      expect(l.geometry.coordinates.some((c) => Math.hypot(c[0]!, c[1]!) <= 600)).toBe(true);
+    expect(
+      now.utilities.lines.features.some(
+        (l) => l.properties.class === 'powerLine' && l.properties.status === 'failed',
+      ),
+    ).toBe(false);
+    // Class list on every feature.
+    for (const p of now.utilities.points.features)
+      expect([
+        'waterMain',
+        'gasMain',
+        'powerLine',
+        'sewer',
+        'pipeline',
+        'canal',
+        'aqueduct',
+        'heatMain',
+        'telegraph',
+        'telephone',
+      ]).toContain(p.properties.class);
+  }, 300_000);
 
   it('cuts a canal with locks from an inland canal-age town to the nearest water', async () => {
     const specs: SettlementSpec[] = [

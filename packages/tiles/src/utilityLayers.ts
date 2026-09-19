@@ -13,6 +13,7 @@ type AnyFc = FeatureCollection<Geometry, Record<string, unknown>>;
 export function utilityLayers(utilities: UtilitiesOutput | null): TileLayerInput[] {
   const empty: AnyFc = { type: 'FeatureCollection', features: [] };
   const lines = (utilities?.lines.features ?? []) as unknown as AnyFc['features'];
+  const points = (utilities?.points.features ?? []) as unknown as AnyFc['features'];
   const fine = (f: AnyFc['features'][number]) =>
     f.properties.kind === 'distribution' || f.properties.kind === 'branch';
   return [
@@ -22,7 +23,17 @@ export function utilityLayers(utilities: UtilitiesOutput | null): TileLayerInput
       minZoom: 9,
     },
     { name: 'utilities', features: { type: 'FeatureCollection', features: lines.filter(fine) }, minZoom: 13 },
-    { name: 'utilityPoints', features: (utilities?.points ?? empty) as unknown as AnyFc, minZoom: 11 },
+    {
+      name: 'utilityPoints',
+      features: { type: 'FeatureCollection', features: points.filter((f) => f.properties.kind !== 'pole') },
+      minZoom: 11,
+    },
+    // Telegraph poles every 150 m along the railway: only when the map is close enough.
+    {
+      name: 'utilityPoints',
+      features: { type: 'FeatureCollection', features: points.filter((f) => f.properties.kind === 'pole') },
+      minZoom: 14,
+    },
     { name: 'utilityAreas', features: (utilities?.areas ?? empty) as unknown as AnyFc, minZoom: 11 },
   ];
 }

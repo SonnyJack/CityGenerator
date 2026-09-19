@@ -157,7 +157,7 @@ export const TOOL_SCHEMAS = {
   }),
   remove_settlement: z.object({ id: z.string() }),
   add_event: z.object({
-    kind: z.enum(['fire', 'storm', 'flood']),
+    kind: z.enum(['fire', 'storm', 'flood', 'burst', 'blackout', 'explosion']),
     year: z.number().int().min(1100).max(2100),
     x: xy,
     y: xy,
@@ -230,7 +230,7 @@ export const TOOL_DESCRIPTIONS: Record<ToolName, string> = {
   add_settlement: 'Add a settlement at a point; the engine lays it out.',
   remove_settlement: 'Remove a settlement by id.',
   add_event:
-    'Put a disaster on the timeline: a fire (burnt buildings rebuild over the following years), a storm (damage that heals) or a flood (low ground under water for a while). Centre, radius and year.',
+    'Put a disaster or a utility failure on the timeline: a fire (burnt buildings rebuild over the following years), a storm (damage that heals), a flood (low ground under water for a while), a burst water main, a power cut, or a gas explosion (a small fire that also takes out the gas mains it reached). Centre, radius and year.',
   remove_event: 'Remove a disaster by id.',
   floor_plan:
     'Rooms, doors, windows and stairs of a building or a facility part (warehouse, hall, ward, cell block, terminal…), floor by floor, generated from its footprint, use and era. Use it to describe an interior or plan a scene.',

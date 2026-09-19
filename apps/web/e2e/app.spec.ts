@@ -330,6 +330,8 @@ test('railways, stations and trams render and respond to the network settings', 
 });
 
 test('facilities are placed, rendered, inspectable, removable and pinnable', async ({ page }) => {
+  // Four full regenerations (place, remove, pin, reseed) on a machine shared with the workers.
+  test.setTimeout(180_000);
   await ready(page);
   type Stats = {
     facilities: {

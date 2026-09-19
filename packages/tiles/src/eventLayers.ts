@@ -3,7 +3,7 @@ import type { TileLayerInput } from './builder.js';
 
 export interface EventLike {
   id: string;
-  kind: 'fire' | 'storm' | 'flood';
+  kind: 'fire' | 'storm' | 'flood' | 'burst' | 'blackout' | 'explosion';
   year: number;
   center: [number, number];
   radiusM: number;
@@ -20,7 +20,7 @@ export interface EventLike {
 export function eventLayers(events: EventLike[], year: number): TileLayerInput[] {
   const features: Feature<Polygon, Record<string, unknown>>[] = [];
   for (const e of events) {
-    const span = e.kind === 'flood' ? e.durationYears : e.kind === 'fire' ? 5 : 1;
+    const span = e.kind === 'flood' || e.kind === 'blackout' ? e.durationYears : e.kind === 'fire' ? 5 : 1;
     if (year < e.year || year >= e.year + span) continue;
     const n = 48;
     const ring: [number, number][] = [];

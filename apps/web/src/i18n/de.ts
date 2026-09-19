@@ -322,6 +322,11 @@ export const de: Record<string, string> = {
   Stations: 'Bahnhöfe',
   Stop: 'Stopp',
   Storm: 'Sturm',
+  'Main burst': 'Rohrbruch',
+  'Power cut': 'Stromausfall',
+  'Gas explosion': 'Gasexplosion',
+  'aqueducts {aqueduct} km · telephone {telephone} km ({exchanges} exchanges) · telegraph {telegraph} km · heating {heat} km · {failed} lines failed':
+    'Aquädukte {aqueduct} km · Telefon {telephone} km ({exchanges} Vermittlungen) · Telegraf {telegraph} km · Fernwärme {heat} km · {failed} Leitungen ausgefallen',
   Street: 'Straße',
   'Stroke amount': 'Strichstärke',
   'Stroke delta': 'Strichdelta',
