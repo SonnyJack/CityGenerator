@@ -31,6 +31,8 @@ export interface ExportModel {
   streets: FeatureCollection<LineString, Props>;
   ways: FeatureCollection<LineString, Props>;
   walls: FeatureCollection<LineString, Props>;
+  /** Field boundaries in the farm belts. */
+  hedges?: FeatureCollection<LineString, Props>;
   roads: FeatureCollection<LineString, Props>;
   /** Bridges: regional roads over rivers and town streets across them. */
   bridges?: FeatureCollection<LineString, Props>;

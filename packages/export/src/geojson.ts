@@ -21,6 +21,7 @@ export function exportGeoJson(
     ['patches', model.patches],
     ['streets', model.streets],
     ['walls', model.walls],
+    ['hedges', (model.hedges ?? { type: 'FeatureCollection', features: [] }) as typeof model.roads],
     ['roads', model.roads],
     ['bridges', (model.bridges ?? { type: 'FeatureCollection', features: [] }) as typeof model.roads],
     ['rail', model.rail],

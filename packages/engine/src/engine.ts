@@ -998,6 +998,12 @@ export function createEngine(): EngineApi {
           ...(latest.roads?.bridges.features ?? []),
           ...towns.flatMap((t) => t.bridges.features),
         ] as unknown as Feature<LineString, Record<string, unknown>>[]),
+        hedges: fc(
+          towns.flatMap((t) => t.hedges.features) as unknown as Feature<
+            LineString,
+            Record<string, unknown>
+          >[],
+        ),
         rail: fc([
           ...(latest.rail?.tracks.features ?? []),
           ...facilities.spurs.features,

@@ -113,6 +113,7 @@ const CLASS_RANK: Record<string, number> = {
   collector: 2,
   motorway: 5,
   street: 1,
+  lane: 0.5,
   steps: 0,
 };
 

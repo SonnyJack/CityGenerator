@@ -173,7 +173,7 @@ export const tramStage = defineStage<TramInput, TramOutput>({
     const graph = new StreetGraph();
     for (const st of town.streets.features) {
       const cls = st.properties.class;
-      if (cls === 'motorway' || cls === 'steps') continue;
+      if (cls === 'motorway' || cls === 'steps' || cls === 'lane') continue;
       const mult = cls === 'artery' ? 1 : cls === 'road' ? 1.1 : cls === 'collector' ? 1.25 : 2.5;
       const c = st.geometry.coordinates;
       for (let i = 1; i < c.length; i++) {

@@ -183,7 +183,11 @@ with the modern street patterns, which change the block count materially.
       tunnels on the regional roads: a road keeps a ruling gradient of 8 %
       on the profile the railways use, and each run of one earthwork is a
       feature of its own, styled per theme and in the SVG export.
-- [ ] Deferred: field subdivision and country lanes.
+- [x] Field subdivision and country lanes: every farm holding in the belt
+      is cut into strip fields across its long axis with a hedge on each
+      boundary (a `hedges` layer, thin and muted per theme, in the SVG and
+      GeoJSON), and a holding no road or artery touches gets a `lane` along
+      the patch edges to the nearest of them, lanes sharing their way.
 
 Acceptance (met): overlays show coherent gradients (dense centres, wealth on
 the hills, waterfront and the upwind side, poverty by flood-prone low ground)

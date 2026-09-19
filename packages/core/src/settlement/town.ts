@@ -9,6 +9,7 @@ import {
   distToRing,
   inset,
   open,
+  orientedBox,
   pointInRing,
   type Pt,
 } from '../geometry/polygon.js';
@@ -113,7 +114,7 @@ export interface TownOutput {
     LineString,
     {
       settlement: string;
-      class: 'artery' | 'street' | 'steps' | 'road' | 'collector' | 'motorway';
+      class: 'artery' | 'street' | 'steps' | 'lane' | 'road' | 'collector' | 'motorway';
       built?: number;
     }
   >;
@@ -121,6 +122,8 @@ export interface TownOutput {
   gates: FeatureCollection<Point, { settlement: string; kind: 'gate' | 'tower' }>;
   /** Where a street crosses a river: an artery's bridge in the core, a radial's in the rings. */
   bridges: FeatureCollection<LineString, { settlement: string; kind: 'bridge' }>;
+  /** Field boundaries in the farm belt: the strips and the edges of each holding. */
+  hedges: FeatureCollection<LineString, { settlement: string; kind: 'hedge' }>;
   blocks: BlockRecipe[];
   stats: {
     patches: number;
@@ -646,7 +649,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
     let streetsKm = 0;
     const pushLine = (
       pts: Ring,
-      cls: 'artery' | 'street' | 'steps' | 'road' | 'collector' | 'motorway',
+      cls: 'artery' | 'street' | 'steps' | 'lane' | 'road' | 'collector' | 'motorway',
       k: number | string,
       built = history.founded,
     ) => {
@@ -661,6 +664,68 @@ export const townStage = defineStage<TownInput, TownOutput>({
     };
     arteries.forEach((a, k) => pushLine(a, 'artery', k));
     roads.forEach((r, k) => pushLine(r, 'road', k));
+    // Country lanes: each farm holding that no road or artery touches gets a lane along patch
+    // edges to the nearest of them; lanes share their way where they can.
+    const hedgeFeatures: TownOutput['hedges']['features'] = [];
+    {
+      const served = new Set<string>();
+      for (const path of [...arteries, ...roads]) for (const v of path) served.add(graph.key(v));
+      const laneEdges = new Set<string>();
+      let laneCount = 0;
+      const fieldRng = rng.fork('fields');
+      for (const p of patches) {
+        if (p.inner || p.ward !== 'farm') continue;
+        const keys = p.ring.map((v) => graph.key(v));
+        if (keys.some((k) => served.has(k))) continue;
+        // Start from the vertex nearest the centre: the lane heads for the town.
+        const start = keys.reduce((best, k) => {
+          const a = graph.point(k);
+          const b = graph.point(best);
+          return Math.hypot(a[0] - cx, a[1] - cy) < Math.hypot(b[0] - cx, b[1] - cy) ? k : best;
+        }, keys[0]!);
+        const path = graph.shortestPath(
+          start,
+          served,
+          (ek) => (laneEdges.has(ek) ? 0.5 : 1) * bridgeFactor(ek),
+          slopeAt(height, slope),
+        );
+        let len = 0;
+        for (let i = 1; i < path.length; i++)
+          len += Math.hypot(path[i]![0] - path[i - 1]![0], path[i]![1] - path[i - 1]![1]);
+        if (path.length < 2 || len > 600) continue;
+        // Only the stretch not already a lane is new.
+        let from = 0;
+        for (let i = 1; i < path.length; i++) {
+          const ek = graph.edgeKey(path[i - 1]!, path[i]!);
+          if (laneEdges.has(ek)) {
+            if (i - from >= 2) pushLine(path.slice(from, i), 'lane', laneCount++);
+            from = i;
+          }
+          laneEdges.add(ek);
+        }
+        if (path.length - from >= 2) pushLine(path.slice(from), 'lane', laneCount++);
+        for (const v of path) served.add(graph.key(v));
+        // Strip fields: the holding cut across its long axis, a hedge on every boundary.
+        const box = orientedBox(p.ring);
+        const stripW = fieldRng.fork(`strip:${p.index}`).range(35, 70);
+        const perp: Pt = [-box.axis[1], box.axis[0]];
+        const hedge = (a: Pt, b: Pt) =>
+          hedgeFeatures.push({
+            type: 'Feature',
+            id: `${id}-hedge-${hedgeFeatures.length}`,
+            geometry: { type: 'LineString', coordinates: [a, b] },
+            properties: { settlement: id, kind: 'hedge' },
+          });
+        for (let u = -box.length / 2 + stripW; u < box.length / 2 - stripW * 0.5; u += stripW) {
+          const c: Pt = [box.center[0] + box.axis[0] * u, box.center[1] + box.axis[1] * u];
+          const reach = box.width;
+          const a: Pt = [c[0] - perp[0] * reach, c[1] - perp[1] * reach];
+          const b: Pt = [c[0] + perp[0] * reach, c[1] + perp[1] * reach];
+          for (const [q0, q1] of chords(p.ring, a, b)) hedge(q0, q1);
+        }
+        for (let i = 0; i < p.ring.length; i++) hedge(p.ring[i]!, p.ring[(i + 1) % p.ring.length]!);
+      }
+    }
     // Minor streets: every inner patch edge not already an artery.
     const seenEdges = new Set<string>();
     for (const p of inner) {
@@ -896,6 +961,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       streets: { type: 'FeatureCollection', features: streetFeatures },
       walls: { type: 'FeatureCollection', features: wallFeatures },
       gates: { type: 'FeatureCollection', features: gateFeatures },
+      hedges: { type: 'FeatureCollection', features: hedgeFeatures },
       bridges: {
         type: 'FeatureCollection',
         features: bridgeSpans.map(([a, b], k) => ({
@@ -923,6 +989,37 @@ export const townStage = defineStage<TownInput, TownOutput>({
     };
   },
 });
+
+/** The stretches of the line a→b that lie inside the ring (pairs of crossings along it). */
+function chords(ring: Ring, a: Pt, b: Pt): [Pt, Pt][] {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const ts: number[] = [];
+  const n = ring.length;
+  for (let i = 0; i < n; i++) {
+    const p = ring[i]!;
+    const q = ring[(i + 1) % n]!;
+    const ex = q[0] - p[0];
+    const ey = q[1] - p[1];
+    const den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((p[0] - a[0]) * ey - (p[1] - a[1]) * ex) / den;
+    const u = ((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / den;
+    if (u >= 0 && u < 1) ts.push(t);
+  }
+  ts.sort((x, y) => x - y);
+  const out: [Pt, Pt][] = [];
+  for (let i = 0; i + 1 < ts.length; i += 2) {
+    const t0 = ts[i]!;
+    const t1 = ts[i + 1]!;
+    if ((t1 - t0) * Math.hypot(dx, dy) < 8) continue;
+    out.push([
+      [a[0] + dx * t0, a[1] + dy * t0],
+      [a[0] + dx * t1, a[1] + dy * t1],
+    ]);
+  }
+  return out;
+}
 
 function median(values: number[]): number {
   if (!values.length) return 0;

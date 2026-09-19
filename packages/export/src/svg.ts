@@ -106,6 +106,14 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
     'facilities',
     `stroke="${p.inkMuted}" stroke-width="0.6" stroke-dasharray="4 2"`,
   );
+  if (model.hedges)
+    lines(
+      model.hedges,
+      () => p.inkMuted,
+      () => 0.7,
+      'hedges',
+      'stroke-opacity="0.5"',
+    );
   lines(
     { features: model.roads.features.filter((f) => f.properties.mode !== 'tunnel') },
     () => t.road,
@@ -133,7 +141,16 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
   lines(
     driven,
     () => t.street,
-    (f) => ((f.properties.class === 'artery' ? 9 : f.properties.class === 'road' ? 7 : 4) * k) / 1.2,
+    (f) =>
+      ((f.properties.class === 'artery'
+        ? 9
+        : f.properties.class === 'road'
+          ? 7
+          : f.properties.class === 'lane'
+            ? 2.5
+            : 4) *
+        k) /
+      1.2,
     'streets',
   );
   // Bridges: a bold ink bar over the water under the street.

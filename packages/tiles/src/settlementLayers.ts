@@ -90,6 +90,11 @@ export function settlementLayers(
       minZoom: 11,
     },
     { name: 'walls', features: merge((t) => t.walls as unknown as AnyFc), minZoom: 9 },
+    {
+      name: 'hedges',
+      features: merge((t) => (t.hedges ?? { type: 'FeatureCollection', features: [] }) as unknown as AnyFc),
+      minZoom: 12,
+    },
     { name: 'gates', features: merge((t) => t.gates as unknown as AnyFc), minZoom: 12 },
     {
       name: 'roads',

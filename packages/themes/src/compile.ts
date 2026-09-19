@@ -513,9 +513,9 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
             ['exponential', 1.6],
             ['zoom'],
             12,
-            ['match', ['get', 'class'], 'artery', 1.4, 'road', 1.2, 0.7],
+            ['match', ['get', 'class'], 'artery', 1.4, 'road', 1.2, 'lane', 0.5, 0.7],
             17,
-            ['match', ['get', 'class'], 'artery', 9, 'road', 7, 4],
+            ['match', ['get', 'class'], 'artery', 9, 'road', 7, 'lane', 2.5, 4],
           ],
     },
   });
@@ -532,6 +532,20 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
       'line-color': theme.sketch ? p.ink : t.street,
       'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1, 17, 3.5],
       'line-dasharray': [0.6, 0.6],
+    },
+  });
+  // Field boundaries in the farm belt.
+  layers.push({
+    id: 'hedges',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'hedges',
+    minzoom: 12,
+    layout: { visibility: visible('settlements'), 'line-join': 'round' },
+    paint: {
+      'line-color': theme.sketch ? p.ink : p.inkMuted,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 16, 1.4],
+      'line-opacity': theme.sketch ? 0.7 : 0.45,
     },
   });
   layers.push({
