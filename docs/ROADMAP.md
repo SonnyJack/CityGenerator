@@ -234,9 +234,14 @@ blocks.
       and alignment guides: while a selection is moved or a shape is drawn,
       its edges and centres line up with those of what is already drawn and a
       dashed guide shows the line (Alt moves freely).
-- [ ] Deferred: vegetation and year brushes, layer lock/opacity/reorder,
-      history thumbnails, derived caches for instant reopen, arrows as a
-      drawn annotation tool.
+- [x] A vegetation brush that paints a land cover (woods, open ground,
+      farmland, marsh, sand, rock, snow, mangrove) over the ground a stroke
+      passes, water aside; a year brush that moves the built year of the
+      quarter under the stroke, full at its centre and fading to its edge;
+      and arrows as a drawn annotation, dragged from tail to head, with a
+      head of their own in the themes and the SVG export.
+- [ ] Deferred: layer lock/opacity/reorder, history thumbnails, derived
+      caches for instant reopen.
 
 Acceptance (met): Playwright covers each tool (line, rectangle + select +
 move + undo, terrain and wealth brushes + erase, annotations, freeze and

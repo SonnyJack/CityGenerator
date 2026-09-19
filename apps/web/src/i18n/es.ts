@@ -478,4 +478,16 @@ export const es: Record<string, string> = {
   'Only what lies wholly in the current view': 'Solo lo que cabe entero en la vista actual',
   'Drag a loop around what you want; Shift adds to the selection':
     'Arrastre un lazo alrededor de lo que quiera; Mayús añade a la selección',
+  Cover: 'Cubierta',
+  Arrow: 'Flecha',
+  'Built year ± (earlier / later)': 'Año de construcción ± (antes / después)',
+  Woods: 'Bosque',
+  'Open ground': 'Campo abierto',
+  Farmland: 'Tierras de cultivo',
+  Marsh: 'Marisma',
+  Sand: 'Arena',
+  Rock: 'Roca',
+  Snow: 'Nieve',
+  Mangrove: 'Manglar',
+  'Cover class': 'Clase de cubierta',
 };

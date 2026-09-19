@@ -1761,6 +1761,15 @@ function editorLayers(
     layout: { visibility: visible('annotations'), 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': '#b91c1c', 'line-width': 2.5 },
   });
+  // The head of an arrow, supplied as its own small polygon.
+  out.push({
+    id: 'annotation-arrowheads',
+    type: 'fill',
+    source: ann,
+    filter: ['all', isPoly, ['==', ['get', 'kind'], 'arrowhead']],
+    layout: { visibility: visible('annotations') },
+    paint: { 'fill-color': '#b91c1c' },
+  });
 
   // Editor overlay: drafts, selection, brush footprint and vertex handles, always on top.
   const role = (r: string): ExpressionSpecification => ['==', ['get', 'role'], r];

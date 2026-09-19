@@ -436,3 +436,62 @@ describe('lasso, queries and alignment guides', () => {
     expect(h.tools.draft.guides).toHaveLength(0);
   });
 });
+
+describe('the vegetation and year brushes and the arrow annotation', () => {
+  let h: ReturnType<typeof harness>;
+  beforeEach(() => {
+    h = harness();
+  });
+
+  it('paints a land cover as a vegetation stroke', () => {
+    h.tools.setTool('brush');
+    h.tools.setOptions({ brush: 'vegetation', cover: 'forest', brushRadiusM: 180 });
+    h.tools.pointerDown([0, 0]);
+    h.tools.pointerMove([200, 0]);
+    h.tools.pointerUp([200, 0]);
+    const f = h.doc().authored.features[0]!;
+    expect(f.properties).toMatchObject({ layer: 'vegetation', kind: 'forest', radiusM: 180 });
+    expect(f.geometry.type).toBe('LineString');
+  });
+
+  it('records a year stroke in years, not as a fraction', () => {
+    h.tools.setTool('brush');
+    h.tools.setOptions({ brush: 'year', brushAmount: -45, brushRadiusM: 300 });
+    h.tools.pointerDown([0, 0]);
+    h.tools.pointerMove([100, 100]);
+    h.tools.pointerUp([100, 100]);
+    const f = h.doc().authored.features[0]!;
+    expect(f.properties).toMatchObject({ layer: 'fieldEdit', field: 'year', delta: -45, radiusM: 300 });
+  });
+
+  it('drags an arrow annotation and ignores a click that goes nowhere', () => {
+    h.tools.setTool('annotate');
+    h.tools.setOptions({ annotation: 'arrow', text: 'this way' });
+    h.tools.hitToleranceM = 6;
+    h.tools.pointerDown([0, 0]);
+    h.tools.pointerMove([300, 120]);
+    expect(h.tools.draft.geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [300, 120],
+      ],
+    });
+    h.tools.pointerUp([300, 120]);
+    const a = h.doc().annotations[0]!;
+    expect(a.kind).toBe('arrow');
+    expect(a.text).toBe('this way');
+    expect(a.geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [300, 120],
+      ],
+    });
+    expect(h.tools.draft.geometry).toBeNull();
+    // A click with no drag has no direction, so it makes no arrow.
+    h.tools.pointerDown([500, 500]);
+    h.tools.pointerUp([502, 500]);
+    expect(h.doc().annotations).toHaveLength(1);
+  });
+});

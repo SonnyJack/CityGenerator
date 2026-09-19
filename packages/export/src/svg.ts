@@ -415,6 +415,30 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
       parts.push(
         `<path d="${path(a.geometry)}" fill="none" stroke="#b91c1c" stroke-width="1.5" stroke-dasharray="6 3"/>`,
       );
+    } else if (kind === 'arrow' && a.geometry.type === 'LineString') {
+      // The shaft, then a solid head on the last segment.
+      const pts = a.geometry.coordinates;
+      parts.push(`<path d="${path(a.geometry)}" fill="none" stroke="#b91c1c" stroke-width="2.5"/>`);
+      const tip = pts[pts.length - 1]!;
+      const back = pts[pts.length - 2] ?? pts[0]!;
+      const [hx, hy] = tx(tip[0]!, tip[1]!);
+      const [bx, by] = tx(back[0]!, back[1]!);
+      const ang = Math.atan2(hy - by, hx - bx);
+      const head = 11;
+      const wing = 0.42;
+      parts.push(
+        `<path d="M ${num(hx)} ${num(hy)} L ${num(hx - Math.cos(ang - wing) * head)} ${num(
+          hy - Math.sin(ang - wing) * head,
+        )} L ${num(hx - Math.cos(ang + wing) * head)} ${num(
+          hy - Math.sin(ang + wing) * head,
+        )} Z" fill="#b91c1c"/>`,
+      );
+      if (a.properties.text)
+        parts.push(
+          `<text x="${num(hx)}" y="${num(hy - 12)}" font-size="11" fill="#b91c1c">${esc(
+            String(a.properties.text),
+          )}</text>`,
+        );
     }
   }
   parts.push('</g>');

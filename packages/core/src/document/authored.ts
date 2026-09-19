@@ -21,11 +21,20 @@ export interface TerrainEdit {
 
 export interface FieldEdit {
   id: string;
-  field: 'wealth' | 'density' | 'condition';
+  field: 'wealth' | 'density' | 'condition' | 'year';
   points: Ring;
   radiusM: number;
-  /** Change in [-1, 1] at the stroke centre, falling off to the edge. */
+  /** Change in [-1, 1] at the stroke centre, falling off to the edge; years for a `year` stroke. */
   delta: number;
+}
+
+/** A stroke of land cover painted over the ground (the land cover stage takes it as it is). */
+export interface VegetationEdit {
+  id: string;
+  /** A land cover class name: forest, open, farmland, marsh, sand, rock, snow, mangrove. */
+  kind: string;
+  points: Ring;
+  radiusM: number;
 }
 
 export interface ZoneEdit {
@@ -66,12 +75,34 @@ export function terrainEdits(doc: MapDocument): TerrainEdit[] {
 
 /** Wealth and density strokes (consumed by the society stage). */
 export function societyEdits(doc: MapDocument): FieldEdit[] {
-  return fieldEdits(doc).filter((e) => e.field !== 'condition');
+  return fieldEdits(doc).filter((e) => e.field === 'wealth' || e.field === 'density');
 }
 
 /** Condition strokes (consumed by block generation). */
 export function conditionEdits(doc: MapDocument): FieldEdit[] {
   return fieldEdits(doc).filter((e) => e.field === 'condition');
+}
+
+/** Year strokes: the ground under them was built that many years earlier or later. */
+export function yearEdits(doc: MapDocument): FieldEdit[] {
+  return fieldEdits(doc).filter((e) => e.field === 'year');
+}
+
+/** Land cover strokes (consumed by the land cover stage). */
+export function vegetationEdits(doc: MapDocument): VegetationEdit[] {
+  const out: VegetationEdit[] = [];
+  for (const f of doc.authored.features) {
+    if (f.properties.layer !== 'vegetation' || typeof f.properties.kind !== 'string') continue;
+    const points = lineOrPolygonPoints(f);
+    if (!points) continue;
+    out.push({
+      id: f.id,
+      kind: f.properties.kind,
+      points,
+      radiusM: typeof f.properties.radiusM === 'number' ? f.properties.radiusM : 150,
+    });
+  }
+  return out;
 }
 
 export function fieldEdits(doc: MapDocument): FieldEdit[] {
@@ -80,7 +111,8 @@ export function fieldEdits(doc: MapDocument): FieldEdit[] {
     if (f.properties.layer !== 'fieldEdit') continue;
     const field = f.properties.field;
     const points = lineOrPolygonPoints(f);
-    if (!points || (field !== 'wealth' && field !== 'density' && field !== 'condition')) continue;
+    if (!points || (field !== 'wealth' && field !== 'density' && field !== 'condition' && field !== 'year'))
+      continue;
     out.push({
       id: f.id,
       field,

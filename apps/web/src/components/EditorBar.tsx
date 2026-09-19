@@ -135,6 +135,8 @@ const BRUSHES: { id: BrushKind; label: string; unit: string; min: number; max: n
   { id: 'density', label: 'Density ±', unit: '', min: -1, max: 1, step: 0.05 },
   { id: 'condition', label: 'Condition ± (repair / decay)', unit: '', min: -1, max: 1, step: 0.05 },
   { id: 'zone', label: 'Zone', unit: '', min: 0, max: 0, step: 0 },
+  { id: 'vegetation', label: 'Land cover', unit: '', min: 0, max: 0, step: 0 },
+  { id: 'year', label: 'Built year ± (earlier / later)', unit: 'years', min: -400, max: 400, step: 5 },
   { id: 'erase', label: 'Erase authored', unit: '', min: 0, max: 0, step: 0 },
   { id: 'reroll', label: 'Re-roll blocks', unit: '', min: 0, max: 0, step: 0 },
 ];
@@ -308,6 +310,23 @@ export function EditorBar() {
                   <span className="text-stone-500">{brush.unit}</span>
                 </label>
               )}
+              {o.brush === 'vegetation' && (
+                <label className="flex items-center gap-1">
+                  <span className="text-stone-600">{t('Cover')}</span>
+                  <select
+                    aria-label={t('Cover class')}
+                    className={sel}
+                    value={o.cover}
+                    onChange={(e) => setOptions({ cover: e.target.value })}
+                  >
+                    {COVERS.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {t(c.label)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {o.brush === 'zone' && (
                 <label className="flex items-center gap-1">
                   <span className="text-stone-600">{t('Ward')}</span>
@@ -339,6 +358,7 @@ export function EditorBar() {
                 >
                   <option value="label">{t('Label')}</option>
                   <option value="marker">{t('Marker')}</option>
+                  <option value="arrow">{t('Arrow')}</option>
                   <option value="note">{t('GM note')}</option>
                   <option value="handoutFrame">{t('Handout frame')}</option>
                 </select>
@@ -489,6 +509,18 @@ function SelectOptions() {
   );
 }
 
+/** Land covers the vegetation brush paints (water is the terrain's, not the brush's). */
+const COVERS: { id: string; label: string }[] = [
+  { id: 'forest', label: 'Woods' },
+  { id: 'open', label: 'Open ground' },
+  { id: 'farmland', label: 'Farmland' },
+  { id: 'marsh', label: 'Marsh' },
+  { id: 'sand', label: 'Sand' },
+  { id: 'rock', label: 'Rock' },
+  { id: 'snow', label: 'Snow' },
+  { id: 'mangrove', label: 'Mangrove' },
+];
+
 const ALL_LAYERS: { id: AuthoredLayer; label: string }[] = [
   ...LINE_LAYERS.map((l) => ({ id: l.id, label: l.label })),
   ...AREA_LAYERS.map((l) => ({ id: l.id, label: l.label })),
@@ -511,6 +543,8 @@ function defaultAmount(brush: BrushKind): number {
       return 0.3;
     case 'condition':
       return -0.4;
+    case 'year':
+      return -40;
     default:
       return 0;
   }

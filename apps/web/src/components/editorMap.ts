@@ -58,6 +58,18 @@ function circle(c: XY, r: number): Geometry {
   return { type: 'Polygon', coordinates: [strokePolygon([c], r).concat([strokePolygon([c], r)[0]!])] };
 }
 
+/** The triangle at the tip of an arrow annotation, `sizeM` long, on its last segment. */
+function arrowHead(pts: XY[], sizeM: number): XY[] | null {
+  if (pts.length < 2) return null;
+  const tip = pts[pts.length - 1]!;
+  const back = pts[pts.length - 2]!;
+  const ang = Math.atan2(tip[1] - back[1], tip[0] - back[0]);
+  const wing = 0.42;
+  const a: XY = [tip[0] - Math.cos(ang - wing) * sizeM, tip[1] - Math.sin(ang - wing) * sizeM];
+  const b: XY = [tip[0] - Math.cos(ang + wing) * sizeM, tip[1] - Math.sin(ang + wing) * sizeM];
+  return [tip, a, b, tip];
+}
+
 /**
  * Connects the map to the editor: routes pointer and keyboard events to the tool
  * controller, keeps the authored/overlay/annotation GeoJSON sources in sync with
@@ -146,17 +158,29 @@ export function attachEditor(map: MapLibreMap): () => void {
     }
     setData(OVERLAY_SOURCE, { type: 'FeatureCollection', features: overlay });
 
-    setData(ANNOTATION_SOURCE, {
-      type: 'FeatureCollection',
-      features: doc.annotations
-        .filter((a) => a.geometry.type !== 'Point')
-        .map((a) => ({
-          type: 'Feature',
-          id: a.id,
-          geometry: geometryToLonLat(a.geometry),
-          properties: { kind: a.kind, text: a.text, id: a.id },
-        })),
-    });
+    const annotations: Fc['features'] = [];
+    for (const a of doc.annotations) {
+      if (a.geometry.type === 'Point') continue;
+      annotations.push({
+        type: 'Feature',
+        id: a.id,
+        geometry: geometryToLonLat(a.geometry),
+        properties: { kind: a.kind, text: a.text, id: a.id },
+      });
+      // An arrow's head is a small triangle on its last segment, drawn as its own polygon.
+      if (a.kind === 'arrow' && a.geometry.type === 'LineString') {
+        const pts = a.geometry.coordinates as [number, number][];
+        const head = arrowHead(pts, 26 * metresPerPixel(map));
+        if (head)
+          annotations.push({
+            type: 'Feature',
+            id: `${a.id}-head`,
+            geometry: geometryToLonLat({ type: 'Polygon', coordinates: [head] }),
+            properties: { kind: 'arrowhead', id: a.id },
+          });
+      }
+    }
+    setData(ANNOTATION_SOURCE, { type: 'FeatureCollection', features: annotations });
     syncMarkers(doc, s.selectedAnnotation, doc.ui?.layers?.annotations !== false);
   }
 

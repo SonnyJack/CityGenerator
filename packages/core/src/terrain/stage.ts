@@ -488,6 +488,8 @@ export interface LandcoverInput {
   terrain: TerrainOutput;
   biome: BiomeTerrainParams;
   seed: string;
+  /** Hand-painted land cover: each stroke overwrites the classes under it (never the water). */
+  edits?: { id: string; kind: string; points: [number, number][]; radiusM: number }[];
 }
 
 export interface LandcoverOutput {
@@ -510,8 +512,9 @@ export const landcoverStage = defineStage<LandcoverInput, LandcoverOutput>({
   id: 'landcover',
   version: 1,
   seedOf: (input) => input.seed,
-  keyOf: (input) => `${input.terrain.key}|${JSON.stringify(input.biome)}|${input.seed}`,
-  run({ terrain, biome, seed }, ctx) {
+  keyOf: (input) =>
+    `${input.terrain.key}|${JSON.stringify(input.biome)}|${input.seed}|${JSON.stringify(input.edits ?? [])}`,
+  run({ terrain, biome, seed, edits }, ctx) {
     const { water, slope, distToSea, distToWater, seaLevel } = terrain;
     // Land cover varies over kilometres, so classify on a coarser grid when the base raster is large.
     const step = terrain.height.width * terrain.height.height > 160_000 ? 2 : 1;
@@ -565,6 +568,51 @@ export const landcoverStage = defineStage<LandcoverInput, LandcoverOutput>({
         counts[cls] = counts[cls]! + 1;
       }
       if ((row & 63) === 0) ctx.checkpoint();
+    }
+    // Hand-painted cover: a stroke lays its class over the ground it passes, water aside.
+    for (const e of edits ?? []) {
+      const id = LANDCOVER[e.kind as LandcoverClass];
+      if (id === undefined || id === LANDCOVER.water || !e.points.length) continue;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const [px, py] of e.points) {
+        minX = Math.min(minX, px);
+        minY = Math.min(minY, py);
+        maxX = Math.max(maxX, px);
+        maxY = Math.max(maxY, py);
+      }
+      const c0 = Math.max(0, Math.floor(height.col(minX - e.radiusM)));
+      const c1 = Math.min(width - 1, Math.ceil(height.col(maxX + e.radiusM)));
+      const r0 = Math.max(0, Math.floor(height.row(minY - e.radiusM)));
+      const r1 = Math.min(rows - 1, Math.ceil(height.row(maxY + e.radiusM)));
+      const r2 = e.radiusM * e.radiusM;
+      for (let row = r0; row <= r1; row++) {
+        const y = height.y(row);
+        for (let col = c0; col <= c1; col++) {
+          const i = row * width + col;
+          if (classes[i] === LANDCOVER.water) continue;
+          const x = height.x(col);
+          let near = false;
+          for (let k = 0; k < e.points.length && !near; k++) {
+            const a = e.points[k]!;
+            const b = e.points[Math.min(k + 1, e.points.length - 1)]!;
+            const vx = b[0] - a[0];
+            const vy = b[1] - a[1];
+            const len2 = vx * vx + vy * vy;
+            const t = len2 ? Math.max(0, Math.min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / len2)) : 0;
+            const dx = x - (a[0] + vx * t);
+            const dy = y - (a[1] + vy * t);
+            near = dx * dx + dy * dy <= r2;
+          }
+          if (!near) continue;
+          counts[classes[i]!] = counts[classes[i]!]! - 1;
+          classes[i] = id;
+          counts[id] = counts[id]! + 1;
+        }
+      }
+      ctx.checkpoint();
     }
     ctx.progress(0.5, 'classified');
 

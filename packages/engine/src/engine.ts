@@ -37,6 +37,8 @@ import {
   reseedSalt,
   terrainEdits,
   zoneEdits,
+  yearEdits,
+  vegetationEdits,
   type LandcoverOutput,
   type MapDocument,
   type SitingOutput,
@@ -158,9 +160,15 @@ export function createEngine(): EngineApi {
       const terrainMs = performance.now() - t0;
 
       const t1 = performance.now();
+      const painted = vegetationEdits(doc);
       const landcover = await runner.run(
         landcoverStage,
-        { terrain, biome: biomeTerrain(doc.spec.biome), seed: doc.spec.seed },
+        {
+          terrain,
+          biome: biomeTerrain(doc.spec.biome),
+          seed: doc.spec.seed,
+          ...(painted.length ? { edits: painted } : {}),
+        },
         { signal },
       );
       const landcoverMs = performance.now() - t1;
@@ -360,6 +368,7 @@ export function createEngine(): EngineApi {
           })),
       ];
       const zones = zoneEdits(doc);
+      const years = yearEdits(doc);
       const towns: TownOutput[] = [];
       for (const site of sites) {
         // The old town was laid out in the era of its founding; its block size does not follow the slider.
@@ -383,6 +392,7 @@ export function createEngine(): EngineApi {
               ...(doc.spec.events.length ? { events: doc.spec.events } : {}),
               ...(salt ? { salt } : {}),
               ...(zones.length ? { zoneEdits: zones } : {}),
+              ...(years.length ? { yearEdits: years } : {}),
               ...(reserved.length ? { reserved } : {}),
             },
             { signal },

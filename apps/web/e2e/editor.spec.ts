@@ -480,3 +480,71 @@ test('the lasso takes in what it encircles and the find row selects by layer and
   // The rectangle was dragged upward, so its top edge is the corner that was aligned.
   expect(Math.min(...ys)).toBeCloseTo(Math.max(...rowYs), 6);
 });
+
+test('the vegetation brush paints woods, the year brush ages a quarter, and an arrow is drawn', async ({
+  page,
+}) => {
+  test.setTimeout(180_000); // two regenerations from the terrain up
+  await ready(page);
+  const [cx, cy] = await townCenter(page);
+  const px = cx + 2500;
+  const py = cy + 2500;
+  await jumpTo(page, px, py, 13);
+  type Info = { landcover: string };
+  const before = (await page.evaluate(([x, y]) => window.__citygen.inspect(x, y), [px, py])) as Info;
+
+  // Paint marsh over that ground; the inspector reports the painted cover.
+  await page.keyboard.press('b');
+  await page.getByLabel('Brush', { exact: true }).selectOption('vegetation');
+  await page.getByLabel('Cover class').selectOption('marsh');
+  await page.evaluate(() => window.__citygen.setToolOptions({ brushRadiusM: 400 }));
+  const a = await screen(page, px - 200, py);
+  const b = await screen(page, px + 200, py);
+  await regenerated(page, async () => {
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 6 });
+    await page.mouse.up();
+  });
+  let d = await doc(page);
+  expect(d.authored.features[0]!.properties).toMatchObject({ layer: 'vegetation', kind: 'marsh' });
+  const after = (await page.evaluate(([x, y]) => window.__citygen.inspect(x, y), [px, py])) as Info;
+  expect(after.landcover).toBe('marsh');
+  expect(before.landcover === 'marsh').toBe(false);
+
+  // Age a band of the town by fifty years.
+  await jumpTo(page, cx, cy, 15);
+  await page.getByLabel('Brush', { exact: true }).selectOption('year');
+  await page.getByLabel('Brush amount').fill('-50');
+  const ya = await screen(page, cx - 300, cy + 200);
+  const yb = await screen(page, cx + 300, cy + 200);
+  await regenerated(page, async () => {
+    await page.mouse.move(ya.x, ya.y);
+    await page.mouse.down();
+    await page.mouse.move(yb.x, yb.y, { steps: 6 });
+    await page.mouse.up();
+  });
+  d = await doc(page);
+  expect(d.authored.features[1]!.properties).toMatchObject({ layer: 'fieldEdit', field: 'year', delta: -50 });
+
+  // Drag an arrow annotation; it lands in the document with both ends.
+  await page.keyboard.press('n');
+  await page.getByLabel('Annotation kind').selectOption('arrow');
+  await page.getByLabel('Annotation text').fill('the way in');
+  const aa = await screen(page, cx - 200, cy - 200);
+  const ab = await screen(page, cx + 100, cy - 60);
+  await page.mouse.move(aa.x, aa.y);
+  await page.mouse.down();
+  await page.mouse.move(ab.x, ab.y, { steps: 6 });
+  await page.mouse.up();
+  d = await doc(page);
+  const arrow = d.annotations.find((x) => x.kind === 'arrow')!;
+  expect(arrow.text).toBe('the way in');
+  // The map draws the shaft and a head of its own.
+  await page.waitForFunction(
+    () =>
+      window.__citygenMap!.querySourceFeatures('annotations').some((f) => f.properties.kind === 'arrowhead'),
+    undefined,
+    { timeout: 15_000 },
+  );
+});

@@ -21,7 +21,7 @@ import { FILL_WARDS, WARDS, type WardContext, type WardId } from './wards.js';
 import type { EraParams } from './eras.js';
 import type { SocietyOutput } from '../society/stage.js';
 import { generateRings, growthRings, modernCoreZone, modernZone } from './rings.js';
-import { distToPolyline, type ZoneEdit } from '../document/authored.js';
+import { distToPolyline, type FieldEdit, type ZoneEdit } from '../document/authored.js';
 import type { EventKind, RegionEvent } from '../document/schema.js';
 import { maxRadius, peakUntil, populationAt, radiusAt, yearForRadius } from './history.js';
 import { growthFootprint } from './footprint.js';
@@ -51,6 +51,8 @@ export interface TownInput {
   salt?: string;
   /** Hand-authored zone polygons and strokes that override generated wards. */
   zoneEdits?: ZoneEdit[];
+  /** Year strokes: the ground under them was built this many years earlier or later. */
+  yearEdits?: FieldEdit[];
   /** Land taken by facilities and rail yards: patches inside take the ward and get no buildings. */
   reserved?: { id: string; ring: Ring; ward: WardId }[];
   /** Disasters on the timeline; those before the year mark the blocks they touched. */
@@ -171,7 +173,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
   version: 1,
   seedOf: (i) => `${i.seed}/${i.site.id}${i.salt ? `/${i.salt}` : ''}`,
   keyOf: (i) =>
-    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}|${i.salt ?? ''}|${JSON.stringify(i.zoneEdits ?? [])}|${JSON.stringify(i.reserved?.map((r) => [r.id, r.ward, r.ring]) ?? [])}|${JSON.stringify(i.events ?? [])}`,
+    `${i.terrain.key}|${i.seed}|${i.year}|${i.blockSizeM}|${JSON.stringify(i.site)}|${i.society?.key ?? ''}|${JSON.stringify(i.eras?.map((e) => e.id) ?? [])}|${i.salt ?? ''}|${JSON.stringify(i.zoneEdits ?? [])}|${JSON.stringify(i.yearEdits ?? [])}|${JSON.stringify(i.reserved?.map((r) => [r.id, r.ward, r.ring]) ?? [])}|${JSON.stringify(i.events ?? [])}`,
   run(input, ctx) {
     const { site, terrain, year } = input;
     const rng = ctx.rng;
@@ -336,6 +338,35 @@ export const townStage = defineStage<TownInput, TownOutput>({
         patches.push(p);
       });
     }
+    // Year strokes: a quarter that went up earlier or later than the growth curve says. The
+    // shift moves the built year of every patch the stroke passes, within the town's history.
+    if (input.yearEdits?.length) {
+      const shiftAt = (p: Pt): number => {
+        let shift = 0;
+        for (const e of input.yearEdits!) {
+          let best = Infinity;
+          for (let k = 0; k < e.points.length; k++) {
+            const a = e.points[k]!;
+            const b = e.points[Math.min(k + 1, e.points.length - 1)]!;
+            const vx = b[0] - a[0];
+            const vy = b[1] - a[1];
+            const len2 = vx * vx + vy * vy;
+            const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2)) : 0;
+            best = Math.min(best, Math.hypot(p[0] - (a[0] + vx * t), p[1] - (a[1] + vy * t)));
+          }
+          // Full shift at the stroke, fading to nothing at the edge of its radius.
+          if (best <= e.radiusM) shift += e.delta * (1 - best / e.radiusM);
+        }
+        return Math.round(shift);
+      };
+      for (const p of patches) {
+        const shift = shiftAt(p.centroid);
+        if (!shift) continue;
+        p.builtYear = Math.max(history.founded, Math.min(year, p.builtYear + shift));
+        p.why = `${p.why}; built ${shift > 0 ? 'later' : 'earlier'} by hand`;
+      }
+    }
+
     // Map original cell index → patch for adjacency.
     const patchByCell = new Map<number, Patch>();
     for (const p of patches) patchByCell.set(cells.indexOf(p.cell), p);

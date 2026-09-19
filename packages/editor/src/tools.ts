@@ -66,6 +66,8 @@ export type BrushKind =
   | 'density'
   | 'condition'
   | 'zone'
+  | 'vegetation'
+  | 'year'
   | 'erase'
   | 'reroll';
 
@@ -80,7 +82,9 @@ export interface ToolOptions {
   /** Metres for terrain ops, delta in [-1,1] for fields, strength for smooth. */
   brushAmount: number;
   zoneWard: string;
-  annotation: 'label' | 'marker' | 'note' | 'handoutFrame';
+  /** Land cover the vegetation brush paints. */
+  cover: string;
+  annotation: 'label' | 'marker' | 'arrow' | 'note' | 'handoutFrame';
   text: string;
   snapGridM: number;
   snapToVertices: boolean;
@@ -99,6 +103,7 @@ export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   brushRadiusM: 150,
   brushAmount: 15,
   zoneWard: 'park',
+  cover: 'forest',
   annotation: 'label',
   text: 'Label',
   snapGridM: 0,
@@ -166,6 +171,7 @@ export class ToolController {
     | { kind: 'vertex'; handle: VertexHandle; moved: boolean }
     | { kind: 'box'; start: XY }
     | { kind: 'lasso'; points: XY[] }
+    | { kind: 'arrow'; start: XY }
     | { kind: 'rect'; start: XY }
     | { kind: 'brush'; points: XY[] } = null;
 
@@ -547,6 +553,12 @@ export class ToolController {
         this.host.changed();
         return true;
       case 'annotate':
+        if (this.options.annotation === 'arrow') {
+          this.dragging = { kind: 'arrow', start: p };
+          this.draft = { geometry: null, cursor: p, brushRadiusM: null, guides: [] };
+          this.host.changed();
+          return true;
+        }
         this.commitAnnotation(p);
         return true;
       default:
@@ -619,6 +631,15 @@ export class ToolController {
           this.host.changed();
           return true;
         }
+        case 'arrow':
+          this.draft = {
+            geometry: { type: 'LineString', coordinates: [this.dragging.start, p] },
+            cursor: p,
+            brushRadiusM: null,
+            guides: [],
+          };
+          this.host.changed();
+          return true;
         case 'brush': {
           const last = this.dragging.points[this.dragging.points.length - 1]!;
           if (Math.hypot(last[0] - p[0], last[1] - p[1]) > this.options.brushRadiusM * 0.25)
@@ -709,6 +730,15 @@ export class ToolController {
         this.draft = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
         if (g && Math.abs((p[0] - d.start[0]) * (p[1] - d.start[1])) > 4)
           this.commitFeature(g, this.options.layer === 'street' ? 'building' : this.options.layer);
+        else this.host.changed();
+        return true;
+      }
+      case 'arrow': {
+        const end = this.snap(raw, mods);
+        this.draft = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
+        // A click with no drag is not an arrow; it needs a direction.
+        if (Math.hypot(end[0] - d.start[0], end[1] - d.start[1]) >= this.hitToleranceM * 2)
+          this.commitAnnotation(d.start, end);
         else this.host.changed();
         return true;
       }
@@ -1013,6 +1043,18 @@ export class ToolController {
       };
     } else if (o.brush === 'zone') {
       props = { layer: 'zone', origin: 'authored', kind: o.zoneWard, radiusM: o.brushRadiusM };
+    } else if (o.brush === 'vegetation') {
+      // Paint a land cover over the ground: the land cover stage takes the stroke as it is.
+      props = { layer: 'vegetation', origin: 'authored', kind: o.cover, radiusM: o.brushRadiusM };
+    } else if (o.brush === 'year') {
+      // Shift the year the ground under the stroke was built in, in years.
+      props = {
+        layer: 'fieldEdit',
+        origin: 'authored',
+        field: 'year',
+        radiusM: o.brushRadiusM,
+        delta: Math.round(o.brushAmount),
+      };
     } else {
       props = {
         layer: 'terrainEdit',
@@ -1035,24 +1077,26 @@ export class ToolController {
     });
   }
 
-  private commitAnnotation(p: XY): void {
+  private commitAnnotation(p: XY, end?: XY): void {
     const o = this.options;
     const id = this.host.newId('note');
     const geometry: Geometry =
-      o.annotation === 'handoutFrame'
-        ? {
-            type: 'Polygon',
-            coordinates: [
-              [
-                [p[0] - 500, p[1] - 350],
-                [p[0] + 500, p[1] - 350],
-                [p[0] + 500, p[1] + 350],
-                [p[0] - 500, p[1] + 350],
-                [p[0] - 500, p[1] - 350],
+      o.annotation === 'arrow' && end
+        ? { type: 'LineString', coordinates: [p, end] }
+        : o.annotation === 'handoutFrame'
+          ? {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [p[0] - 500, p[1] - 350],
+                  [p[0] + 500, p[1] - 350],
+                  [p[0] + 500, p[1] + 350],
+                  [p[0] - 500, p[1] + 350],
+                  [p[0] - 500, p[1] - 350],
+                ],
               ],
-            ],
-          }
-        : { type: 'Point', coordinates: p };
+            }
+          : { type: 'Point', coordinates: p };
     this.host.dispatch({
       type: 'annotation.add',
       annotation: {

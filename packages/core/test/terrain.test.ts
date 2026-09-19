@@ -125,6 +125,56 @@ describe('terrain stage', () => {
     expect(again).toBe(lc);
   });
 
+  it('paints a land cover stroke over the ground it passes, water aside', async () => {
+    const runner = new StageRunner();
+    const terrain = await runner.run(terrainStage, fixture);
+    const plain = await runner.run(landcoverStage, { terrain, biome: DEFAULT_BIOME, seed: fixture.seed });
+    // A stroke across the middle of the region, painted as marsh.
+    const painted = await runner.run(landcoverStage, {
+      terrain,
+      biome: DEFAULT_BIOME,
+      seed: fixture.seed,
+      edits: [
+        {
+          id: 'paint-1',
+          kind: 'marsh',
+          points: [
+            [-1500, 0],
+            [1500, 0],
+          ],
+          radiusM: 300,
+        },
+      ],
+    });
+    // Distance from a cell to the stroke, which runs along y = 0 from x = -1500 to x = 1500.
+    const distToStroke = (x: number, y: number) => Math.hypot(Math.max(0, Math.abs(x) - 1500), y);
+    let onStroke = 0;
+    let marshOnStroke = 0;
+    let changedWellOff = 0;
+    const cell = plain.raster.cellSizeM;
+    for (let row = 0; row < plain.raster.height; row++)
+      for (let col = 0; col < plain.raster.width; col++) {
+        const i = row * plain.raster.width + col;
+        const x = plain.raster.originX + col * cell;
+        const y = plain.raster.originY + row * cell;
+        const d = distToStroke(x, y);
+        const water = plain.classes[i] === LANDCOVER.water;
+        if (d <= 250 && !water) {
+          onStroke++;
+          if (painted.classes[i] === LANDCOVER.marsh) marshOnStroke++;
+        } else if (d > 300 + cell && painted.classes[i] !== plain.classes[i]) changedWellOff++;
+        // The stroke never takes the water.
+        if (water) expect(painted.classes[i]).toBe(LANDCOVER.water);
+      }
+    expect(onStroke).toBeGreaterThan(20);
+    expect(marshOnStroke).toBe(onStroke);
+    expect(changedWellOff).toBe(0);
+    expect(painted.fractions.marsh).toBeGreaterThan(plain.fractions.marsh);
+    // The painted ground shows up in the polygons the renderers draw, and the key changed.
+    expect(painted.polygons.features.some((f) => f.properties.kind === 'marsh')).toBe(true);
+    expect(painted.key).not.toBe(plain.key);
+  });
+
   it('accepts an imported heightmap', async () => {
     const data = new Float32Array(16 * 16);
     for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) data[r * 16 + c] = c * 10 - 40; // west below sea

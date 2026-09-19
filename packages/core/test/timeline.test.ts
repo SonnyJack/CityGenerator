@@ -59,7 +59,13 @@ const eras: EraParams[] = [
 const runner = new StageRunner();
 const terrainP = runner.run(terrainStage, terrainFixture);
 
-async function townAt(year: number, specs: SettlementSpec[], anchorYear = 1925, seed = 't') {
+async function townAt(
+  year: number,
+  specs: SettlementSpec[],
+  anchorYear = 1925,
+  seed = 't',
+  yearEdits?: { id: string; field: 'year'; points: [number, number][]; radiusM: number; delta: number }[],
+) {
   const terrain = await terrainP;
   const siting = await runner.run(sitingStage, {
     seed,
@@ -90,7 +96,16 @@ async function townAt(year: number, specs: SettlementSpec[], anchorYear = 1925, 
     density: { baseline: 0.5, gradient: 0.5, noise: 0.2 },
     inequality: 0.5,
   });
-  const town = await runner.run(townStage, { seed, site, terrain, year, blockSizeM: 90, eras, society });
+  const town = await runner.run(townStage, {
+    seed,
+    site,
+    terrain,
+    year,
+    blockSizeM: 90,
+    eras,
+    society,
+    ...(yearEdits ? { yearEdits } : {}),
+  });
   return { site, town };
 }
 
@@ -104,6 +119,51 @@ const city: SettlementSpec[] = [
     features: [],
   },
 ];
+
+describe('the year brush', () => {
+  it('moves the built year of the ground it passes, and leaves the rest alone', async () => {
+    const plain = await townAt(1925, city);
+    const centre = plain.site.center;
+    // A stroke across a band north of the centre, making that quarter fifty years older.
+    const stroke = {
+      id: 'year-1',
+      field: 'year' as const,
+      points: [
+        [centre[0] - 400, centre[1] + 300],
+        [centre[0] + 400, centre[1] + 300],
+      ] as [number, number][],
+      radiusM: 250,
+      delta: -50,
+    };
+    const edited = await townAt(1925, city, 1925, 't', [stroke]);
+    const before = new Map(plain.town.blocks.map((b) => [b.id, b.builtYear]));
+    let moved = 0;
+    let untouched = 0;
+    for (const b of edited.town.blocks) {
+      const was = before.get(b.id);
+      if (was === undefined) continue;
+      const c = [
+        b.ring.reduce((a, p) => a + p[0], 0) / b.ring.length,
+        b.ring.reduce((a, p) => a + p[1], 0) / b.ring.length,
+      ];
+      const near =
+        Math.abs(c[1]! - (centre[1] + 300)) < 120 && c[0]! > centre[0] - 400 && c[0]! < centre[0] + 400;
+      if (near && b.builtYear !== was) {
+        moved++;
+        // Earlier, never before the town was founded.
+        expect(b.builtYear).toBeLessThan(was!);
+        expect(b.builtYear).toBeGreaterThanOrEqual(1300);
+      }
+      const far = Math.hypot(c[0]! - centre[0], c[1]! - (centre[1] + 300)) > 700;
+      if (far) {
+        expect(b.builtYear).toBe(was);
+        untouched++;
+      }
+    }
+    expect(moved).toBeGreaterThan(0);
+    expect(untouched).toBeGreaterThan(0);
+  });
+});
 
 describe('settlement history', () => {
   const h = { founded: 1300, anchorYear: 1925, anchorPopulation: 20_000 };
