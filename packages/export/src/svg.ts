@@ -107,10 +107,17 @@ export function renderSvg(model: ExportModel, theme: Theme, options: SvgOptions)
     `stroke="${p.inkMuted}" stroke-width="0.6" stroke-dasharray="4 2"`,
   );
   lines(
-    model.roads,
+    { features: model.roads.features.filter((f) => f.properties.mode !== 'tunnel') },
     () => t.road,
     () => 2.2,
     'roads',
+  );
+  lines(
+    { features: model.roads.features.filter((f) => f.properties.mode === 'tunnel') },
+    () => t.road,
+    () => 2.2,
+    'roads-tunnel',
+    'stroke-dasharray="4 3" stroke-opacity="0.7"',
   );
   const driven = {
     features: model.streets.features.filter((f) => f.properties.class !== 'steps'),

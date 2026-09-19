@@ -217,7 +217,15 @@ export interface EngineStats {
   regionName: string;
   riverNames: string[];
   culture: string;
-  roads: { links: number; roadKm: number; bridges: number };
+  roads: {
+    links: number;
+    roadKm: number;
+    bridges: number;
+    cuttings: number;
+    tunnels: number;
+    embankments: number;
+    maxGradient: number;
+  };
   rail: {
     trackKm: number;
     mainlineKm: number;

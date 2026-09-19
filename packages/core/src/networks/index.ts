@@ -25,3 +25,4 @@ export {
   type UtilityAreaProps,
   type UtilityFacility,
 } from './utilities.js';
+export { gradeProfile, resampleLine, structureModes, type StructureMode } from './profile.js';

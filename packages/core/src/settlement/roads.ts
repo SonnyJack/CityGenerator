@@ -5,6 +5,7 @@ import { landSampler, smoothOnLand } from '../terrain/land.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { SettlementSite } from './siting.js';
 import { roadCost, routeCells } from '../networks/routing.js';
+import { gradeProfile, resampleLine, structureModes, type StructureMode } from '../networks/profile.js';
 
 /**
  * Region stage R5 (roads): connect settlements with terrain-routed roads.
@@ -20,12 +21,29 @@ export interface RoadsInput {
   sites: SettlementSite[];
 }
 
+export type RoadMode = StructureMode;
+
 export interface RoadsOutput {
   key: string;
-  roads: FeatureCollection<LineString, { class: 'road'; from: string; to: string; lengthKm: number }>;
+  /** One feature per run of a mode along a link: a main road climbs in cuttings and on embankments. */
+  roads: FeatureCollection<
+    LineString,
+    { class: 'road'; from: string; to: string; lengthKm: number; mode: RoadMode; gradient: number }
+  >;
   bridges: FeatureCollection<LineString, { kind: 'bridge' }>;
-  stats: { links: number; roadKm: number; bridges: number };
+  stats: {
+    links: number;
+    roadKm: number;
+    bridges: number;
+    cuttings: number;
+    tunnels: number;
+    embankments: number;
+    maxGradient: number;
+  };
 }
+
+/** Ruling gradient of a main road (rise over run). */
+export const ROAD_GRADIENT_CAP = 0.08;
 
 export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
   id: 'roads',
@@ -78,6 +96,10 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
     const roadFeatures: RoadsOutput['roads']['features'] = [];
     const bridgeFeatures: RoadsOutput['bridges']['features'] = [];
     let roadKm = 0;
+    let cuttings = 0;
+    let tunnels = 0;
+    let embankments = 0;
+    let maxGradient = 0;
     const trimRadius = new Map<string, number>();
     for (const s of sites) trimRadius.set(s.id, s.radiusM * 0.95);
     const routeAndPush = (
@@ -114,16 +136,45 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
         }
       }
       const line = smoothOnLand(pts, onLand, { iterations: 2, tolerance: cellSizeM * 0.3 });
-      let len = 0;
-      for (let i = 1; i < line.length; i++)
-        len += Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]);
-      roadKm += len / 1000;
-      roadFeatures.push({
-        type: 'Feature',
-        id: `road-${k}`,
-        geometry: { type: 'LineString', coordinates: line },
-        properties: { class: 'road', from: idFrom, to: idTo, lengthKm: len / 1000 },
+      // Vertical alignment: the road keeps its ruling gradient in cuttings, on embankments and,
+      // rarely, through a tunnel; each run of one mode is a feature of its own.
+      const { pts: fine, s } = resampleLine(line, cellSizeM * 0.5);
+      if (fine.length < 2) return;
+      const z = gradeProfile(terrain, fine, s, ROAD_GRADIENT_CAP);
+      const modes = structureModes(terrain, fine, z, {
+        embankment: 3,
+        cutting: -3,
+        tunnel: -14,
+        viaduct: 12,
       });
+      let i = 0;
+      let part = 0;
+      while (i < modes.length - 1) {
+        let j = i + 1;
+        while (j < modes.length && modes[j] === modes[i]) j++;
+        const end = Math.min(j, modes.length - 1);
+        const coords: Ring = fine.slice(i, end + 1);
+        let len = 0;
+        let grad = 0;
+        for (let m = i + 1; m <= end; m++) {
+          const ds = s[m]! - s[m - 1]!;
+          len += ds;
+          if (ds > 0) grad = Math.max(grad, Math.abs(z[m]! - z[m - 1]!) / ds);
+        }
+        const mode = modes[i]! === 'viaduct' ? 'embankment' : modes[i]!;
+        if (mode === 'cutting') cuttings++;
+        else if (mode === 'tunnel') tunnels++;
+        else if (mode === 'embankment') embankments++;
+        maxGradient = Math.max(maxGradient, grad);
+        roadKm += len / 1000;
+        roadFeatures.push({
+          type: 'Feature',
+          id: `road-${k}-${part++}`,
+          geometry: { type: 'LineString', coordinates: coords },
+          properties: { class: 'road', from: idFrom, to: idTo, lengthKm: len / 1000, mode, gradient: grad },
+        });
+        i = end;
+      }
     };
     links.forEach(([a, b], k) => {
       routeAndPush(sites[a]!.center, sites[b]!.center, sites[a]!.id, sites[b]!.id, k);
@@ -152,7 +203,15 @@ export const roadsStage = defineStage<RoadsInput, RoadsOutput>({
       key: ctx.key,
       roads: { type: 'FeatureCollection', features: roadFeatures },
       bridges: { type: 'FeatureCollection', features: bridgeFeatures },
-      stats: { links: links.length, roadKm, bridges: bridgeFeatures.length },
+      stats: {
+        links: links.length,
+        roadKm,
+        bridges: bridgeFeatures.length,
+        cuttings,
+        tunnels,
+        embankments,
+        maxGradient,
+      },
     };
   },
 });

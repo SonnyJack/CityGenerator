@@ -3,6 +3,7 @@ import { defineStage } from '../pipeline/stage.js';
 import { Rng } from '../random/rng.js';
 import type { Ring } from '../raster/contours.js';
 import { landSampler, smoothOnLand } from '../terrain/land.js';
+import { gradeProfile, resampleLine } from './profile.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import { eraAt, type EraParams } from '../settlement/eras.js';
 import type { SettlementSite } from '../settlement/siting.js';
@@ -296,60 +297,10 @@ export const railStage = defineStage<RailInput, RailOutput>({
     };
 
     /** Resample a polyline at a fixed spacing (keeps the endpoints). */
-    const resample = (line: Ring, ds: number): { pts: Ring; s: number[] } => {
-      const pts: Ring = [[line[0]![0], line[0]![1]]];
-      const s: number[] = [0];
-      let acc = 0; // length up to the start of the current segment
-      let nextS = ds; // arc length of the next sample
-      for (let i = 1; i < line.length; i++) {
-        const a = line[i - 1]!;
-        const b = line[i]!;
-        const seg = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        while (nextS <= acc + seg && seg > 0) {
-          const u = (nextS - acc) / seg;
-          pts.push([a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]);
-          s.push(nextS);
-          nextS += ds;
-        }
-        acc += seg;
-      }
-      const last = line[line.length - 1]!;
-      const prev = pts[pts.length - 1]!;
-      if (Math.hypot(last[0] - prev[0], last[1] - prev[1]) > ds * 0.25) {
-        pts.push([last[0], last[1]]);
-        s.push(acc);
-      } else {
-        pts[pts.length - 1] = [last[0], last[1]];
-        s[s.length - 1] = acc;
-      }
-      return { pts, s };
-    };
+    const resample = (line: Ring, ds: number): { pts: Ring; s: number[] } => resampleLine(line, ds);
 
     /** Vertical profile within the gradient cap, iterated forward and backward. */
-    const profile = (pts: Ring, s: number[], cap: number): Float64Array => {
-      const ground = new Float64Array(pts.length);
-      for (let i = 0; i < pts.length; i++)
-        ground[i] = Math.max(terrain.seaLevel, height.sample(pts[i]![0], pts[i]![1]));
-      const z = Float64Array.from(ground);
-      for (let it = 0; it < 8; it++) {
-        for (let i = 1; i < z.length; i++) {
-          const d = (s[i]! - s[i - 1]!) * cap;
-          z[i] = Math.min(Math.max(z[i]!, z[i - 1]! - d), z[i - 1]! + d);
-        }
-        for (let i = z.length - 2; i >= 0; i--) {
-          const d = (s[i + 1]! - s[i]!) * cap;
-          z[i] = Math.min(Math.max(z[i]!, z[i + 1]! - d), z[i + 1]! + d);
-        }
-      }
-      // Nudge toward the ground where the profile has slack so short tunnels vanish.
-      for (let it = 0; it < 3; it++)
-        for (let i = 1; i < z.length - 1; i++) {
-          const lo = Math.max(z[i - 1]! - (s[i]! - s[i - 1]!) * cap, z[i + 1]! - (s[i + 1]! - s[i]!) * cap);
-          const hi = Math.min(z[i - 1]! + (s[i]! - s[i - 1]!) * cap, z[i + 1]! + (s[i + 1]! - s[i]!) * cap);
-          if (lo <= hi) z[i] = Math.min(Math.max(ground[i]!, lo), hi);
-        }
-      return z;
-    };
+    const profile = (pts: Ring, s: number[], cap: number): Float64Array => gradeProfile(terrain, pts, s, cap);
 
     const minRadiusOf = (line: Ring): number => {
       let best = Infinity;

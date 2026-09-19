@@ -142,8 +142,7 @@ stage and the cross-engine fixture.
       markers at region zoom.
 - [x] Settlements panel: automatic (policy count) or explicit list with kind,
       population and name; live stats per settlement.
-- [ ] District labels: deferred to Phase 7 with the glyph atlas (MapLibre text
-      needs glyph PBFs, which the static site must bundle).
+- [x] District labels: delivered in Phase 7 with the glyph atlas.
 
 Acceptance: golden-hash tests for the town stage; a 20 km region with a port
 town and two villages generates in about 2.1 s in the browser (settlements
@@ -180,8 +179,11 @@ with the modern street patterns, which change the block count materially.
 - [x] "Why is this here?" inspector: click anywhere for elevation, slope,
       ground, wealth and density (value and class), settlement and zone with
       the score explanation recorded by the town stage.
-- [ ] Deferred to Phase 5/6: contour-aligned local streets, cuttings and
-      tunnels on major roads (with rail), field subdivision and country lanes.
+- [x] Contour-aligned local streets (Phase 13) and cuttings, embankments and
+      tunnels on the regional roads: a road keeps a ruling gradient of 8 %
+      on the profile the railways use, and each run of one earthwork is a
+      feature of its own, styled per theme and in the SVG export.
+- [ ] Deferred: field subdivision and country lanes.
 
 Acceptance (met): overlays show coherent gradients (dense centres, wealth on
 the hills, waterfront and the upwind side, poverty by flood-prone low ground)
@@ -437,8 +439,8 @@ and 28 end-to-end tests.
 - [ ] Deferred: the recordings are authored by hand until a live run
       records real responses (the runner writes them); the server-side
       refusal fallback option from DESIGN §11.2 is not in the SDK, so
-      refusals are handled client-side; the MCP server and CLI from DESIGN
-      §11.5 wait for a later phase.
+      refusals are handled client-side. The MCP server and CLI from DESIGN
+      §11.5 were delivered in Phase 10.
 
 Acceptance: all 50 recorded requests produce valid commands or correct
 answers (unit test); no tool can emit unvalidated geometry (the executor

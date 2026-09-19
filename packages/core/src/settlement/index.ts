@@ -21,7 +21,7 @@ export {
   type BlockOptions,
   type BuildingProps,
 } from './blocks.js';
-export { roadsStage, type RoadsInput, type RoadsOutput } from './roads.js';
+export { roadsStage, ROAD_GRADIENT_CAP, type RoadsInput, type RoadsOutput, type RoadMode } from './roads.js';
 export {
   WARDS,
   MODERN_WARDS,

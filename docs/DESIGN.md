@@ -989,6 +989,10 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v1.1** — Generation backlog: the regional roads keep a ruling gradient
+  of 8 % on the profile the railways use (`networks/profile.ts`), with
+  cuttings, embankments and tunnels as runs of their own, styled per theme
+  and exported.
 - **v1.0-rc** — Phase 12 tuning pass: the headless sweep and the two
   robustness fixes it forced (siting relaxation passes; a built core on
   rugged ground). Phase 13 terrain fit: one drawn shoreline for every land

@@ -238,16 +238,61 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
       'fill-antialias': false,
     },
   });
+  // Earthworks under the main roads: a cutting's banks as a wide faint casing, an embankment's
+  // as a narrower dark one.
+  layers.push({
+    id: 'roads-cutting',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'roads',
+    minzoom: 12,
+    filter: ['==', ['get', 'mode'], 'cutting'],
+    layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'butt' },
+    paint: {
+      'line-color': p.inkMuted,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 16],
+      'line-opacity': 0.25,
+    },
+  });
+  layers.push({
+    id: 'roads-embankment',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'roads',
+    minzoom: 12,
+    filter: ['==', ['get', 'mode'], 'embankment'],
+    layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'butt' },
+    paint: {
+      'line-color': p.ink,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3.5, 16, 10],
+      'line-opacity': 0.35,
+    },
+  });
   layers.push({
     id: 'roads',
     type: 'line',
     source: options.sourceId,
     'source-layer': 'roads',
+    filter: ['!=', ['get', 'mode'], 'tunnel'],
     layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'round' },
     paint: {
       'line-color': t.road,
       'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 2, 16, 6],
       ...(theme.sketch ? { 'line-dasharray': [4, 2] } : {}),
+    },
+  });
+  layers.push({
+    id: 'roads-tunnel',
+    type: 'line',
+    source: options.sourceId,
+    'source-layer': 'roads',
+    filter: ['==', ['get', 'mode'], 'tunnel'],
+    layout: { visibility: visible('settlements'), 'line-join': 'round', 'line-cap': 'butt' },
+    paint: {
+      'line-color': t.road,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 12, 2, 16, 6],
+      'line-dasharray': [2, 2],
+      'line-opacity': 0.7,
     },
   });
   layers.push({
