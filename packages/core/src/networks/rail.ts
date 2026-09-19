@@ -756,7 +756,28 @@ export const railStage = defineStage<RailInput, RailOutput>({
       const pick = (s0: number, s1: number, o0: number, o1: number) =>
         band(host, s0, s1, o0, o1, side) ?? band(host, s0, s1, o0, o1, -side);
 
+      // The yard goes where the ground is low, flat and by the river when the line offers such a
+      // stretch within reach of the station: the floodplain, not the hill.
       let cursor = 120;
+      {
+        const hCentre = height.sample(s.center[0], s.center[1]);
+        let bestScore = -Infinity;
+        for (let d = 120; d <= Math.min(total - 400, 900); d += 40) {
+          const at = along(host, d);
+          if (!at) break;
+          const [c, r] = cellAt(terrain, at.p[0], at.p[1]);
+          const i = r * width + c;
+          const score =
+            -Math.max(0, height.data[i]! - hCentre) / 8 -
+            terrain.slope[i]! * 15 +
+            (terrain.distToWater[i]! < 300 ? 0.6 : 0) -
+            d / 3000;
+          if (score > bestScore) {
+            bestScore = score;
+            cursor = d;
+          }
+        }
+      }
       // Goods yard (1840–1965) or a smaller freight depot later.
       if (year < 1965 || s.population >= 20_000) {
         const L = 220 + Math.min(pop, 100_000) / 400;

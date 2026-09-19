@@ -250,6 +250,8 @@ export const townNamesStage = defineStage<TownNamesInput, TownNamesOutput>({
           return { key: 'market', kind: 'quarter' };
         case 'port':
           return { key: 'port', kind: 'quarter' };
+        case 'fishing':
+          return { key: 'fishing', kind: 'quarter' };
         case 'industrial':
         case 'yard':
           return { key: 'industrial', kind: 'quarter' };

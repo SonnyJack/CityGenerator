@@ -119,7 +119,8 @@ generated names are unique within their scope.
       "market": "Grote Markt",
       "port": "Haven",
       "industrial": "Werkstad",
-      "station": "Stationsbuurt"
+      "station": "Stationsbuurt",
+      "fishing": "Vissersbuurt"
     }
   },
   "conventions": {

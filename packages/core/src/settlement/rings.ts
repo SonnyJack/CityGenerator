@@ -507,6 +507,8 @@ export function modernCoreZone(ward: WardId, era: EraParams, centreDist: number,
   if (onArtery) return 'retailStrip';
   if (ward === 'slum') return 'tenement';
   if (ward === 'patriciate') return 'patriciate';
+  // The fishing quarter keeps its boats until the post-war flats.
+  if (ward === 'fishing') return era.year >= 1955 ? 'apartment' : 'fishing';
   return era.year >= 1955 ? 'apartment' : 'rowhouse';
 }
 

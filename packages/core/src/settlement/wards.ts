@@ -11,6 +11,7 @@ export type WardId =
   | 'merchant'
   | 'patriciate'
   | 'slum'
+  | 'fishing'
   | 'military'
   | 'cathedral'
   | 'castle'
@@ -68,6 +69,8 @@ export interface WardContext {
   slope: number;
   /** Whether the cell touches water. */
   waterfront: boolean;
+  /** Whether the cell fronts the sea (not a river or a lake). */
+  seaside: boolean;
   /** Where the cell stands in the core's range of heights (0 lowest, 1 highest). */
   elevation: number;
   /** How much the cell sits low by a river (0 dry, 1 on the bank of the floodplain). */
@@ -190,6 +193,17 @@ const MEDIEVAL_WARDS: Record<
       (c.onArtery ? 0.3 : 0) +
       c.floodplain * 0.8 -
       c.elevation * 0.4,
+  },
+  fishing: {
+    id: 'fishing',
+    courtyards: false,
+    lotAreaM2: 220,
+    emptyChance: 0.1,
+    setbackM: 0.5,
+    floors: [1, 2],
+    fillWeight: 0,
+    // Assigned by the town stage on the sea shore; the score ranks seaside patches.
+    score: (c) => (c.seaside ? 1 : -Infinity) + c.centreDist * 0.3 - c.elevation * 0.5,
   },
   military: {
     id: 'military',

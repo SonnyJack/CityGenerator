@@ -45,6 +45,8 @@ export const culturePackSchema = z.object({
       port: z.string(),
       industrial: z.string(),
       station: z.string(),
+      /** The fishing quarter on the shore; packs made before it was named fall back to English. */
+      fishing: z.string().default("Fishermen's Row"),
     }),
   }),
   conventions: z.object({

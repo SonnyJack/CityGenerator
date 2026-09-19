@@ -240,6 +240,9 @@ export const sitingStage = defineStage<SitingInput, SitingOutput>({
           if (Math.abs(x) > halfW - marginR * 0.6 || Math.abs(y) > halfH - marginR * 0.6) continue;
           // A harbour town stays on the coast until the last resort; only its room to grow relaxes.
           if (level < 2 && wantsCoast && distToSea[i]! > radiusM * 0.9 + 300) continue;
+          // A fishing village sits on the shore itself: its boats are its living.
+          if (level === 0 && spec.kind === 'fishingVillage' && distToSea[i]! > Math.max(120, radiusM * 0.6))
+            continue;
           // Room to grow: on the mainland (or an island several times the town's area) with
           // most of the ground around the centre dry.
           const comp = component[i]!;

@@ -96,6 +96,7 @@ function WARD_IDS(): string[] {
     'merchant',
     'patriciate',
     'slum',
+    'fishing',
     'military',
     'cathedral',
     'castle',

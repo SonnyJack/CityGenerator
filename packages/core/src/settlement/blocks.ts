@@ -82,6 +82,7 @@ const WARD_CONDITION: Partial<Record<WardId, number>> = {
   warehouse: 0.55,
   towerEstate: 0.5,
   tenement: 0.45,
+  fishing: 0.5,
   slum: 0.35,
 };
 
@@ -337,6 +338,7 @@ function kindFor(ward: WardId, areaM2: number): string {
   if (ward === 'patriciate') return areaM2 > 400 ? 'mansion' : 'townhouse';
   if (ward === 'merchant') return 'shophouse';
   if (ward === 'slum') return 'shack';
+  if (ward === 'fishing') return areaM2 > 150 ? 'boatshed' : 'cottage';
   if (ward === 'military') return 'barracks';
   if (ward === 'market') return 'shop';
   return areaM2 > 250 ? 'workshop' : 'house';

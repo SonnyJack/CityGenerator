@@ -711,6 +711,9 @@ cells the router had never entered.
       floodplain, slums and craftsmen take the low ground by the river; in
       the rings, works and yards take the floodplain in the industrial city
       and the rich take the hill with the view.
-- [ ] Deferred: fishing quarters as a ward of their own (the culture packs
-      would each need its names and building kinds); rail yards steered to
-      the floodplain by the placement engine.
+- [x] Fishing quarters as a ward of their own (`fishing`): boats drawn up
+      on the shore of a coastal town, the whole shore of a fishing village
+      (which is now sited on the shore itself), with cottages and boat
+      sheds, a colour per theme, and a quarter name in every culture pack
+      (custom packs fall back to English). Rail yards go where the line runs
+      low, flat and by the river within reach of the station.

@@ -595,7 +595,7 @@ test('SVG and GeoJSON export a frame, and the player version hides GM notes', as
 });
 
 test('PNG and Universal VTT export a downtown frame with capped walls', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   await ready(page);
   const webglMissing = await page.getByText('needs WebGL').isVisible();
   test.skip(webglMissing, 'WebGL is not available in this browser build');

@@ -26,6 +26,7 @@ export type WardKind =
   | 'merchant'
   | 'patriciate'
   | 'slum'
+  | 'fishing'
   | 'military'
   | 'cathedral'
   | 'castle'
@@ -162,6 +163,7 @@ export const atlas: Theme = {
       merchant: '#e4d6bd',
       patriciate: '#dfe6d3',
       slum: '#e6d8d0',
+      fishing: '#dbe3e3',
       military: '#d6d6d2',
       cathedral: '#d9d2e8',
       castle: '#cfcfcf',
@@ -569,6 +571,7 @@ export const dark: Theme = {
       merchant: '#36353a',
       patriciate: '#333a36',
       slum: '#3a3434',
+      fishing: '#313a3d',
       military: '#35363a',
       cathedral: '#38353f',
       castle: '#3a3a3d',

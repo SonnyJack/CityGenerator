@@ -549,6 +549,11 @@ export const townStage = defineStage<TownInput, TownOutput>({
         relativeArea: fixed.relativeArea,
         slope: p.slope,
         waterfront: p.waterfront,
+        // On the sea shore: a clipped patch within a block of the water, or, in a fishing village
+        // whose whole core is the shore, any patch close to it.
+        seaside:
+          terrain.distToSea[cellAt(p.centroid[0], p.centroid[1])]! <
+          (site.kind === 'fishingVillage' ? 250 : p.waterfront ? 120 : 0),
         elevation: elevationRank(p),
         floodplain: floodplainOf(p),
       };
@@ -569,6 +574,22 @@ export const townStage = defineStage<TownInput, TownOutput>({
           best.ward = wardId;
           best.why = `${wardId}: best location score ${profile.score(contextOf(best)).toFixed(2)}`;
         }
+      }
+    }
+    // The fishing quarter: boats drawn up on the shore of a coastal town, the whole shore of a
+    // fishing village.
+    if (site.coastal) {
+      const seaside = inner.filter((p) => !p.ward && contextOf(p).seaside);
+      const count =
+        site.kind === 'fishingVillage'
+          ? seaside.length
+          : Math.min(seaside.length, Math.max(1, Math.round(inner.length / 12)));
+      const ranked = [...seaside].sort(
+        (a, b) => WARDS.fishing.score(contextOf(b)) - WARDS.fishing.score(contextOf(a)) || a.index - b.index,
+      );
+      for (const p of ranked.slice(0, count)) {
+        p.ward = 'fishing';
+        p.why = 'fishing: boats drawn up on the shore';
       }
     }
     const fillRng = rng.fork('wards');
