@@ -480,6 +480,17 @@ medium, high, core}`. Both numeric and class values are exposed to the UI and
   the founding era had them and the era profile keeps remnants), surrounded by
   rings whose street pattern follows the era they were built in. This is how
   mixed-era layouts arise naturally rather than by a "mixed" switch.
+- The **footprint** is not a disc. A cost-weighted fill grows from the site
+  over the buildable ground (land above the sea, slopes weighted, cliffs
+  impassable, rivers at the cost of a bridge) and gives every cell the area
+  covered when the growth reached it, expressed as the radius of a disc of
+  that area. Everything that used to be measured as a distance from the
+  centre (core and ring extents, the built year of a block, ward scores,
+  where an artery ends, which blocks empty first in a decline) reads that
+  equivalent radius instead, so a port takes the same area as an inland town
+  of the same population but along its shore, and a hill town follows the
+  valley floor. The fill is sized to the largest radius the settlement's
+  history ever reaches, so a block's shape is the same at every year.
 - **Districts** are relaxed-Voronoi patches (organic rings) or super-block
   unions (grid rings), clipped to the buildable mask and split by rivers, rail
   and arterials.
@@ -970,8 +981,10 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   robustness fixes it forced (siting relaxation passes; a built core on
   rugged ground). Phase 13 terrain fit: one drawn shoreline for every land
   test (bilinear distance field, half a cell in from the water cell
-  centres, with setbacks) and route smoothing constrained to the land the
-  router chose, with a sweep invariant for both.
+  centres, with setbacks), route smoothing constrained to the land the
+  router chose, with a sweep invariant for both, and the growth footprint
+  (a cost-weighted fill over the buildable ground in place of the disc,
+  read everywhere as an equivalent radius).
 - **v0.13** — Phase 11: utility networks (water, gas, power, sewers,
   pipelines, canals) as a region stage over the towns and facilities, with
   the shared raster router and per-network cost models (mains follow the

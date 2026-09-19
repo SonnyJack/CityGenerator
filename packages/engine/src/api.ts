@@ -193,6 +193,10 @@ export interface EngineStats {
     population: number;
     center: [number, number];
     radiusM: number;
+    /** Farthest the built-up area reaches from the centre (the footprint is shaped by the ground). */
+    extentM: number;
+    /** Share of the core's ground steeper than 1 in 5. */
+    steepShare: number;
     patches: number;
     walled: boolean;
     blocks: number;

@@ -1,5 +1,5 @@
 import { area, ccw, centroid, inset, open, splitByLine, type Pt } from '../geometry/polygon.js';
-import type { Ring } from '../raster/contours.js';
+import { smoothLine, type Ring } from '../raster/contours.js';
 import type { Rng } from '../random/rng.js';
 import type { TerrainOutput } from '../terrain/stage.js';
 import type { SocietyOutput, WealthClass, DensityClass } from '../society/stage.js';
@@ -97,6 +97,14 @@ interface RingGenContext {
   slopeAt: (x: number, y: number) => number;
   /** Gate positions of the organic core, used to start radial arteries. */
   gates: Pt[];
+  /** Equivalent radius on the settlement's growth footprint (see footprint.ts). */
+  radiusAt: (x: number, y: number) => number;
+  /** Farthest the footprint within equivalent radius r reaches from the centre. */
+  extent: (r: number) => number;
+  /** Outline of the footprint within equivalent radius r. */
+  outline: (r: number) => Ring | null;
+  /** Bounding box of the footprint within equivalent radius r. */
+  bbox: (r: number) => { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 /** Generate grid blocks and streets for all rings. */
@@ -107,6 +115,9 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   const streets: RingsResult['streets'] = [];
   if (!rings.length) return { rings, blocks, streets, coreRadius };
   const R = rings[rings.length - 1]!.rOut;
+  // The footprint may run well past R along a shore or a valley; the grid must cover it.
+  const E = Math.max(R, ctx.extent(R * 1.05));
+  const box = ctx.bbox(R * 1.05);
 
   // Radial arteries: from gates (or evenly spaced angles) out to the edge.
   const arteryCount = Math.min(8, Math.max(3, Math.round(2 + Math.sqrt(site.anchorPopulation) / 40)));
@@ -125,11 +136,11 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   for (const a of angles) {
     const dir: Pt = [Math.cos(a), Math.sin(a)];
     const start: Pt = [cx + dir[0] * coreRadius * 0.98, cy + dir[1] * coreRadius * 0.98];
-    // Stop the artery where it would enter the sea.
-    let end: Pt = [cx + dir[0] * R * 1.05, cy + dir[1] * R * 1.05];
-    for (let d = coreRadius; d <= R * 1.05; d += 25) {
+    // Stop the artery where it would enter the sea or leave the built-up ground.
+    let end: Pt = [cx + dir[0] * E * 1.05, cy + dir[1] * E * 1.05];
+    for (let d = coreRadius; d <= E * 1.05; d += 25) {
       const p: Pt = [cx + dir[0] * d, cy + dir[1] * d];
-      if (!ctx.isLand(p[0], p[1])) {
+      if (!ctx.isLand(p[0], p[1]) || ctx.radiusAt(p[0], p[1]) > R * 1.05) {
         end = [cx + dir[0] * (d - 25), cy + dir[1] * (d - 25)];
         break;
       }
@@ -198,12 +209,10 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     const vy = ux;
     const toWorld = (u: number, v: number): Pt => [cx + u * ux + v * vx, cy + u * uy + v * vy];
     const halfWidth = era.streetWidthM.local / 2;
-    const iMax = Math.ceil(ring.rOut / bw) + 1;
-    const jMax = Math.ceil(ring.rOut / bh) + 1;
+    const iMax = Math.ceil(E / bw) + 1;
+    const jMax = Math.ceil(E / bh) + 1;
     for (let i = -iMax; i < iMax; i++) {
       for (let j = -jMax; j < jMax; j++) {
-        // Per-cell randomness: a cell draws the same numbers whatever the ring's current extent.
-        const cellRng = ringRng.fork(`cell:${i},${j}`);
         const u0 = i * bw;
         const v0 = j * bh;
         const corners: Pt[] = [
@@ -213,8 +222,11 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
           toWorld(u0, v0 + bh),
         ];
         const c = centroid(corners);
-        const d = Math.hypot(c[0] - cx, c[1] - cy);
+        if (c[0] < box.minX || c[0] > box.maxX || c[1] < box.minY || c[1] > box.maxY) continue;
+        const d = ctx.radiusAt(c[0], c[1]);
         if (d < ring.rIn || d > ring.rOut) continue;
+        // Per-cell randomness: a cell draws the same numbers whatever the ring's current extent.
+        const cellRng = ringRng.fork(`cell:${i},${j}`);
         // Suburban patterns thin out toward the edge, leaving gaps and greens.
         const edgeT = (d - ring.rIn) / Math.max(1, ring.rOut - ring.rIn);
         if ((pattern === 'suburban' || pattern === 'culDeSac') && cellRng.chance(0.08 + edgeT * 0.25))
@@ -250,7 +262,7 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
           const shrunk = inset(ccw(open(piece)), halfWidth);
           if (shrunk.length < 3 || area(shrunk) < 150) return;
           const pc = centroid(shrunk);
-          const dist = Math.hypot(pc[0] - cx, pc[1] - cy);
+          const dist = Math.min(ctx.radiusAt(pc[0], pc[1]), ring.rOut);
           blocks.push({
             ring: shrunk,
             ringIndex,
@@ -270,13 +282,20 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
         pushEdge(corners[3]!, corners[0]!, collectorI ? 'collector' : 'street');
       }
     }
-    // Ring road at the outer edge for motorway eras and large settlements.
+    // Ring road at the outer edge for motorway eras and large settlements: it follows the
+    // footprint's outline (round the bay, along the valley) rather than a circle.
     if (era.transport.motorway && site.population >= 20_000 && ringIndex === rings.length - 1) {
       const pts: Ring = [];
       const rr = ring.rOut * 1.03;
-      for (let k = 0; k <= 72; k++) {
-        const a = (k / 72) * Math.PI * 2;
-        const p: Pt = [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr];
+      const loop = ctx.outline(rr);
+      const path: Pt[] = loop
+        ? resampleClosed(smoothLine(open(loop), 2, true), Math.max(40, rr / 36))
+        : Array.from({ length: 73 }, (_, k) => {
+            const a = (k / 72) * Math.PI * 2;
+            return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr] as Pt;
+          });
+      for (let k = 0; k < path.length; k++) {
+        const p = path[k]!;
         if (ctx.isLand(p[0], p[1])) pts.push(p);
         else if (pts.length >= 2) {
           streets.push({ points: pts.splice(0), cls: 'motorway', key: `motorway-${ringIndex}-${k}` });
@@ -286,6 +305,28 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     }
   });
   return { rings, blocks, streets, coreRadius };
+}
+
+/** Points every `stepM` along a closed ring, ending back at the start. */
+function resampleClosed(ring: Ring, stepM: number): Pt[] {
+  const out: Pt[] = [];
+  if (ring.length < 2) return out;
+  const n = ring.length;
+  let carry = 0;
+  for (let i = 0; i < n; i++) {
+    const a = ring[i]!;
+    const b = ring[(i + 1) % n]!;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    let d = carry;
+    while (d <= len) {
+      const t = len ? d / len : 0;
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      d += stepM;
+    }
+    carry = d - len;
+  }
+  if (out.length) out.push(out[0]!);
+  return out;
 }
 
 function segmentCrossesRing(a: Pt, b: Pt, ring: Ring): boolean {

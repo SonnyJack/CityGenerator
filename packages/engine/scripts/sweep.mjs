@@ -195,11 +195,20 @@ for (const run of selected) {
     )
       invariants.push(`facilities failed ${stats.facilities.failed}/${stats.facilities.placed}`);
     if (ms > budgetMs) invariants.push(`slow ${ms.toFixed(0)} ms`);
-    for (const st of stats.settlements)
+    for (const st of stats.settlements) {
       if (st.blocks === 0 && st.population > 300) invariants.push(`${st.id} has no blocks`);
+      // Terrain fit: a core mostly on steep ground means the fill found no gentler ground to take.
+      if (
+        st.steepShare > 0.75 &&
+        st.population > 1000 &&
+        run.doc.spec.terrain.roughness < 1 &&
+        run.doc.spec.extent.widthM >= 6_000
+      )
+        invariants.push(`${st.id} core ${(st.steepShare * 100).toFixed(0)}% steep`);
+    }
     if (invariants.length) problems.push(`${run.name}: ${invariants.join('; ')}`);
     const rss = `${(process.memoryUsage().rss / 1048576).toFixed(0)}M`;
-    const line = `${run.name.padEnd(48)} ${ms.toFixed(0).padStart(6)} ms ${rss.padStart(6)} ${stats.settlements.length}s ${stats.blocks}bl ${stats.facilities.placed}/${stats.facilities.failed}fac ${stats.rail.trackKm.toFixed(0)}rail ${stats.utilities.powerKm.toFixed(0)}pw ${stats.utilities.canalKm.toFixed(0)}cn waste ${stats.facilities.wasteland.overall.toFixed(2)}${queries}`;
+    const line = `${run.name.padEnd(48)} ${ms.toFixed(0).padStart(6)} ms ${rss.padStart(6)} ${stats.settlements.length}s ${stats.blocks}bl ${stats.facilities.placed}/${stats.facilities.failed}fac ${stats.rail.trackKm.toFixed(0)}rail ${stats.utilities.powerKm.toFixed(0)}pw ${stats.utilities.canalKm.toFixed(0)}cn waste ${stats.facilities.wasteland.overall.toFixed(2)} steep ${(Math.max(0, ...stats.settlements.map((t) => t.steepShare)) * 100).toFixed(0)}%${queries}`;
     rows.push(line);
     console.log(line);
   } catch (e) {

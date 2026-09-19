@@ -546,6 +546,8 @@ export function createEngine(): EngineApi {
           population: sites[i]!.population,
           center: sites[i]!.center,
           radiusM: t.radiusM,
+          extentM: t.extentM,
+          steepShare: t.stats.steepShare,
           patches: t.stats.patches,
           walled: t.stats.walled,
           blocks: t.blocks.length,
@@ -653,7 +655,10 @@ export function createEngine(): EngineApi {
       let patch: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['patch'];
       for (let t = 0; t < towns.length; t++) {
         const town = towns[t]!;
-        if (Math.hypot(x - town.center[0], y - town.center[1]) > town.radiusM * 2) continue;
+        if (
+          Math.hypot(x - town.center[0], y - town.center[1]) > Math.max(town.radiusM * 2, town.extentM * 1.1)
+        )
+          continue;
         for (const p of town.patches.features) {
           const ring = p.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
           if (pointInRing(x, y, ring)) {
@@ -673,7 +678,10 @@ export function createEngine(): EngineApi {
       }
       let building: NonNullable<Awaited<ReturnType<EngineApi['inspect']>>>['building'];
       for (const town of towns) {
-        if (Math.hypot(x - town.center[0], y - town.center[1]) > town.radiusM * 2) continue;
+        if (
+          Math.hypot(x - town.center[0], y - town.center[1]) > Math.max(town.radiusM * 2, town.extentM * 1.1)
+        )
+          continue;
         for (const block of town.blocks) {
           if (!pointInRing(x, y, block.ring)) continue;
           for (const b of latest.tiler.model(block).buildings) {
@@ -1293,7 +1301,10 @@ export function createEngine(): EngineApi {
         properties: (f.properties ?? {}) as Record<string, unknown>,
       });
       for (const town of towns) {
-        if (Math.hypot(x - town.center[0], y - town.center[1]) > town.radiusM * 2) continue;
+        if (
+          Math.hypot(x - town.center[0], y - town.center[1]) > Math.max(town.radiusM * 2, town.extentM * 1.1)
+        )
+          continue;
         // Buildings first (smallest), then streets, then the patch.
         for (const block of town.blocks) {
           if (!pointInRing(x, y, block.ring)) continue;

@@ -22,7 +22,8 @@ import type { SocietyOutput } from '../society/stage.js';
 import { generateRings, growthRings, modernCoreZone, modernZone } from './rings.js';
 import { distToPolyline, type ZoneEdit } from '../document/authored.js';
 import type { RegionEvent } from '../document/schema.js';
-import { peakUntil, populationAt, radiusAt, yearForRadius } from './history.js';
+import { maxRadius, peakUntil, populationAt, radiusAt, yearForRadius } from './history.js';
+import { growthFootprint } from './footprint.js';
 import type { Ring } from '../raster/contours.js';
 
 /**
@@ -93,6 +94,8 @@ export interface TownOutput {
   id: string;
   center: Pt;
   radiusM: number;
+  /** Farthest any patch reaches from the centre: the town is shaped by its ground, not a disc. */
+  extentM: number;
   patches: FeatureCollection<
     Polygon,
     {
@@ -126,6 +129,8 @@ export interface TownOutput {
     abandonedBlocks: number;
     /** Year the organic core reached its final extent. */
     coreEndYear: number;
+    /** Share of the core's ground steeper than 1 in 5 (a terrain-fit measure for the sweep). */
+    steepShare: number;
   };
 }
 
@@ -172,6 +177,15 @@ export const townStage = defineStage<TownInput, TownOutput>({
     const R = growth.coreRadius;
     // The farm belt is laid out once; ring blocks replace it when the first grid era arrives.
     const outerR = R * 1.7;
+    // The footprint: a growth fill over the buildable ground (see footprint.ts). Every "within
+    // R of the centre" below is an equivalent radius on that fill, so the town takes the same
+    // area as a disc would but shaped by the shore, the valley and the slopes.
+    // Sized to the largest radius the history ever reaches, so the fill (and with it every
+    // patch and block) is the same at every year.
+    const lastRing = growth.rings[growth.rings.length - 1];
+    const maxR = Math.max(outerR, maxRadius(history) * 1.05);
+    const footprint = growthFootprint(terrain, site.center, maxR);
+    const reAt = (p: Pt) => footprint.radiusAt(p[0], p[1]);
     const populationNow = site.population;
     const peak = peakUntil(history, year);
     const [cx, cy] = site.center;
@@ -188,35 +202,54 @@ export const townStage = defineStage<TownInput, TownOutput>({
 
     // --- 1. Patch sites: sunflower spiral, denser inside the town ------------
     const spacing = input.blockSizeM;
-    const innerCount = Math.max(6, Math.round((Math.PI * R * R) / (spacing * spacing)));
-    const outerCount = Math.max(
-      6,
-      Math.round((Math.PI * (outerR * outerR - R * R)) / (spacing * spacing * 3)),
-    );
+    // Sites are spread over the disc that holds the whole footprint (a shore town runs along its
+    // coast): one site per block area where the core's growth reaches, a third of that density
+    // beyond it.
+    const E = Math.max(outerR, footprint.extent(outerR));
+    const innerCount = Math.max(6, Math.round((Math.PI * E * E) / (spacing * spacing)));
+    const outerCount = Math.max(6, Math.round((Math.PI * E * E) / (spacing * spacing * 3)));
     const sites: Pt[] = [];
     const golden = Math.PI * (3 - Math.sqrt(5));
     const jitter = rng.fork('jitter');
+    let innerSites = 0;
     for (let i = 0; i < innerCount; i++) {
-      const r = R * Math.sqrt((i + 0.5) / innerCount);
+      const r = E * Math.sqrt((i + 0.5) / innerCount);
       const t = i * golden;
-      sites.push([
+      const p: Pt = [
         cx + Math.cos(t) * r + jitter.range(-spacing, spacing) * 0.2,
         cy + Math.sin(t) * r + jitter.range(-spacing, spacing) * 0.2,
-      ]);
+      ];
+      if (reAt(p) > R) continue;
+      sites.push(p);
+      innerSites++;
     }
     for (let i = 0; i < outerCount; i++) {
-      const r = Math.sqrt(R * R + (outerR * outerR - R * R) * ((i + 0.5) / outerCount));
+      const r = E * Math.sqrt((i + 0.5) / outerCount);
       const t = i * golden + 1.3;
-      sites.push([
+      const p: Pt = [
         cx + Math.cos(t) * r + jitter.range(-spacing, spacing) * 0.3,
         cy + Math.sin(t) * r + jitter.range(-spacing, spacing) * 0.3,
-      ]);
+      ];
+      // Sites beyond the farm edge stay: they keep the cells of the kept sites compact (a cell
+      // with no neighbour on one side would sprawl into the unbuilt ground); their patches go.
+      if (reAt(p) <= R) continue;
+      sites.push(p);
+    }
+    // Ground the fill barely reaches (a cliff-bound cove, a bare crag): lay the disc's sites
+    // anyway so the rugged-core fallback below has patches to choose from.
+    if (innerSites < 6) {
+      const discCount = Math.max(6, Math.round((Math.PI * R * R) / (spacing * spacing)));
+      for (let i = 0; i < discCount; i++) {
+        const r = R * Math.sqrt((i + 0.5) / discCount);
+        const t = i * golden + 0.7;
+        sites.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r]);
+      }
     }
     const bounds = {
-      minX: cx - outerR * 1.15,
-      minY: cy - outerR * 1.15,
-      maxX: cx + outerR * 1.15,
-      maxY: cy + outerR * 1.15,
+      minX: cx - E * 1.15,
+      minY: cy - E * 1.15,
+      maxX: cx + E * 1.15,
+      maxY: cy + E * 1.15,
     };
     const relaxed = relax(sites, bounds, 2);
     const cells = voronoi(relaxed, bounds);
@@ -232,7 +265,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       const cell = cells[i]!;
       if (cell.ring.length < 3) continue;
       const c = centroid(cell.ring);
-      const d = Math.hypot(c[0] - cx, c[1] - cy);
+      const d = reAt(c);
       if (d > outerR) continue;
       const siteLand = isLand(cell.site[0], cell.site[1]);
       let ring = open(cell.ring);
@@ -371,9 +404,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
     const roads: Ring[] = [];
     const outerVertices = new Set<string>();
     for (const p of patches)
-      if (!p.inner)
-        for (const v of p.ring)
-          if (Math.hypot(v[0] - cx, v[1] - cy) > outerR * 0.92) outerVertices.add(graph.key(v));
+      if (!p.inner) for (const v of p.ring) if (reAt(v) > outerR * 0.92) outerVertices.add(graph.key(v));
     for (const g of gates) {
       const dir = Math.atan2(g[1] - cy, g[0] - cx);
       const targets = new Set<string>();
@@ -407,22 +438,36 @@ export const townStage = defineStage<TownInput, TownOutput>({
       }
     }
     const medianArea = median(inner.map((p) => area(p.ring))) || 1;
+    // The distances and shape measures never change while wards are assigned; only the
+    // adjacency to the plaza and the castle does. Scoring asks for every patch once per ward.
+    const fixedContext = new Map<
+      Patch,
+      { dC: number; dG: number; dW: number; compact: number; relativeArea: number }
+    >();
     function contextOf(p: Patch): WardContext {
-      const dC = Math.hypot(p.centroid[0] - cx, p.centroid[1] - cy) / R;
-      const dG = gateSet.length
-        ? Math.min(...gateSet.map((g) => Math.hypot(g[0] - p.centroid[0], g[1] - p.centroid[1]))) / R
-        : 1;
-      const dW = edgeRing.length ? distToRing(p.centroid, edgeRing) / R : 1;
+      let fixed = fixedContext.get(p);
+      if (!fixed) {
+        fixed = {
+          dC: Math.min(reAt(p.centroid), R * 2) / R,
+          dG: gateSet.length
+            ? Math.min(...gateSet.map((g) => Math.hypot(g[0] - p.centroid[0], g[1] - p.centroid[1]))) / R
+            : 1,
+          dW: edgeRing.length ? distToRing(p.centroid, edgeRing) / R : 1,
+          compact: compactness(p.ring),
+          relativeArea: area(p.ring) / medianArea,
+        };
+        fixedContext.set(p, fixed);
+      }
       const ns = neighbours(p);
       return {
-        centreDist: dC,
-        gateDist: dG,
-        wallDist: dW,
+        centreDist: fixed.dC,
+        gateDist: fixed.dG,
+        wallDist: fixed.dW,
         onArtery: arteryPatchSet.has(p),
         adjacentToPlaza: !!plaza && ns.includes(plaza),
         adjacentToCastle: !!castle && ns.includes(castle),
-        compactness: compactness(p.ring),
-        relativeArea: area(p.ring) / medianArea,
+        compactness: fixed.compact,
+        relativeArea: fixed.relativeArea,
         slope: p.slope,
         waterfront: p.waterfront,
       };
@@ -606,6 +651,10 @@ export const townStage = defineStage<TownInput, TownOutput>({
         clipToLand: (ring, s) => clipToLand(ring, s, clipLand, localCell),
         slopeAt: slopeAt(height, slope),
         gates,
+        radiusAt: footprint.radiusAt,
+        extent: (r) => footprint.extent(r),
+        outline: (r) => footprint.outline(r),
+        bbox: (r) => footprint.bbox(r),
       });
       ringCount = rings.rings.length;
       const zoneRng = rng.fork('zones');
@@ -647,7 +696,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       }
       rings.streets.forEach((st) => {
         const mid = st.points[Math.floor(st.points.length / 2)]!;
-        const d = Math.hypot(mid[0] - cx, mid[1] - cy);
+        const d = Math.min(reAt(mid), lastRing?.rOut ?? R);
         const ring = growth.rings.find((r) => d >= r.rIn && d <= r.rOut) ?? growth.rings[0]!;
         const built =
           st.cls === 'artery' ? growth.coreEndYear : yearForRadius(history, d, ring.fromYear, ring.toYear);
@@ -661,7 +710,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
       const ranked = blocks
         .map((b) => {
           const c = centroid(b.ring);
-          return { b, d: Math.hypot(c[0] - cx, c[1] - cy) + jitter.fork(b.id).range(0, 0.15) * R };
+          return { b, d: Math.min(reAt(c), maxR) + jitter.fork(b.id).range(0, 0.15) * R };
         })
         .sort((a, b) => b.d - a.d);
       const fraction = (t: number) => {
@@ -740,11 +789,16 @@ export const townStage = defineStage<TownInput, TownOutput>({
         if (e && e.ward in WARDS) b.ward = e.ward as WardId;
       }
     }
+    let extentM = site.radiusM;
+    for (const f of patchFeatures)
+      for (const c of f.geometry.coordinates[0]!)
+        extentM = Math.max(extentM, Math.hypot(c[0]! - cx, c[1]! - cy));
     return {
       key: ctx.key,
       id,
       center: site.center,
       radiusM: site.radiusM,
+      extentM,
       patches: { type: 'FeatureCollection', features: patchFeatures },
       streets: { type: 'FeatureCollection', features: streetFeatures },
       walls: { type: 'FeatureCollection', features: wallFeatures },
@@ -762,6 +816,7 @@ export const townStage = defineStage<TownInput, TownOutput>({
         peakYear: peak.year,
         abandonedBlocks,
         coreEndYear: growth.coreEndYear,
+        steepShare: footprint.steepShare(R, 0.2),
       },
     };
   },

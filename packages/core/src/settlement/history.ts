@@ -129,6 +129,15 @@ export function radiusAt(h: SettlementHistory, t: number): number {
   return radiusForPopulation(peak.population, t);
 }
 
+/** Largest built-up radius the settlement ever reaches (the table runs to 2100): the footprint is sized to it so a block's shape does not depend on the year. */
+export function maxRadius(h: SettlementHistory): number {
+  const tab = tableOf(h);
+  return Math.max(
+    radiusForPopulation(h.anchorPopulation, h.anchorYear),
+    tab.radius[tab.radius.length - 1] ?? 0,
+  );
+}
+
 /** First year (in 5-year steps from `from`) at which the built-up radius reaches d; `to` when never. */
 export function yearForRadius(h: SettlementHistory, d: number, from: number, to: number): number {
   if (to <= from) return from;

@@ -6,6 +6,7 @@ export {
   type SitingOutput,
 } from './siting.js';
 export { townStage, type TownInput, type TownOutput, type BlockRecipe } from './town.js';
+export { growthFootprint, type Footprint, type FootprintOptions } from './footprint.js';
 export {
   generateBlock,
   subdivide,

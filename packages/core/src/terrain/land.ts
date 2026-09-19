@@ -23,7 +23,12 @@ export interface LandOptions {
 export type LandTest = (x: number, y: number) => boolean;
 
 /** Bilinear sample of a per-cell field on the terrain grid, clamped at the edges. */
-function sampleField(terrain: TerrainOutput, field: Float32Array, x: number, y: number): number {
+export function sampleTerrainField(
+  terrain: TerrainOutput,
+  field: Float32Array,
+  x: number,
+  y: number,
+): number {
   const { height } = terrain;
   const fc = Math.min(Math.max(height.col(x), 0), height.width - 1);
   const fr = Math.min(Math.max(height.row(y), 0), height.height - 1);
@@ -49,7 +54,7 @@ export function shoreDistance(
   rivers: 'water' | 'land' = 'land',
 ): number {
   const field = rivers === 'water' ? terrain.distToWater : (terrain.distToStillWater ?? terrain.distToWater);
-  return sampleField(terrain, field, x, y) - terrain.height.cellSizeM / 2;
+  return sampleTerrainField(terrain, field, x, y) - terrain.height.cellSizeM / 2;
 }
 
 /** A land test that agrees with the drawn water polygons, with an optional setback. */

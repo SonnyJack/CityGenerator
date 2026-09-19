@@ -22,7 +22,7 @@ CI or by a reviewer.
 | 10    | Ecosystem                               | MCP server and CLI, plugin/custom feature authoring, OSM/DEM import, PWA, gallery, docs             |
 | 11    | Utilities                               | Water and gas mains, power lines, sewers, pipelines and canals from the works, by era               |
 | 12    | Tuning pass                             | Headless sweep over presets, eras, cultures and edge cases; the fixes it forced                     |
-| 13    | Terrain fit                             | One drawn shoreline for every test; routes that stay on the land the router chose                   |
+| 13    | Terrain fit                             | One drawn shoreline for every test; routes that stay on land; towns shaped by a growth fill         |
 
 Milestones: `v0.1` after Phase 1, `v0.2` after Phase 2, `v0.3` after Phase 3,
 `v0.5` after Phase 6, `v0.8` after Phase 8, `v1.0` after Phase 9 plus a tuning
@@ -627,7 +627,7 @@ facility failures, settlements without blocks, no premises).
 - [ ] Deferred: a browser-side sweep of every theme at every zoom for
       rendering budgets; per-culture visual review of the generated names.
 
-## Phase 13 — Terrain fit (steps 1 and 2 done, 3–5 open)
+## Phase 13 — Terrain fit (steps 1–3 done, 4 and 5 open)
 
 Screenshots showed blocks hanging over lakes and bays and roads cutting
 coves. The cause was two shorelines: the map draws water from marching
@@ -656,9 +656,29 @@ cells the router had never entered.
 - [x] The engine exposes `landCheck(points, options)` and the sweep asserts
       no building corner over the drawn water and no road or track vertex
       over the sea or a lake, on every run.
-- [ ] Step 3: contour-following streets on slopes (ring roads offset along
-      the isolines rather than concentric circles).
-- [ ] Step 4: bridges, causeways and embankments as drawn features on
-      roads over rivers and marsh, styled per theme and exported.
-- [ ] Step 5: patches that cut on the shoreline keep a promenade or a quay
-      strip instead of a ragged edge.
+- [x] Step 3, the footprint (`core/settlement/footprint.ts`): a town is no
+      longer a disc. A cost-weighted fill grows from the centre over the
+      buildable ground (land above the sea; slopes cost more from 1 in 20,
+      seven times flat ground at 1 in 2.5 and rising; only cliffs are
+      impassable; a river costs a bridge) and records
+      the area covered when it reached each cell. That area, as the radius
+      of a disc, is an _equivalent radius_: on a plain it is the distance
+      from the centre, on a coast or in a valley it is the same area shaped
+      by the ground. Patches, growth rings, the built year of every block,
+      ward scores, the artery ends and the decline order all read it in
+      place of the Euclidean distance, so the growth curve, the ring
+      boundaries and the timeline keep their meaning; the fill is sized to
+      the largest radius the history ever reaches, so a block's shape does
+      not depend on the year. The motorway ring road follows the footprint's
+      outline. Towns report their extent and the share of steep ground in
+      the core.
+- [ ] Step 4: terrain-aligned ring streets (grids rotated to the local
+      gradient or shoreline, collectors contour-parallel on slopes, stepped
+      lanes where a local would be too steep) and siting scored on the
+      buildable area within the eventual footprint rather than the centre
+      cell.
+- [ ] Step 5: rivers through a town as hard boundaries with quays along
+      the bank and bridges only where arteries cross; zoning that reads the
+      terrain (industry and rail on the floodplain, wealth on the high
+      ground, fishing quarters on the shore); a promenade or quay strip
+      where a patch cuts on the shoreline.

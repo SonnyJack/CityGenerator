@@ -894,8 +894,9 @@ test('scrubbing the year keeps what already stands and adds new growth around it
     expect(later!.props.built).toBe(b.props.built);
     survivors++;
   }
-  // The old town rebuilds heavily after its 1890 and 1955 re-zonings, so only a share survives unchanged.
-  expect(survivors).toBeGreaterThan(Math.max(100, at1890.size * 0.15));
+  // The old town rebuilds heavily after its 1890 and 1955 re-zonings (most of a port's core counts as
+  // central on its growth footprint and turns commercial), so only a share survives unchanged.
+  expect(survivors).toBeGreaterThan(Math.max(60, at1890.size * 0.08));
   // Something was built in between, and everything shown was built by then.
   expect([...at1955.values()].some((b) => (b.props.built ?? 0) > 1890)).toBe(true);
   for (const b of at1955.values()) expect(b.props.built).toBeLessThanOrEqual(1955);
