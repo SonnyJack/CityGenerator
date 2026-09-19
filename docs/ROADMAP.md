@@ -399,9 +399,9 @@ into the fill work of Phase 7.
 - [ ] Deferred: the remaining culture packs from DESIGN §7 (data
       contributions with a gallery each), transliteration tables, a
       pixel-level SVG-versus-PNG comparison (the e2e test checks both exports
-      of the same frame for content), streetcar-suburb bias by culture. The
-      wasteland target carried from Phase 6 (block-level fill inside facility
-      grounds) is done.
+      of the same frame for content). The wasteland target carried from
+      Phase 6 (block-level fill inside facility grounds) and the
+      streetcar-suburb bias by culture (`streetcarReach`) are done.
 
 Acceptance: the directory of the default region lists about 11,500 premises,
 every non-residential one with a name and most with an address; a player SVG
