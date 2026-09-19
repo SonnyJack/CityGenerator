@@ -57,13 +57,25 @@ function registerProtocol() {
   });
 }
 
-function styleFor(themeId: string | undefined, layers: Partial<Record<LayerGroup, boolean>>) {
+function styleFor(
+  themeId: string | undefined,
+  layers: Partial<Record<LayerGroup, boolean>>,
+  authored?: { id: string; locked: boolean; opacity: number }[],
+) {
   return compileStyle(themeById(themeId), {
     sourceId: SOURCE_ID,
     tileUrl: TILE_URL,
     demSourceId: DEM_SOURCE_ID,
     demTileUrl: DEM_URL,
     layers,
+    ...(authored
+      ? {
+          authored: {
+            opacity: Object.fromEntries(authored.filter((l) => l.opacity < 1).map((l) => [l.id, l.opacity])),
+            order: authored.map((l) => l.id),
+          },
+        }
+      : {}),
     glyphs: GLYPHS_URL,
     editor: {
       authoredSourceId: AUTHORED_SOURCE,
@@ -121,6 +133,7 @@ export function MapView() {
   const extent = useApp((s) => s.document.spec.extent);
   const themeId = useApp((s) => s.document.ui?.theme);
   const layerState = useApp((s) => s.document.ui?.layers);
+  const authoredLayers = useApp((s) => s.authoredLayers);
   const terrain3d = useApp((s) => s.document.ui?.terrain3d ?? false);
   const directoryOpen = useApp((s) => s.directoryOpen);
   const setDirectoryOpen = useApp((s) => s.setDirectoryOpen);
@@ -170,7 +183,7 @@ export function MapView() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const key = JSON.stringify([themeId ?? 'atlas', layerState ?? {}]);
+    const key = JSON.stringify([themeId ?? 'atlas', layerState ?? {}, authoredLayers]);
     if (appliedStyle.current === null) {
       // First run: the constructor already applied this theme.
       appliedStyle.current = key;
@@ -178,12 +191,16 @@ export function MapView() {
     }
     if (appliedStyle.current === key) return;
     appliedStyle.current = key;
-    const style = styleFor(themeId, (layerState ?? {}) as Partial<Record<LayerGroup, boolean>>);
+    const style = styleFor(
+      themeId,
+      (layerState ?? {}) as Partial<Record<LayerGroup, boolean>>,
+      authoredLayers,
+    );
     const urls = tileUrls(useApp.getState().tileVersion);
     (style.sources[SOURCE_ID] as { tiles: string[] }).tiles = [urls.vector];
     (style.sources[DEM_SOURCE_ID] as { tiles: string[] }).tiles = [urls.dem];
     map.setStyle(style, { diff: true });
-  }, [themeId, layerState]);
+  }, [themeId, layerState, authoredLayers]);
 
   useEffect(() => {
     const map = mapRef.current;

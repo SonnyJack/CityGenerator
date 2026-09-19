@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
-import { atlas, ink, compileStyle, themes } from '../src/index.js';
+import { atlas, ink, compileStyle, themes, AUTHORED_STYLE_LAYERS } from '../src/index.js';
 
 const options = {
   sourceId: 'citygen',
@@ -124,6 +124,37 @@ describe('compileStyle', () => {
     expect(hill.layout?.visibility).toBe('none');
     const rivers = style.layers.find((l) => l.id === 'rivers')!;
     expect(rivers.layout?.visibility).toBe('visible');
+  });
+
+  it('fades and reorders the authored layers as the editor asks, and stays valid', () => {
+    const editor = {
+      authoredSourceId: 'authored',
+      overlaySourceId: 'editor',
+      annotationSourceId: 'annotations',
+    };
+    const plain = compileStyle(atlas, { ...options, editor });
+    const styled = compileStyle(atlas, {
+      ...options,
+      editor,
+      authored: { opacity: { street: 0.25, zone: 0 }, order: ['building', 'facility', 'street'] },
+    });
+    expect(validateStyleMin(styled)).toEqual([]);
+    // Every authored style layer is still there, and only those moved.
+    const ids = (s: typeof plain) => s.layers.map((l) => l.id);
+    expect([...ids(styled)].sort()).toEqual([...ids(plain)].sort());
+    const authoredIds = new Set(AUTHORED_STYLE_LAYERS.map((l) => l.id));
+    expect(ids(styled).filter((i) => !authoredIds.has(i))).toEqual(
+      ids(plain).filter((i) => !authoredIds.has(i)),
+    );
+    // Buildings are drawn under the streets, which the editor asked for.
+    const order = ids(styled);
+    expect(order.indexOf('authored-buildings')).toBeLessThan(order.indexOf('authored-lines'));
+    // The fade is data-driven on the feature's own layer, so one style layer serves several.
+    const lines = styled.layers.find((l) => l.id === 'authored-lines')!;
+    expect(JSON.stringify(lines.paint)).toContain('0.25');
+    expect(JSON.stringify(lines.paint)).toContain('match');
+    // A style with nothing asked for is untouched.
+    expect(compileStyle(atlas, { ...options, editor, authored: {} }).layers).toEqual(plain.layers);
   });
 
   it('ink theme references only patterns it defines', () => {

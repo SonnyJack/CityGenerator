@@ -21,5 +21,12 @@ export {
   WEALTH_CLASS_NAMES,
   DENSITY_CLASS_NAMES,
 } from './theme.js';
-export { compileStyle, EDITOR_ACCENT, AGE_STOPS, type CompileOptions, type LayerGroup } from './compile.js';
+export {
+  compileStyle,
+  EDITOR_ACCENT,
+  AGE_STOPS,
+  AUTHORED_STYLE_LAYERS,
+  type CompileOptions,
+  type LayerGroup,
+} from './compile.js';
 export { utilityColours } from './utilityStyle.js';

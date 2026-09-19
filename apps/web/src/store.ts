@@ -28,6 +28,20 @@ import {
 } from './persistence.js';
 import type { EngineStats, GeneratedHit, Inspection, Thumbnail } from './engine/api.js';
 
+/** The authored layers, bottom of the draw order first; the panel reorders this list. */
+const AUTHORED_LAYER_ORDER: AuthoredLayer[] = [
+  'zone',
+  'vegetation',
+  'water',
+  'wall',
+  'street',
+  'rail',
+  'tram',
+  'building',
+  'facility',
+  'poi',
+];
+
 export interface AppState {
   document: MapDocument;
   canUndo: boolean;
@@ -71,6 +85,12 @@ export interface AppState {
 
   setTool(tool: ToolId): void;
   setToolOptions(patch: Partial<ToolOptions>): void;
+  /** Per-authored-layer presentation: locked layers are left alone by the tools. */
+  authoredLayers: { id: AuthoredLayer; locked: boolean; opacity: number }[];
+  setLayerLocked(id: AuthoredLayer, locked: boolean): void;
+  setLayerOpacity(id: AuthoredLayer, opacity: number): void;
+  /** Move a layer up (later, drawn on top) or down in the draw order. */
+  moveLayer(id: AuthoredLayer, by: number): void;
   /** Select every authored feature matching the query (the editor bar's Find row). */
   selectByQuery(query: { layer?: AuthoredLayer; text?: string; inView?: boolean }): void;
   selectAnnotation(id: string | undefined): void;
@@ -190,6 +210,7 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
     tool: 'navigate',
     toolOptions: { ...tools.options },
     selection: [],
+    authoredLayers: AUTHORED_LAYER_ORDER.map((id) => ({ id, locked: false, opacity: 1 })),
     editorTick: 0,
     directoryOpen: false,
     setDirectoryOpen: (open) => set({ directoryOpen: open }),
@@ -278,6 +299,30 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
     setToolOptions(patch) {
       tools.setOptions(patch);
       set({ toolOptions: { ...tools.options } });
+    },
+    setLayerLocked(id, locked) {
+      tools.setLocked(id, locked);
+      set((s) => ({
+        authoredLayers: s.authoredLayers.map((l) => (l.id === id ? { ...l, locked } : l)),
+        selection: [...tools.selection],
+      }));
+    },
+    setLayerOpacity(id, opacity) {
+      set((s) => ({
+        authoredLayers: s.authoredLayers.map((l) =>
+          l.id === id ? { ...l, opacity: Math.max(0, Math.min(1, opacity)) } : l,
+        ),
+      }));
+    },
+    moveLayer(id, by) {
+      set((s) => {
+        const list = [...s.authoredLayers];
+        const i = list.findIndex((l) => l.id === id);
+        const j = i + by;
+        if (i < 0 || j < 0 || j >= list.length) return {};
+        [list[i], list[j]] = [list[j]!, list[i]!];
+        return { authoredLayers: list };
+      });
     },
     selectByQuery({ layer, text, inView }) {
       // A single box of text matches either the kind or the name, so one field does for both.

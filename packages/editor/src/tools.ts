@@ -159,6 +159,11 @@ export class ToolController {
   tool: ToolId = 'navigate';
   options: ToolOptions = { ...DEFAULT_TOOL_OPTIONS };
   selection = new Set<string>();
+  /**
+   * Layers the tools leave alone: a locked layer is not hit-tested, not selected by a box, a
+   * lasso or a query, and not taken by the erase brush. It is still drawn.
+   */
+  locked = new Set<AuthoredLayer>();
   draft: DraftState = { geometry: null, cursor: null, brushRadiusM: null, guides: [] };
   private preview: Map<string, AuthoredFeature['geometry']> = new Map();
   /** World-metre tolerance for hit tests; the host sets it from the current zoom. */
@@ -239,9 +244,8 @@ export class ToolController {
     if (this.options.snapToVertices) {
       let best: XY | null = null;
       let bestD = this.hitToleranceM * 1.5;
-      for (const f of this.host.document().authored.features) {
-        if (f.id === exclude || f.properties.layer === 'terrainEdit' || f.properties.layer === 'fieldEdit')
-          continue;
+      for (const f of this.editable()) {
+        if (f.id === exclude) continue;
         for (const v of vertices(f.geometry)) {
           const d = Math.hypot(v.p[0] - p[0], v.p[1] - p[1]);
           if (d < bestD) {
@@ -275,12 +279,29 @@ export class ToolController {
 
   // --- Alignment ----------------------------------------------------------------
 
-  /** Features the tools act on: the drawn ones, not the brush strokes that edit fields. */
+  /** Lock or unlock a layer; the tools then pass over it. */
+  setLocked(layer: AuthoredLayer, locked: boolean): void {
+    if (locked) this.locked.add(layer);
+    else this.locked.delete(layer);
+    // A locked layer keeps nothing selected.
+    if (locked) {
+      for (const f of this.selected()) if (f.properties.layer === layer) this.selection.delete(f.id);
+    }
+    this.host.changed();
+  }
+
+  /**
+   * Features the tools act on: the drawn ones, not the brush strokes that edit fields, and not
+   * the ones on a locked layer.
+   */
   private editable(): AuthoredFeature[] {
     return this.host
       .document()
       .authored.features.filter(
-        (f) => f.properties.layer !== 'terrainEdit' && f.properties.layer !== 'fieldEdit',
+        (f) =>
+          f.properties.layer !== 'terrainEdit' &&
+          f.properties.layer !== 'fieldEdit' &&
+          !this.locked.has(f.properties.layer),
       );
   }
 
@@ -457,11 +478,9 @@ export class ToolController {
   // --- Hit testing --------------------------------------------------------------
 
   hit(p: XY): AuthoredFeature | null {
-    const doc = this.host.document();
     let best: AuthoredFeature | null = null;
     let bestD = Infinity;
-    for (const f of doc.authored.features) {
-      if (f.properties.layer === 'terrainEdit' || f.properties.layer === 'fieldEdit') continue;
+    for (const f of this.editable()) {
       const d = distToGeometry(p, f.geometry);
       const tol = f.geometry.type === 'Polygon' ? 0 : this.hitToleranceM;
       if (d <= tol && d < bestD) {
@@ -1015,6 +1034,7 @@ export class ToolController {
     if (o.brush === 'erase') {
       const ids = new Set<string>();
       for (const f of this.host.document().authored.features) {
+        if (this.locked.has(f.properties.layer)) continue;
         for (const q of points) if (distToGeometry(q, f.geometry) <= o.brushRadiusM) ids.add(f.id);
       }
       if (ids.size) {

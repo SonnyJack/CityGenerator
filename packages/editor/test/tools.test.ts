@@ -495,3 +495,80 @@ describe('the vegetation and year brushes and the arrow annotation', () => {
     expect(h.doc().annotations).toHaveLength(1);
   });
 });
+
+describe('locked layers', () => {
+  function withTwoLayers() {
+    const h = harness();
+    h.bus.dispatch({
+      type: 'authored.add',
+      features: [
+        {
+          type: 'Feature',
+          id: 'street-1',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [200, 0],
+            ],
+          },
+          properties: { layer: 'street', origin: 'authored', kind: 'main' },
+        },
+        {
+          type: 'Feature',
+          id: 'house-1',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [0, 20],
+                [40, 20],
+                [40, 60],
+                [0, 60],
+                [0, 20],
+              ],
+            ],
+          },
+          properties: { layer: 'building', origin: 'authored', kind: 'house' },
+        },
+      ],
+    });
+    return h;
+  }
+
+  it('passes over a locked layer when hit-testing, selecting, querying and erasing', () => {
+    const h = withTwoLayers();
+    h.tools.setTool('select');
+    h.tools.hitToleranceM = 6;
+    expect(h.tools.hit([100, 0])?.id).toBe('street-1');
+    h.tools.setLocked('street', true);
+    expect(h.tools.hit([100, 0])).toBeNull();
+    expect(h.tools.selectByQuery({})).toEqual(['house-1']);
+    // A box over both takes only the unlocked one.
+    h.tools.selection.clear();
+    h.tools.pointerDown([-50, -50]);
+    h.tools.pointerMove([260, 120]);
+    h.tools.pointerUp([260, 120]);
+    expect([...h.tools.selection]).toEqual(['house-1']);
+    // The erase brush leaves the locked street standing.
+    h.tools.setTool('brush');
+    h.tools.setOptions({ brush: 'erase', brushRadiusM: 400 });
+    h.tools.pointerDown([100, 20]);
+    h.tools.pointerUp([100, 20]);
+    const left = h.doc().authored.features.map((f) => f.id);
+    expect(left).toEqual(['street-1']);
+    // Unlocking brings it back within reach.
+    h.tools.setLocked('street', false);
+    h.tools.setTool('select');
+    expect(h.tools.hit([100, 0])?.id).toBe('street-1');
+  });
+
+  it('drops a locked layer from the selection when it is locked', () => {
+    const h = withTwoLayers();
+    h.tools.setTool('select');
+    h.tools.selectByQuery({});
+    expect(h.tools.selection.size).toBe(2);
+    h.tools.setLocked('building', true);
+    expect([...h.tools.selection]).toEqual(['street-1']);
+  });
+});

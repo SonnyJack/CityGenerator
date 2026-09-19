@@ -490,4 +490,11 @@ export const fr: Record<string, string> = {
   Snow: 'Neige',
   Mangrove: 'Mangrove',
   'Cover class': 'Classe de couvert',
+  'Drawn layers': 'Calques tracés',
+  '{layer} opacity': 'Opacité de {layer}',
+  'Lock: the tools pass over it': 'Verrou : les outils l’ignorent',
+  'Lock {layer}': 'Verrouiller {layer}',
+  Lock: 'Verrou',
+  'Draw {layer} above': 'Dessiner {layer} au-dessus',
+  'Draw {layer} below': 'Dessiner {layer} en dessous',
 };

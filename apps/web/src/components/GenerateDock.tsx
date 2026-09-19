@@ -697,6 +697,7 @@ export function GenerateDock() {
             </label>
           ))}
         </div>
+        <AuthoredLayers />
       </section>
 
       {stats && (
@@ -744,3 +745,83 @@ export function GenerateDock() {
 
 const btn = 'rounded border border-stone-300 bg-white px-2 py-1 hover:bg-stone-100';
 const sel = 'min-w-0 flex-1 rounded border border-stone-300 bg-white px-2 py-1';
+
+/**
+ * The hand-drawn layers: how solid each is drawn, whether the tools may touch it, and the
+ * order they are drawn in. This is how the map looks and feels to work with, not what the
+ * region is, so it lives with the session rather than in the document.
+ */
+function AuthoredLayers() {
+  const t = useT();
+  const layers = useApp((s) => s.authoredLayers);
+  const setLocked = useApp((s) => s.setLayerLocked);
+  const setOpacity = useApp((s) => s.setLayerOpacity);
+  const move = useApp((s) => s.moveLayer);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-1" data-testid="authored-layers">
+      <button
+        className="text-xs text-stone-600 underline decoration-dotted"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {t('Drawn layers')}
+      </button>
+      {open && (
+        <ul className="space-y-1">
+          {[...layers].reverse().map((l) => (
+            <li key={l.id} className="flex items-center gap-1 text-xs">
+              <span className="w-16 text-stone-600">{t(LAYER_NAMES[l.id] ?? l.id)}</span>
+              <input
+                type="range"
+                aria-label={t('{layer} opacity', { layer: t(LAYER_NAMES[l.id] ?? l.id) })}
+                className="w-20"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(l.opacity * 100)}
+                onChange={(e) => setOpacity(l.id, Number(e.target.value) / 100)}
+              />
+              <label className="flex items-center gap-1" title={t('Lock: the tools pass over it')}>
+                <input
+                  type="checkbox"
+                  aria-label={t('Lock {layer}', { layer: t(LAYER_NAMES[l.id] ?? l.id) })}
+                  checked={l.locked}
+                  onChange={(e) => setLocked(l.id, e.target.checked)}
+                />
+                {t('Lock')}
+              </label>
+              <button
+                className="rounded border border-stone-300 px-1 hover:bg-stone-100"
+                aria-label={t('Draw {layer} above', { layer: t(LAYER_NAMES[l.id] ?? l.id) })}
+                onClick={() => move(l.id, 1)}
+              >
+                ↑
+              </button>
+              <button
+                className="rounded border border-stone-300 px-1 hover:bg-stone-100"
+                aria-label={t('Draw {layer} below', { layer: t(LAYER_NAMES[l.id] ?? l.id) })}
+                onClick={() => move(l.id, -1)}
+              >
+                ↓
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const LAYER_NAMES: Record<string, string> = {
+  zone: 'Zone',
+  vegetation: 'Vegetation',
+  water: 'Water',
+  wall: 'Wall',
+  street: 'Street',
+  rail: 'Railway',
+  tram: 'Tram',
+  building: 'Building',
+  facility: 'Facility',
+  poi: 'Point of interest',
+};

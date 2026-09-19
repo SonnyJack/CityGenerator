@@ -25,6 +25,12 @@ export interface CompileOptions {
    * style declares them (empty) and styles them; the app feeds them with setData.
    */
   editor?: { authoredSourceId: string; overlaySourceId: string; annotationSourceId: string };
+  /**
+   * Per-authored-layer presentation the editor controls: how solid each layer is drawn
+   * (1 = as the theme has it, 0 = invisible) and the order they are drawn in, bottom first.
+   * Layers left out of `order` keep their place after the ones named.
+   */
+  authored?: { opacity?: Record<string, number>; order?: string[] };
 }
 
 export type LayerGroup =
@@ -688,7 +694,8 @@ export function compileStyle(theme: Theme, options: CompileOptions): StyleSpecif
     paint: { 'line-color': p.ink, 'line-width': theme.sketch ? 1.5 : 1.2 },
   });
 
-  if (options.editor) layers.push(...editorLayers(theme, options, visible));
+  if (options.editor)
+    layers.push(...applyAuthoredPresentation(editorLayers(theme, options, visible), options));
 
   return {
     version: 8,
@@ -1529,6 +1536,91 @@ export const EDITOR_ACCENT = '#2563eb';
  * features carry `layer` (street, rail, …) and metre widths/radii; the overlay
  * carries `role` (draft, selection, handle, brush, hover, guide).
  */
+/**
+ * Which authored layers each style layer draws, so the editor can fade and reorder them.
+ * The first entry is the layer the style layer is named after: fading is per feature, but a
+ * style layer can only be moved as a whole, so it follows that primary layer's place in the
+ * order and the others it draws ride along. A style layer not listed here (the overlay, the
+ * annotations) is left where it is.
+ */
+export const AUTHORED_STYLE_LAYERS: { id: string; layers: string[] }[] = [
+  { id: 'authored-zones', layers: ['zone'] },
+  { id: 'authored-zones-outline', layers: ['zone'] },
+  { id: 'authored-vegetation', layers: ['vegetation'] },
+  { id: 'authored-water-fill', layers: ['water'] },
+  { id: 'authored-buildings', layers: ['building', 'facility'] },
+  { id: 'authored-buildings-outline', layers: ['building', 'facility'] },
+  { id: 'authored-lines-casing', layers: ['street', 'rail', 'tram', 'water', 'wall'] },
+  { id: 'authored-lines', layers: ['street', 'rail', 'tram', 'water', 'wall'] },
+  // `authored-rail-ties` is named after rail, so moving the railway moves the ties with it.
+  { id: 'authored-rail-ties', layers: ['rail'] },
+  { id: 'authored-strokes', layers: ['terrainEdit', 'fieldEdit'] },
+  { id: 'authored-strokes-centre', layers: ['terrainEdit', 'fieldEdit'] },
+  { id: 'authored-stroke-points', layers: ['terrainEdit', 'fieldEdit'] },
+  { id: 'authored-zone-strokes', layers: ['zone'] },
+  { id: 'authored-points', layers: ['poi', 'facility'] },
+];
+
+/** The paint property that fades a layer of each type. */
+const OPACITY_KEY: Record<string, string> = {
+  fill: 'fill-opacity',
+  line: 'line-opacity',
+  circle: 'circle-opacity',
+  symbol: 'icon-opacity',
+};
+
+/**
+ * Fade and reorder the authored style layers as the editor asks. Opacity is data-driven on
+ * the feature's own `layer`, so one style layer can carry several authored ones; the order
+ * moves whole style layers, keeping the ones the editor does not name after those it does.
+ */
+function applyAuthoredPresentation(
+  layers: LayerSpecification[],
+  options: CompileOptions,
+): LayerSpecification[] {
+  const opacity = options.authored?.opacity;
+  const order = options.authored?.order;
+  if (!opacity && !order) return layers;
+  const spec = new Map(AUTHORED_STYLE_LAYERS.map((l) => [l.id, l.layers]));
+  let out = layers;
+  if (opacity && Object.keys(opacity).length) {
+    const factor: ExpressionSpecification = [
+      'match',
+      ['get', 'layer'],
+      ...Object.entries(opacity).flatMap(([k, v]) => [k, v]),
+      1,
+    ] as unknown as ExpressionSpecification;
+    out = out.map((l) => {
+      if (!spec.has(l.id)) return l;
+      const key = OPACITY_KEY[l.type];
+      if (!key) return l;
+      const paint = { ...((l.paint ?? {}) as Record<string, unknown>) };
+      const base = paint[key];
+      paint[key] = (base === undefined ? factor : ['*', base, factor]) as unknown;
+      return { ...l, paint } as LayerSpecification;
+    });
+  }
+  if (order && order.length) {
+    const rank = (id: string): number => {
+      const mine = spec.get(id);
+      if (!mine) return Number.MAX_SAFE_INTEGER;
+      const place = order.indexOf(mine[0]!);
+      return place >= 0 ? place : order.length;
+    };
+    // Only the authored style layers move; they keep their own relative order within a rank.
+    const indices = out.map((l, i) => i).filter((i) => spec.has(out[i]!.id));
+    const moved = indices
+      .map((i) => out[i]!)
+      .map((l, k) => ({ l, k, r: rank(l.id) }))
+      .sort((a, b) => a.r - b.r || a.k - b.k)
+      .map((x) => x.l);
+    const copy = [...out];
+    indices.forEach((slot, k) => (copy[slot] = moved[k]!));
+    out = copy;
+  }
+  return out;
+}
+
 function editorLayers(
   theme: Theme,
   options: CompileOptions,

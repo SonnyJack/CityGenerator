@@ -1053,7 +1053,9 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 - **v1.1** — Editor backlog: lasso and by-query selection with alignment
   guides; a vegetation brush that paints land cover and a year brush that
   moves the built year of the ground under the stroke (both read by the land
-  cover and town stages as authored edits); arrows as a drawn annotation.
+  cover and town stages as authored edits); arrows as a drawn annotation;
+  and a drawn-layers panel with per-layer opacity, a lock the tools respect
+  and a draw order (each style layer follows its primary authored layer).
 - **v1.1** — Generation backlog: the regional roads keep a ruling gradient
   of 8 % on the profile the railways use (`networks/profile.ts`), with
   cuttings, embankments and tunnels as runs of their own, styled per theme

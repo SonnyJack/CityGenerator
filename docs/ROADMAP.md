@@ -240,8 +240,13 @@ blocks.
       quarter under the stroke, full at its centre and fading to its edge;
       and arrows as a drawn annotation, dragged from tail to head, with a
       head of their own in the themes and the SVG export.
-- [ ] Deferred: layer lock/opacity/reorder, history thumbnails, derived
-      caches for instant reopen.
+- [x] A drawn-layers panel over the hand-drawn layers: how solid each is
+      drawn (data-driven on the feature's own layer, so one style layer
+      serves several), a lock that makes the tools pass over a layer (no hit
+      test, no box, lasso or query, no erase, no vertex snap) and the draw
+      order, moved a step at a time. It is how the map is drawn rather than
+      what the region is, so it lives with the session, not the document.
+- [ ] Deferred: history thumbnails, derived caches for instant reopen.
 
 Acceptance (met): Playwright covers each tool (line, rectangle + select +
 move + undo, terrain and wealth brushes + erase, annotations, freeze and

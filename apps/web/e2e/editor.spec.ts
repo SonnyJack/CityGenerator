@@ -548,3 +548,76 @@ test('the vegetation brush paints woods, the year brush ages a quarter, and an a
     { timeout: 15_000 },
   );
 });
+
+test('the drawn-layers panel locks a layer, fades it and changes the draw order', async ({ page }) => {
+  await ready(page);
+  const [cx, cy] = await townCenter(page);
+  await jumpTo(page, cx, cy, 16);
+
+  // A street and a building over it.
+  await page.keyboard.press('l');
+  await page.getByLabel('Layer').selectOption('street');
+  const la = await screen(page, cx - 200, cy);
+  const lb = await screen(page, cx + 200, cy);
+  await page.mouse.click(la.x, la.y);
+  await page.mouse.click(lb.x, lb.y);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('r');
+  await page.getByLabel('Layer').selectOption('building');
+  const ba = await screen(page, cx - 60, cy - 40);
+  const bb = await screen(page, cx + 60, cy + 40);
+  await page.mouse.move(ba.x, ba.y);
+  await page.mouse.down();
+  await page.mouse.move(bb.x, bb.y, { steps: 4 });
+  await page.mouse.up();
+  let d = await doc(page);
+  expect(d.authored.features).toHaveLength(2);
+
+  // With the select tool, clicking the building selects it.
+  await page.keyboard.press('v');
+  const inside = await screen(page, cx, cy - 20);
+  await page.mouse.click(inside.x, inside.y);
+  await page.waitForFunction(() => window.__citygen.selection().length === 1, undefined, {
+    timeout: 10_000,
+  });
+
+  // Lock the buildings: the same click selects nothing.
+  await page.getByRole('button', { name: 'Drawn layers' }).click();
+  await page.getByLabel('Lock Building').check();
+  const inside2 = await screen(page, cx - 40, cy + 25);
+  await page.mouse.click(inside2.x, inside2.y);
+  await page.waitForFunction(() => window.__citygen.selection().length === 0, undefined, {
+    timeout: 10_000,
+  });
+  await page.getByLabel('Lock Building').uncheck();
+  const inside3 = await screen(page, cx + 40, cy - 25);
+  await page.mouse.click(inside3.x, inside3.y);
+  await page.waitForFunction(() => window.__citygen.selection().length === 1, undefined, {
+    timeout: 10_000,
+  });
+
+  // Fade the streets: the style carries the opacity the panel asked for.
+  await page.getByLabel('Street opacity').fill('30');
+  await page.waitForFunction(() => {
+    const layer = window.__citygenMap!.getStyle().layers.find((l) => l.id === 'authored-lines');
+    return JSON.stringify(layer?.paint ?? {}).includes('0.3');
+  });
+
+  // Draw the buildings under the streets: the style layers change places.
+  const before = await page.evaluate(() => {
+    const ids = window.__citygenMap!.getStyle().layers.map((l) => l.id);
+    return ids.indexOf('authored-buildings') > ids.indexOf('authored-lines');
+  });
+  expect(before).toBe(true);
+  // Buildings start above the tram, the railway and the streets: three steps down clears them.
+  await page.getByLabel('Draw Building below').click();
+  await page.getByLabel('Draw Building below').click();
+  await page.getByLabel('Draw Building below').click();
+  await page.waitForFunction(() => {
+    const ids = window.__citygenMap!.getStyle().layers.map((l) => l.id);
+    return ids.indexOf('authored-buildings') < ids.indexOf('authored-lines');
+  });
+  // The document itself is untouched: this is how the map is drawn, not what the region is.
+  d = await doc(page);
+  expect(d.authored.features).toHaveLength(2);
+});
