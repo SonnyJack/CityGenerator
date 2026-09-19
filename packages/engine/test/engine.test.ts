@@ -15,6 +15,13 @@ describe('headless engine', () => {
     expect(version).toBe(1);
     expect(stats.settlements.length).toBeGreaterThan(0);
     expect(stats.regionName.length).toBeGreaterThan(2);
+    // Region-level fill: land cover by class adds up to the region, the towns have woods or commons within reach.
+    const km2 = Object.values(stats.landcover.km2).reduce((a, b) => a + b, 0);
+    expect(Math.abs(km2 - 36)).toBeLessThan(2);
+    expect(stats.landcover.km2['forest']! + stats.landcover.km2['open']!).toBeGreaterThan(0);
+    const near = stats.landcover.nearTowns;
+    expect(near.woodsKm2 + near.commonsKm2 + near.farmlandKm2).toBeGreaterThan(0);
+    expect(near.woodsKm2).toBeLessThanOrEqual(stats.landcover.km2['forest']! + 1e-9);
     const tile = await engine.getTile(version, 0, 0, 0);
     expect(tile).toBeInstanceOf(Uint8Array);
     expect(tile!.byteLength).toBeGreaterThan(100);

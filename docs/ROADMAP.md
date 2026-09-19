@@ -325,9 +325,14 @@ settlements and two mainlines routes in about 0.9 s.
       grounds, graves, walls); Facilities panel (defaults on/off, compression
       on/off, list with remove, failures, restore), per-settlement facility
       requests, inspector with pin-here and remove; wasteland statistic.
-- [ ] Deferred: block-level fill passes inside facility grounds, region-level
-      fill (woods, commons) reporting, a dedicated facility-drawing tool
-      (authored facility polygons already work).
+- [x] Block-level fill inside facility grounds: the free ground of a works,
+      a port or a transport facility gets stores, sheds, workshops and
+      offices on a lattice, off the laid-out parts and on land, as `shed`
+      parts with interiors like any other. Region-level fill reporting: the
+      engine stats carry land cover by class in km² and the woods, commons
+      and farmland within twice each town's radius.
+- [ ] Deferred: a dedicated facility-drawing tool (authored facility
+      polygons already work).
 
 Acceptance (met with one caveat): on the `bay` preset at 1925 a break-bulk
 port with rail on the quay, a marshalling or goods yard behind it, gasworks
@@ -387,9 +392,9 @@ into the fill work of Phase 7.
 - [ ] Deferred: the remaining culture packs from DESIGN §7 (data
       contributions with a gallery each), transliteration tables, a
       pixel-level SVG-versus-PNG comparison (the e2e test checks both exports
-      of the same frame for content), streetcar-suburb bias by culture, and
-      the wasteland target carried from Phase 6 (block-level fill inside
-      facility grounds).
+      of the same frame for content), streetcar-suburb bias by culture. The
+      wasteland target carried from Phase 6 (block-level fill inside facility
+      grounds) is done.
 
 Acceptance: the directory of the default region lists about 11,500 premises,
 every non-residential one with a name and most with an address; a player SVG

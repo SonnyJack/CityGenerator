@@ -994,7 +994,8 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   cuttings, embankments and tunnels as runs of their own, styled per theme
   and exported; the farm belt is cut into strip fields with hedges and
   reached by country lanes; a `fishing` ward lines the shore; rail yards
-  take the floodplain.
+  take the floodplain; facility grounds get a fill of sheds and stores;
+  the engine reports land cover and the woods and commons near the towns.
 - **v1.0-rc** — Phase 12 tuning pass: the headless sweep and the two
   robustness fixes it forced (siting relaxation passes; a built core on
   rugged ground). Phase 13 terrain fit: one drawn shoreline for every land

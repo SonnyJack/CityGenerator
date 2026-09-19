@@ -365,6 +365,11 @@ export function placeFeatures(
       front,
     });
     parts.forEach((p, k) => result.parts.push(partToFeature(p, frame, placed, k)));
+    // Fill pass: the free ground of a works or a port gets its stores, sheds and offices.
+    if (type.category !== 'institution') {
+      const extra = fillGrounds(frame, parts, ctx, reqRng.fork('fill'));
+      extra.forEach((p, k) => result.parts.push(partToFeature(p, frame, placed, parts.length + k)));
+    }
     if (type.nuisance)
       result.nuisance.push([
         frame.center[0],
@@ -571,6 +576,93 @@ function orientationsFor(type: FeatureType, c: Pt, ctx: PlacementContext, host: 
         [-Math.SQRT1_2, Math.SQRT1_2],
       ];
   }
+}
+
+/** Whether a local point lies within `margin` of a laid-out part. */
+function partCovers(p: LocalPart, u: number, v: number, margin: number): boolean {
+  switch (p.shape) {
+    case 'rect': {
+      const ang = p.angle ?? 0;
+      const du = u - p.u;
+      const dv = v - p.v;
+      const lu = du * Math.cos(ang) + dv * Math.sin(ang);
+      const lv = -du * Math.sin(ang) + dv * Math.cos(ang);
+      return Math.abs(lu) <= p.lengthM / 2 + margin && Math.abs(lv) <= p.widthM / 2 + margin;
+    }
+    case 'circle':
+      return Math.hypot(u - p.u, v - p.v) <= p.radiusM + margin;
+    case 'point':
+      return Math.hypot(u - p.u, v - p.v) <= margin;
+    case 'line': {
+      const half = (p.widthM ?? 4) / 2 + margin;
+      for (let i = 1; i < p.points.length; i++) {
+        const a = p.points[i - 1]!;
+        const b = p.points[i]!;
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const len2 = dx * dx + dy * dy || 1;
+        const t = Math.min(1, Math.max(0, ((u - a[0]) * dx + (v - a[1]) * dy) / len2));
+        if (Math.hypot(a[0] + dx * t - u, a[1] + dy * t - v) <= half) return true;
+      }
+      return false;
+    }
+    case 'polygon': {
+      // Bounding box with margin: enough to keep the fill off the part.
+      let minU = Infinity;
+      let minV = Infinity;
+      let maxU = -Infinity;
+      let maxV = -Infinity;
+      for (const [a, b] of p.points) {
+        minU = Math.min(minU, a);
+        maxU = Math.max(maxU, a);
+        minV = Math.min(minV, b);
+        maxV = Math.max(maxV, b);
+      }
+      return u >= minU - margin && u <= maxU + margin && v >= minV - margin && v <= maxV + margin;
+    }
+  }
+}
+
+/**
+ * Block-level fill inside a facility's grounds: small sheds, stores and offices on the ground
+ * the layout left free, on a lattice with a spacing that keeps them apart, on land only.
+ */
+function fillGrounds(frame: Frame, parts: LocalPart[], ctx: PlacementContext, rng: Rng): LocalPart[] {
+  const L = frame.lengthM;
+  const W = frame.widthM;
+  const want = Math.min(14, Math.floor((L * W) / 7000));
+  if (want < 1) return [];
+  const step = 26;
+  const candidates: Pt[] = [];
+  for (let v = -W / 2 + 12; v <= W / 2 - 12; v += step)
+    for (let u = -L / 2 + 12; u <= L / 2 - 12; u += step) {
+      if (parts.some((p) => partCovers(p, u, v, 6))) continue;
+      const [x, y] = toWorld(frame, u, v);
+      if (!ctx.isLand(x, y)) continue;
+      candidates.push([u, v]);
+    }
+  // Deterministic shuffle, then a greedy pick with spacing.
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
+  }
+  const picks: Pt[] = [];
+  for (const c of candidates) {
+    if (picks.length >= want) break;
+    if (picks.some((q) => Math.hypot(q[0] - c[0], q[1] - c[1]) < 24)) continue;
+    picks.push(c);
+  }
+  const names = ['store', 'shed', 'workshop', 'office'];
+  return picks.map(([u, v]) => ({
+    kind: 'shed' as const,
+    shape: 'rect' as const,
+    u,
+    v,
+    lengthM: rng.range(9, 16),
+    widthM: rng.range(7, 11),
+    floors: 1,
+    name: rng.pick(names),
+  }));
 }
 
 function partToFeature(p: LocalPart, frame: Frame, placed: PlacedFeature, k: number): PartFeature {

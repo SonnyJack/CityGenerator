@@ -7,6 +7,7 @@ import {
   defaultRequests,
   facilitiesStage,
   frameRing,
+  pointInRing,
   railStage,
   sitingStage,
   terrainStage,
@@ -263,6 +264,31 @@ describe('placement engine', () => {
     expect(out.failures.every((f) => f.reason.length > 10)).toBe(true);
     expect(customFeatureType(custom).footprint('large', { population: 0, year: 1925 })[0]).toBeCloseTo(128);
   }, 120_000);
+
+  it('fills the free ground of a works or a port with sheds that stay inside and off the other parts', async () => {
+    const { facilities } = await bay('bay-fill', 1925);
+    const sheds = facilities.parts.features.filter((p) => p.properties.kind === 'shed' && p.properties.name);
+    expect(sheds.length).toBeGreaterThan(0);
+    const fills = sheds.filter((p) =>
+      ['store', 'shed', 'workshop', 'office'].includes(String(p.properties.name)),
+    );
+    expect(fills.length).toBeGreaterThan(0);
+    for (const shed of fills) {
+      const owner = facilities.features.features.find((f) => f.properties.id === shed.properties.feature)!;
+      const ring = owner.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+      const corners = (shed.geometry as { coordinates: number[][][] }).coordinates[0]!;
+      for (const c of corners.slice(0, 4)) expect(pointInRing(c[0]!, c[1]!, ring)).toBe(true);
+      // Its centre is not inside any other polygon part of the same facility.
+      const cx = corners.slice(0, 4).reduce((a, c) => a + c[0]! / 4, 0);
+      const cy = corners.slice(0, 4).reduce((a, c) => a + c[1]! / 4, 0);
+      for (const other of facilities.parts.features) {
+        if (other === shed || other.properties.feature !== shed.properties.feature) continue;
+        if (other.geometry.type !== 'Polygon') continue;
+        const r = other.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]);
+        expect(pointInRing(cx, cy, r)).toBe(false);
+      }
+    }
+  });
 
   it('defaults follow kind, size and year; every built-in type lays out parts inside its footprint', () => {
     const site = {

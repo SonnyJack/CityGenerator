@@ -541,6 +541,7 @@ export function createEngine(): EngineApi {
         utilities,
       };
       const wasteland = measureWasteland(terrain, namedSiting, towns, facilities, rail);
+      const landcoverStats = measureLandcover(landcover, sites);
       dem = { sampler: createDemSampler(terrain, doc.spec.seed), extent: doc.spec.extent };
       const tilesMs = performance.now() - t2;
 
@@ -582,6 +583,7 @@ export function createEngine(): EngineApi {
         })),
         anchorYear: doc.spec.anchorYear,
         era: { id: era.id, name: era.name, year: era.year },
+        landcover: landcoverStats,
         roads: roads.stats,
         rail: {
           trackKm: rail.stats.trackKm,
@@ -1432,6 +1434,36 @@ function centroidOf(ring: number[][]): [number, number] {
  * Wasteland: buildable land inside each settlement's built-up radius that no
  * patch, facility or yard uses, as a fraction of the buildable land there.
  */
+/** Land cover by class in km², and the woods, commons and farmland within twice each town's radius. */
+function measureLandcover(
+  landcover: LandcoverOutput,
+  sites: { center: [number, number]; radiusM: number }[],
+): EngineStats['landcover'] {
+  const { raster, classes } = landcover;
+  const cellKm2 = (raster.cellSizeM * raster.cellSizeM) / 1e6;
+  const names = Object.keys(LANDCOVER) as (keyof typeof LANDCOVER)[];
+  const km2: Record<string, number> = {};
+  for (const n of names) km2[n] = 0;
+  let woods = 0;
+  let commons = 0;
+  let farmland = 0;
+  for (let r = 0; r < raster.height; r++)
+    for (let c = 0; c < raster.width; c++) {
+      const cls = names[classes[r * raster.width + c]!];
+      if (!cls) continue;
+      km2[cls] = (km2[cls] ?? 0) + cellKm2;
+      if (cls !== 'forest' && cls !== 'open' && cls !== 'farmland') continue;
+      const x = raster.originX + c * raster.cellSizeM;
+      const y = raster.originY + r * raster.cellSizeM;
+      const near = sites.some((s) => Math.hypot(x - s.center[0], y - s.center[1]) <= s.radiusM * 2);
+      if (!near) continue;
+      if (cls === 'forest') woods += cellKm2;
+      else if (cls === 'open') commons += cellKm2;
+      else farmland += cellKm2;
+    }
+  return { km2, nearTowns: { woodsKm2: woods, commonsKm2: commons, farmlandKm2: farmland } };
+}
+
 function measureWasteland(
   terrain: TerrainOutput,
   siting: SitingOutput,

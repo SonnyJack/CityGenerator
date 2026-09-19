@@ -217,6 +217,11 @@ export interface EngineStats {
   regionName: string;
   riverNames: string[];
   culture: string;
+  /** Region-level fill: land cover by class, and the woods and open commons within reach of the towns. */
+  landcover: {
+    km2: Record<string, number>;
+    nearTowns: { woodsKm2: number; commonsKm2: number; farmlandKm2: number };
+  };
   roads: {
     links: number;
     roadKm: number;
