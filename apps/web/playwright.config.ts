@@ -7,6 +7,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // Many tests wait on a full regeneration, and the map draws WebGL in software: with two tests
+  // at a time, or on a hosted runner at about half a workstation's speed, 30 s is too tight.
+  // Tests that need more still say so.
+  timeout: 90_000,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: 'http://localhost:4173', trace: 'on-first-retry' },
   webServer: {

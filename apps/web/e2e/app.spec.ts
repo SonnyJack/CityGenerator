@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { FIXTURE_GOLDEN_HASH } from '@citygen/core';
 
+/** What a host that serves documents or packs to other sites sends (gists and GitHub Pages do). */
+const CORS = { 'access-control-allow-origin': '*' };
+
 async function ready(page: Page) {
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__citygen !== 'undefined');
@@ -1154,8 +1157,9 @@ test('imports OpenStreetMap data, a heightmap and a culture pack, and opens a do
   const other = JSON.parse(exported) as { meta: { name: string }; spec: { seed: string } };
   other.meta.name = 'From a gist';
   other.spec.seed = 'gist-seed';
+  // A real host must allow the cross-origin read, and WebKit holds a mocked one to that too.
   await page.route('https://gist.example/raw/region.citygen.json', (route) =>
-    route.fulfill({ body: JSON.stringify(other), contentType: 'application/json' }),
+    route.fulfill({ body: JSON.stringify(other), contentType: 'application/json', headers: CORS }),
   );
   const urlReport = await page.evaluate(
     (u) => window.__citygen.importFromUrl(u),
@@ -1260,6 +1264,7 @@ test('the gallery opens example regions and share links open hosted documents', 
     if (url.pathname === '/r/index.json')
       return route.fulfill({
         contentType: 'application/json',
+        headers: CORS,
         body: JSON.stringify({
           name: 'Miskatonic packs',
           description: 'test registry',
@@ -1269,9 +1274,9 @@ test('the gallery opens example regions and share links open hosted documents', 
       });
     if (url.pathname === '/r/cannery.json') {
       const res = await page.request.get(`${origin}/plugins/cannery.json`);
-      return route.fulfill({ contentType: 'application/json', body: await res.text() });
+      return route.fulfill({ contentType: 'application/json', headers: CORS, body: await res.text() });
     }
-    return route.fulfill({ status: 404, body: '' });
+    return route.fulfill({ status: 404, headers: CORS, body: '' });
   });
   await page.getByRole('button', { name: 'Gallery', exact: true }).click();
   await expect(page.getByTestId('gallery-list')).toContainText('Arkham Coast');

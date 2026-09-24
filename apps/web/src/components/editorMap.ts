@@ -263,6 +263,11 @@ export function attachEditor(map: MapLibreMap): () => void {
   }
 
   const onDown = (e: MapMouseEvent | MapTouchEvent) => {
+    // Pressing on the map takes the keyboard with it. Chromium does this by itself, but WebKit
+    // leaves the focus on the last form control used, so the next tool shortcut would be typed
+    // into a dropdown or a field instead of switching the tool.
+    const canvas = map.getCanvas();
+    if (document.activeElement !== canvas) canvas.focus({ preventScroll: true });
     const s = useApp.getState();
     if (s.tool === 'navigate') return;
     if ('button' in e.originalEvent && e.originalEvent.button !== 0) return;

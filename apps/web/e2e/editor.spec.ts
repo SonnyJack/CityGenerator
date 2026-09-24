@@ -140,6 +140,7 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
 
   // Move it with the select tool.
   await page.keyboard.press('v');
+  expect(await page.evaluate(() => window.__citygen.tool())).toBe('select');
   const inside = await screen(page, cx, cy);
   const target = await screen(page, cx + 200, cy + 150);
   await page.mouse.move(inside.x, inside.y);
@@ -483,6 +484,7 @@ test('the lasso takes in what it encircles and the find row selects by layer and
   expect(d.authored.features).toHaveLength(3);
   // Name the middle one so the find row has something to match.
   await page.keyboard.press('v');
+  expect(await page.evaluate(() => window.__citygen.tool())).toBe('select');
   const middle = await screen(page, cx, cy);
   await page.mouse.click(middle.x, middle.y);
   await page.getByLabel('Feature name').fill('Marsh Wharf');
@@ -630,6 +632,7 @@ test('the drawn-layers panel locks a layer, fades it and changes the draw order'
 
   // With the select tool, clicking the building selects it.
   await page.keyboard.press('v');
+  expect(await page.evaluate(() => window.__citygen.tool())).toBe('select');
   const inside = await screen(page, cx, cy - 20);
   await page.mouse.click(inside.x, inside.y);
   await page.waitForFunction(() => window.__citygen.selection().length === 1, undefined, {
