@@ -1054,6 +1054,16 @@ used, not the source. This policy goes in CONTRIBUTING.md.
 
 ## 16. Change history
 
+- **v1.2** — Nothing on top of anything: each growth ring is cut back along
+  the edge of the older ground it meets (the core, the gate suburbs and the
+  rings inside it), so no block lies on another and blocks keep their
+  outlines year to year; a works clears the buildings on its ground without
+  reshaping the blocks around it (`BlockRecipe.clear`), and the town's own
+  streets stop at its fence; the regional roads are laid before the works,
+  which may not straddle them or surface track, and spurs and access roads
+  go round other works; layouts are sized to their ground; the cemetery
+  stands on the town's edge; towns grown into each other give way to the
+  ground built first. The sweep audits all of it on every run.
 - **v1.1** — Editor backlog: lasso and by-query selection with alignment
   guides; a vegetation brush that paints land cover and a year brush that
   moves the built year of the ground under the stroke (both read by the land

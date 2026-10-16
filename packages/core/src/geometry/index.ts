@@ -18,7 +18,12 @@ export {
   orientedBox,
   distToSegment,
   distToRing,
+  convexHull,
+  convexOverlapArea,
+  clearOfConvex,
+  segmentOutsideConvex,
   type Pt,
   type Obb,
 } from './polygon.js';
+export { Territory, type Claim } from './territory.js';
 export { voronoi, relax, unionBoundary, type VoronoiCell, type Bounds } from './voronoi.js';

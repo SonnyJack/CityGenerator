@@ -1,6 +1,17 @@
 import type { Feature, Polygon } from 'geojson';
 import { Rng } from '../random/rng.js';
-import { area, distToRing, inset, open, orientedBox, splitByLine, type Pt } from '../geometry/polygon.js';
+import {
+  area,
+  centroid,
+  convexOverlapArea,
+  distToRing,
+  inset,
+  open,
+  orientedBox,
+  pointInRing,
+  splitByLine,
+  type Pt,
+} from '../geometry/polygon.js';
 import type { Ring } from '../raster/contours.js';
 import { WARDS, type WardId } from './wards.js';
 import type { BlockRecipe } from './town.js';
@@ -151,6 +162,16 @@ export function generateBlock(block: BlockRecipe, year: number, options: BlockOp
   if (ring.length < 3) return model;
   const timeline = block.builtYear !== undefined;
   const finish = (): BlockModel => {
+    // Ground taken by a works or a yard: its buildings and lots go, after every draw is made, so
+    // the rest of the block is exactly what it would have been.
+    if (block.clear?.length) {
+      const free = (r: Ring) => block.clear!.every((c) => convexOverlapArea(r, c) <= 0.5);
+      model.buildings = model.buildings.filter((b) => free(open(b.geometry.coordinates[0] as Ring)));
+      model.parcels = model.parcels.filter((f) => {
+        const c = centroid(open(f.geometry.coordinates[0] as Ring));
+        return !block.clear!.some((r) => pointInRing(c[0], c[1], r));
+      });
+    }
     if (timeline) conditionOf(model, block, year, options);
     if (options.pack) describeBuildings(model, year, options);
     return model;

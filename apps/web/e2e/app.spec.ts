@@ -886,19 +886,42 @@ test('scrubbing the year keeps what already stands and adds new growth around it
   };
   const at1890 = await buildingsAt(1890);
   const at1955 = await buildingsAt(1955);
-  const patchesAt1955 = (
-    JSON.parse(await page.evaluate((r) => window.__citygen.exportGeoJson(r), req)) as {
-      features: { id?: string; properties: { layer: string; ward?: string; __id?: string } }[];
-    }
-  ).features
+  const geo1955 = JSON.parse(await page.evaluate((r) => window.__citygen.exportGeoJson(r), req)) as {
+    features: {
+      id?: string;
+      geometry: { type: string; coordinates: number[][][] };
+      properties: { layer: string; ward?: string; __id?: string };
+    }[];
+  };
+  const patchesAt1955 = geo1955.features
     .filter((f) => f.properties.layer === 'patches')
     .map((f) => ({ id: f.id ?? f.properties.__id, ward: f.properties.ward }));
+  // The grounds of the works standing in 1955: a building on one has been cleared for it.
+  const grounds = geo1955.features
+    .filter((f) => f.properties.layer === 'facilities' && f.geometry.type === 'Polygon')
+    .map((f) => f.geometry.coordinates[0]!);
+  const inside = (x: number, y: number, ring: number[][]) => {
+    let hit = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!;
+      const [xj, yj] = ring[j]!;
+      if (yi! > y !== yj! > y && x < ((xj! - xi!) * (y - yi!)) / (yj! - yi!) + xi!) hit = !hit;
+    }
+    return hit;
+  };
+  const onGround = (geometry: string) => {
+    const ring = (JSON.parse(geometry) as { coordinates: number[][][] }).coordinates[0]!;
+    return grounds.some(
+      (g) => ring.some(([x, y]) => inside(x!, y!, g)) || g.some(([x, y]) => inside(x!, y!, ring)),
+    );
+  };
   expect(at1890.size).toBeGreaterThan(50);
   expect(at1955.size).toBeGreaterThan(at1890.size * 0.9);
   // Every building standing in 1890 that has not been replaced by 1955 is still there, unchanged.
   let survivors = 0;
   // Blocks taken by a facility or rail yard between the two years lose their buildings (the land is
-  // reserved), which is a change of that place, not a re-roll of the rest.
+  // reserved), and so does a building standing on part of a works' ground, which is a change of
+  // that place, not a re-roll of the rest.
   const reserved = new Set(['port', 'industrial', 'institution', 'campus', 'cemetery', 'airfield', 'yard']);
   const reservedBlocks = new Set(
     patchesAt1955
@@ -909,6 +932,7 @@ test('scrubbing the year keeps what already stands and adds new growth around it
     expect(b.props.built).toBeLessThanOrEqual(1890);
     if ((b.props.demolished ?? Infinity) <= 1955) continue;
     if (reservedBlocks.has(String(b.props.block))) continue;
+    if (onGround(b.geometry)) continue;
     const later = at1955.get(id);
     expect(later, `building ${id} vanished between 1890 and 1955`).toBeDefined();
     expect(later!.geometry).toBe(b.geometry);

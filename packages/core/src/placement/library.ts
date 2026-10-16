@@ -91,6 +91,16 @@ const nearCentre = (w = 1) =>
       : 0,
   );
 const farFromCentre = (w = 1) => scorer(w, (c) => 1 - nearCentre().score(c));
+/** Best just outside the built-up edge (about 1.1 radii out), falling off either side. */
+const atTownEdge = (w = 1) =>
+  scorer(w, (c) => {
+    if (!c.host) return 0;
+    const d = Math.hypot(
+      c.frame.center[0] - c.host.site.center[0],
+      c.frame.center[1] - c.host.site.center[1],
+    );
+    return 1 - Math.min(1, Math.abs(d / c.host.site.radiusM - 1.1) / 0.5);
+  });
 const downwind = (w = 1) =>
   scorer(w, (c) => {
     if (!c.host) return 0;
@@ -636,21 +646,36 @@ const gasworks: FeatureType = {
   connectors: { rail: true, road: true },
   nuisance: { radiusM: 600, strength: 0.6 },
   ward: 'industrial',
+  // Everything is sized from the ground it is given, so a small or compressed works still holds
+  // its plant: holders in a row across the back of the left half, the retort house and its chimney
+  // on the right, the coal yard on the siding, the tar tank in the far corner.
   layout: ({ lengthM: L, widthM: W, rng, compression: k }) => {
     const parts: LocalPart[] = [];
-    const holders = rng.int(2, 3);
+    const holders = Math.max(1, Math.min(rng.int(2, 3), Math.floor(L / (60 * k))));
+    const span = L / 2 - 6;
+    const r = Math.max(2, Math.min(24 * k, W / 4 - 3, span / (2 * holders + 0.5 * (holders - 1))));
     for (let h = 0; h < holders; h++)
-      parts.push(circle('gasholder', -L / 2 + 40 * k + h * 60 * k, W / 4, 24 * k, 'Gasholder'));
-    parts.push(rect('building', L / 4, -W / 4, 70 * k, 26 * k, { floors: 2, name: 'Retort house' }));
-    parts.push(point('chimney', L / 4 + 40 * k, -W / 4, 'Chimney'));
-    parts.push(rect('yard', -L / 4, -W / 2 + 22 * k, 70 * k, 34 * k, { name: 'Coal yard' }));
-    parts.push(circle('tank', L / 2 - 20 * k, W / 2 - 20 * k, 8 * k, 'Tar tank'));
+      parts.push(circle('gasholder', -L / 2 + 4 + r + h * 2.5 * r, W / 4, r, 'Gasholder'));
+    parts.push(
+      rect('building', L / 4, -W / 4, Math.min(70 * k, L * 0.4), Math.min(26 * k, W * 0.3), {
+        floors: 2,
+        name: 'Retort house',
+      }),
+    );
+    parts.push(point('chimney', L / 4 + Math.min(40 * k, L * 0.18), -W / 4, 'Chimney'));
+    const sidingV = -W / 2 + Math.min(6 * k, W * 0.07);
+    const yardW = Math.min(34 * k, W * 0.3);
+    parts.push(
+      rect('yard', -L / 4, sidingV + 3 + yardW / 2, Math.min(70 * k, L * 0.4), yardW, { name: 'Coal yard' }),
+    );
+    const tank = Math.min(8 * k, W * 0.08, L * 0.05);
+    parts.push(circle('tank', L / 2 - tank - 4, W / 2 - tank - 4, tank, 'Tar tank'));
     parts.push(
       line(
         'track',
         [
-          [-L / 2, -W / 2 + 6 * k],
-          [L / 2, -W / 2 + 6 * k],
+          [-L / 2, sidingV],
+          [L / 2, sidingV],
         ],
         4,
         'Siding',
@@ -691,7 +716,14 @@ const mill: FeatureType = {
     if (year < 1780) {
       parts.push(rect('wheelhouse', 0, front - 16 * k, 14 * k, 10 * k, { name: 'Wheel house' }));
       parts.push(rect('building', 0, front - 32 * k, 24 * k, 16 * k, { floors: 2, name: 'Mill' }));
-      parts.push(rect('pond', -L / 2 + 20 * k, front + 14 * k, 36 * k, 24 * k, { name: 'Mill pond' }));
+      // The pond is dug behind the mill, clear of the river and of the mill itself.
+      const pondL = Math.min(30 * k, L * 0.3);
+      const pondW = Math.min(20 * k, W * 0.4);
+      parts.push(
+        rect('pond', -L / 2 + 2 * k + pondL / 2, -W / 2 + 3 * k + pondW / 2, pondL, pondW, {
+          name: 'Mill pond',
+        }),
+      );
     } else {
       parts.push(
         rect('building', 0, front - 30 * k, Math.min(L * 0.7, 90 * k), 22 * k, {
@@ -1149,9 +1181,10 @@ const cemetery: FeatureType = {
   years: [1100, 2100],
   footprint: sized([100, 80], [220, 180], [400, 300]),
   orientation: 'alignRadial',
-  radial: [0.8, 1.7],
+  // Laid out on the edge of the town of its day, which later grew round it.
+  radial: [0.8, 1.5],
   hard: [allLand, maxSlope(0.12)],
-  soft: [farFromCentre(0.6), elevated(0.3), flat],
+  soft: [atTownEdge(0.8), elevated(0.3), flat],
   connectors: { road: true },
   ward: 'cemetery',
   layout: ({ lengthM: L, widthM: W, year, compression: k }) => {

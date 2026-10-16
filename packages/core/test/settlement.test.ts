@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   StageRunner,
   area,
+  ccw,
   contentHash,
+  convexHull,
+  convexOverlapArea,
+  inset,
+  open,
   generateBlock,
   pointInRing,
   roadsStage,
@@ -171,6 +176,76 @@ describe('town stage', () => {
     expect(
       contentHash({ p: c.patches, s: c.streets, w: c.walls, g: c.gates, b: c.blocks.map((x) => x.ring) }),
     ).toBe(TOWN_GOLDEN);
+  });
+
+  it('gives a works its ground: blocks keep their lots, and buildings and streets stop at the fence', async () => {
+    const terrain = await terrainP;
+    const siting = await runner.run(sitingStage, {
+      seed: 's',
+      terrain,
+      year: 1650,
+      settlements: specs,
+      policy: { count: [3, 8], kinds: {} },
+    });
+    const site = siting.sites.find((s) => s.id === 'arkham')!;
+    const plain = await runner.run(townStage, { seed: 's', site, terrain, year: 1650, blockSizeM: 90 });
+    // A works across the old town, off its centre, at an angle to everything.
+    const [cx, cy] = site.center;
+    const R = plain.stats.coreRadiusM;
+    const a = 0.4;
+    const ground = [
+      [-80, -55],
+      [80, -55],
+      [80, 55],
+      [-80, 55],
+    ].map(([u, v]) => [
+      cx + R * 0.45 + u! * Math.cos(a) - v! * Math.sin(a),
+      cy + u! * Math.sin(a) + v! * Math.cos(a),
+    ]) as [number, number][];
+    const works = await runner.run(townStage, {
+      seed: 's',
+      site,
+      terrain,
+      year: 1650,
+      blockSizeM: 90,
+      reserved: [{ id: 'works', ring: ground, ward: 'industrial' }],
+    });
+    const hull = ccw(convexHull(ground));
+    const ringOf = (g: { coordinates: number[][][] }) =>
+      open(g.coordinates[0]!.map((q) => [q[0]!, q[1]!] as [number, number]));
+    const before = new Map(plain.blocks.map((b) => [b.id, b]));
+    let partly = 0;
+    let buildingsKept = 0;
+    for (const b of works.blocks) {
+      const was = before.get(b.id)!;
+      // No block is new and none is reshaped: what the works took is cleared, the rest stands.
+      expect(was).toBeDefined();
+      expect(b.ring).toEqual(was.ring);
+      if (b.clear) partly++;
+      const now = generateBlock(b, 1650);
+      for (const h of now.buildings)
+        expect(convexOverlapArea(ringOf(h.geometry), hull)).toBeLessThanOrEqual(0.5);
+      const ids = new Map(now.buildings.map((h) => [h.id, JSON.stringify(h.geometry)]));
+      for (const h of generateBlock(was, 1650).buildings)
+        if (convexOverlapArea(ringOf(h.geometry), hull) <= 0.5) {
+          expect(ids.get(h.id)).toBe(JSON.stringify(h.geometry));
+          buildingsKept++;
+        }
+    }
+    expect(partly).toBeGreaterThan(0);
+    expect(buildingsKept).toBeGreaterThan(50);
+    // A block whose middle the works took is gone.
+    expect(works.blocks.length).toBeLessThan(plain.blocks.length);
+    // The town's own streets stop at the fence (one along the fence is fine).
+    const inside = inset(hull, 2);
+    for (const st of works.streets.features) {
+      if (!['street', 'steps', 'lane', 'collector'].includes(st.properties.class)) continue;
+      const pts = st.geometry.coordinates;
+      for (let k = 1; k < pts.length; k++) {
+        const m = [(pts[k - 1]![0]! + pts[k]![0]!) / 2, (pts[k - 1]![1]! + pts[k]![1]!) / 2];
+        expect(pointInRing(m[0]!, m[1]!, inside)).toBe(false);
+      }
+    }
   });
 
   it('never drops an explicit settlement too big for its region, and keeps a built core on rugged ground', async () => {
@@ -343,6 +418,36 @@ describe('modern town with growth rings', () => {
       );
     }
     expect(town.streets.features.some((s) => s.properties.class === 'collector')).toBe(true);
+    // Nothing is built on anything else: no two blocks overlap, and no ring block reaches onto the
+    // old town's built patches (the grid is cut back along their edge).
+    const hullOf = (r: [number, number][]) => ccw(convexHull(r));
+    const boxOf = (r: [number, number][]) => [
+      Math.min(...r.map((p) => p[0])),
+      Math.min(...r.map((p) => p[1])),
+      Math.max(...r.map((p) => p[0])),
+      Math.max(...r.map((p) => p[1])),
+    ];
+    const meet = (a: number[], b: number[]) =>
+      a[0]! <= b[2]! && a[2]! >= b[0]! && a[1]! <= b[3]! && a[3]! >= b[1]!;
+    const blockBoxes = town.blocks.map((b) => ({ b, box: boxOf(b.ring), hull: hullOf(b.ring) }));
+    let blockClashes = 0;
+    for (let i = 0; i < blockBoxes.length; i++)
+      for (let j = i + 1; j < blockBoxes.length; j++)
+        if (
+          meet(blockBoxes[i]!.box, blockBoxes[j]!.box) &&
+          convexOverlapArea(blockBoxes[i]!.b.ring, blockBoxes[j]!.hull) > 1
+        )
+          blockClashes++;
+    expect(blockClashes).toBe(0);
+    const corePatches = town.patches.features
+      .filter((f) => f.properties.ring === 0 && f.properties.ward !== 'farm')
+      .map((f) => f.geometry.coordinates[0]!.slice(0, -1).map((q) => [q[0]!, q[1]!] as [number, number]));
+    const ringBlocks = town.blocks.filter((b) => b.id.includes('-r'));
+    expect(ringBlocks.length).toBeGreaterThan(20);
+    let ontoCore = 0;
+    for (const b of ringBlocks)
+      for (const c of corePatches) if (convexOverlapArea(b.ring, hullOf(c)) > 1) ontoCore++;
+    expect(ontoCore).toBe(0);
     // Streetcar suburbs string out along the radial arteries the trams ran on: the blocks of a
     // streetcar ring lie nearer a radial than an evenly filled ring would put them, and the
     // ground between the lines is left open for the car age.
@@ -461,5 +566,5 @@ describe('roads', () => {
   });
 });
 
-const TOWN_GOLDEN = '5ac6f6d98879514193882ee66dbf0e4b';
-const MODERN_GOLDEN = 'a7351336dc96a4b5e74b1cf1b3db5a45';
+const TOWN_GOLDEN = 'dad2ceb344a65bb14231833cb3b0323a';
+const MODERN_GOLDEN = '75211eaa85ea07fea5646e73bfba8282';

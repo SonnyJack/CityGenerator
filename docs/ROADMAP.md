@@ -772,3 +772,61 @@ cells the router had never entered.
       sheds, a colour per theme, and a quarter name in every culture pack
       (custom packs fall back to English). Rail yards go where the line runs
       low, flat and by the river within reach of the station.
+
+## Phase 14 — Nothing on top of anything (done)
+
+The live site showed growth-ring blocks laid over the organic old town and
+over each other, and works placed on top of town blocks, across railways and
+main roads, or with parts outside their own ground. Measured on the default
+region (seed `arkham`, 1925), the main town had 20,900 m² of ring blocks over
+the core, 14,400 m² of one ring over another, 137 pairs of overlapping
+buildings and 56 town buildings on works' grounds. The causes: a ring cell
+was a whole rectangle kept by its centre alone; a works took a block only
+when the block's centre was inside its ground; placement knew the railways
+only as a preference and the regional roads not at all; and a few layouts
+used fixed offsets that a small ground could not hold.
+
+- [x] Rings go round what is there (`core/settlement/rings.ts`,
+      `core/geometry/territory.ts`): the old core's patches and the gate
+      suburbs are claimed ground, and each ring's cells are cut back along
+      the edge of the older ground they meet, one straight cut per claim
+      (a street runs there), so a block stays convex and keeps clear of the
+      core and of every ring inside it. Accepted cells become claimed ground
+      for the rings after; grid streets stop where they would cross older
+      ground; a cell that keeps no block lays no streets; and a radial
+      artery is drawn from where the core's streets end. The ground a ring
+      takes is fixed once the next ring starts, so blocks keep their
+      outlines year to year. A waterfront patch's traced shore is kept
+      within its own Voronoi cell.
+- [x] A works takes its ground, not the town's buildings
+      (`core/settlement/town.ts`, `blocks.ts`): a block standing on a works
+      is dropped as before; one that only runs onto it keeps its outline and
+      lots, and its buildings on the ground are cleared (`BlockRecipe.clear`)
+      after every draw is made, so the rest of the block is unchanged from
+      a year without the works. The drawn patch is cut back to the fence
+      and the town's own streets stop at it; arteries and roads stay whole.
+- [x] Works keep off the lines: the regional roads are laid before the
+      works (they depend only on the ground and the settlements), and no
+      ground may straddle surface track or a regional road; a pinned works
+      is kept and the crossing reported. Spurs and access roads are routed
+      around every other works' ground.
+- [x] Layouts fit their ground: the gasworks sizes its holders, retort
+      house, coal yard and tar tank from the ground it is given, and the
+      early mill pond is dug behind the mill instead of in the river. A test
+      lays out every type at every size, scale and year and checks that
+      nothing leaves the ground but what is built out over the water.
+- [x] The cemetery is laid out on the edge of the town of its day rather
+      than as far out as it may go.
+- [x] Towns that grow into each other: the ground built first keeps it
+      (`core/settlement/merge.ts`); a newer patch running onto an older one
+      of another town is cut back and its buildings there cleared, one
+      standing on it is dropped.
+- [x] The sweep audits every run: no overlapping blocks, no overlapping
+      buildings of different blocks, no town building on a works' ground,
+      no works' part outside its ground and no main line or road through a
+      works. The quick sweep reports 0 problems (32 runs); facilities placed
+      and failed are unchanged in aggregate (307/25 against 306/26).
+
+Still open: a railway that crosses an old town runs over its blocks (the
+blocks do not yet give way to the line), and a regional road can cross the
+blocks of a ring on its way in.

@@ -1,4 +1,5 @@
 import { area, ccw, centroid, inset, open, splitByLine, type Pt } from '../geometry/polygon.js';
+import { Territory } from '../geometry/territory.js';
 import { smoothLine, type Ring } from '../raster/contours.js';
 import type { Rng } from '../random/rng.js';
 import type { TerrainOutput } from '../terrain/stage.js';
@@ -14,6 +15,13 @@ import { gradientBetween, gridOrientation, STEPS_GRADIENT } from './orientation.
  * the street pattern of the era that built it (DESIGN §6.3). Ring extents come
  * from a growth curve of the population; each ring is a rotated grid whose
  * cells become blocks, cut by radial arteries.
+ *
+ * A ring is laid around what is already there. Its cells are rectangles chosen by their centres,
+ * so the cells along its inner edge reach into the old core or the ring before; each is cut back
+ * along the edge of the older ground it meets (a street runs there), and the grid's streets stop
+ * where they would cross older ground. Every ring keeps clear of the core, the gate suburbs and
+ * every ring inside it, and the ground it takes is fixed once the next ring starts, so a block
+ * keeps its outline from year to year.
  */
 
 export interface GrowthRing {
@@ -121,6 +129,11 @@ interface RingGenContext {
   coreElevationM: number;
   /** Distance to the nearest river or other water, negative in it. */
   riverDistance: (x: number, y: number) => number;
+  /**
+   * Ground the town had already built on before the first ring: the old core's patches and the
+   * suburbs outside its gates, by their street centrelines. No ring block or street is laid on it.
+   */
+  claimed?: Ring[];
 }
 
 /** Distance from a point to a segment. */
@@ -136,6 +149,11 @@ function distToSegment(p: Pt, a: Pt, b: Pt): number {
 export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: RingGenContext): RingsResult {
   const { site, rng } = ctx;
   const [cx, cy] = site.center;
+  // Older ground: the core's patches (tag -1), then each ring's accepted cells (tag = ring index).
+  const ground = new Territory<number>(200);
+  for (const r of ctx.claimed ?? []) ground.add(r, -1);
+  let currentRing = -1;
+  const older = (c: { tag: number }) => c.tag < currentRing;
   const blocks: RingBlock[] = [];
   const streets: RingsResult['streets'] = [];
   const bridges: [Pt, Pt][] = [];
@@ -207,16 +225,22 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
       b: endFull,
       far: [start[0] + dir[0] * 50_000, start[1] + dir[1] * 50_000],
     });
-    if (Math.hypot(end[0] - start[0], end[1] - start[1]) >= 60)
-      streets.push({ points: [start, end], cls: 'artery', key: `artery-${arteryLines.length - 1}` });
+    // The drawn artery picks up where the old core's streets end rather than over its blocks.
+    let drawFrom = start;
+    const endLen = Math.hypot(end[0] - start[0], end[1] - start[1]);
+    for (let d = 0; d < endLen && ground.covers(drawFrom); d += 5)
+      drawFrom = [start[0] + dir[0] * d, start[1] + dir[1] * d];
+    if (Math.hypot(end[0] - drawFrom[0], end[1] - drawFrom[1]) >= 60)
+      streets.push({ points: [drawFrom, end], cls: 'artery', key: `artery-${arteryLines.length - 1}` });
   }
 
   // Grid orientation: along the first artery, jittered per ring for variety.
   const theta0 = angles[0] ?? 0;
   const edgeKeys = new Set<string>();
   const key = (p: Pt) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-  // A grid edge is drawn only where it is on land: an edge across an inlet is trimmed to its land
-  // runs (a run shorter than a lane is dropped), so no street crosses the drawn water.
+  // A grid edge is drawn only where it is on land and clear of older ground: an edge across an
+  // inlet or into the old town is trimmed to its free runs (a run shorter than a lane is dropped),
+  // so no street crosses the drawn water or an older block.
   const landRuns = (a: Pt, b: Pt): [Pt, Pt][] => {
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const n = Math.max(1, Math.ceil(len / 6));
@@ -224,7 +248,8 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
     let start: number | null = null;
     for (let k = 0; k <= n; k++) {
       const t = k / n;
-      const land = ctx.isLand(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+      const p: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      const land = ctx.isLand(p[0], p[1]) && !ground.covers(p, older);
       if (land && start === null) start = t;
       if ((!land || k === n) && start !== null) {
         const end = land ? t : (k - 1) / n;
@@ -276,6 +301,7 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
   // one grid with the odd shift, not a patchwork.
   let prevTheta = theta0;
   rings.forEach((ring, ringIndex) => {
+    currentRing = ringIndex;
     const era = ring.era;
     const pattern = era.ringPattern;
     const sizeMul =
@@ -361,7 +387,11 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
           }
           pieces = next;
         }
-        pieces.forEach((piece, pieceIndex) => {
+        let laid = 0;
+        pieces.forEach((cut, pieceIndex) => {
+          // Cut back from the core and the rings inside this one, along the street at their edge.
+          const piece = ground.clear(cut, { keep: older });
+          if (piece.length < 3 || area(piece) < bw * bh * 0.08) return;
           let shrunk = inset(ccw(open(piece)), halfWidth);
           const nearWater =
             waterfront || shrunk.some(([x, y]) => ctx.riverDistance(x, y) < ctx.quayM + ctx.localCell);
@@ -373,6 +403,8 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
           if (shrunk.length < 3 || area(shrunk) < 150) return;
           const pc = centroid(shrunk);
           const dist = Math.min(ctx.radiusAt(pc[0], pc[1]), ring.rOut);
+          ground.add(piece, ringIndex);
+          laid++;
           blocks.push({
             ring: shrunk,
             ringIndex,
@@ -385,6 +417,8 @@ export function generateRings(rings: GrowthRing[], coreRadius: number, ctx: Ring
             builtYear: yearForRadius(site.history, dist, ring.fromYear, ring.toYear),
           });
         });
+        // A cell with no block left (all of it older ground, water or slivers) lays no streets.
+        if (!laid) continue;
         // Streets along the cell edges (the artery cuts are drawn as arteries already). On a
         // slope the collectors run along the contour (the grid's u axis); the cross streets
         // climb, and the steepest of them are steps.

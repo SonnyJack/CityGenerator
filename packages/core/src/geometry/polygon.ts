@@ -261,3 +261,95 @@ export function distToRing(p: Pt, ring: Ring): number {
   for (let i = 0; i < n; i++) d = Math.min(d, distToSegment(p, ring[i]!, ring[(i + 1) % n]!));
   return d;
 }
+
+/** Convex hull of a point set (Andrew's monotone chain): counter-clockwise, open. */
+export function convexHull(points: Ring): Ring {
+  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Pt[] = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, p) <= 0)
+      lower.pop();
+    lower.push(p);
+  }
+  const upper: Pt[] = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i]!;
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, p) <= 0)
+      upper.pop();
+    upper.push(p);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+
+/** Area of the part of `subject` inside the convex ring `clip` (counter-clockwise, open). */
+export function convexOverlapArea(subject: Ring, clip: Ring): number {
+  let out = subject;
+  const n = clip.length;
+  for (let i = 0; i < n && out.length >= 3; i++) out = clipHalfPlane(out, clip[i]!, clip[(i + 1) % n]!);
+  return out.length >= 3 ? area(out) : 0;
+}
+
+/**
+ * The part of `subject` clear of the convex ring `clip` (counter-clockwise, open), cut along the
+ * one edge of `clip` that keeps the most of it, moved `gapM` outward. A single straight cut keeps a
+ * convex subject convex and is how a later grid meets older ground: its last blocks are cut off by
+ * a street along the old edge. Empty when nothing is left.
+ */
+export function clearOfConvex(subject: Ring, clip: Ring, gapM = 0): Ring {
+  let best: Ring = [];
+  let bestArea = 0;
+  const n = clip.length;
+  for (let i = 0; i < n; i++) {
+    const a = clip[i]!;
+    const b = clip[(i + 1) % n]!;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 1e-9) continue;
+    // Outward normal of a counter-clockwise edge points to its right.
+    const nx = ((b[1] - a[1]) / len) * gapM;
+    const ny = (-(b[0] - a[0]) / len) * gapM;
+    // Keep the right of a→b, i.e. the left of b→a.
+    const kept = clipHalfPlane(subject, [b[0] + nx, b[1] + ny], [a[0] + nx, a[1] + ny]);
+    const k = kept.length >= 3 ? area(kept) : 0;
+    if (k > bestArea) {
+      bestArea = k;
+      best = kept;
+    }
+  }
+  return best;
+}
+
+/**
+ * The stretches of the segment a→b outside the convex ring `clip` (counter-clockwise, open), by
+ * Cyrus–Beck: none, one or two pieces.
+ */
+export function segmentOutsideConvex(a: Pt, b: Pt, clip: Ring): [Pt, Pt][] {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const n = clip.length;
+  for (let i = 0; i < n; i++) {
+    const p = clip[i]!;
+    const q = clip[(i + 1) % n]!;
+    // Inside is the left of each edge: side(x) = cross(q − p, x − p) ≥ 0.
+    const ex = q[0] - p[0];
+    const ey = q[1] - p[1];
+    const s0 = ex * (a[1] - p[1]) - ey * (a[0] - p[0]);
+    const ds = ex * dy - ey * dx;
+    if (Math.abs(ds) < 1e-12) {
+      if (s0 < 0) return [[a, b]];
+      continue;
+    }
+    const t = -s0 / ds;
+    if (ds > 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 >= t1) return [[a, b]];
+  }
+  const at = (t: number): Pt => [a[0] + dx * t, a[1] + dy * t];
+  const out: [Pt, Pt][] = [];
+  if (t0 > 1e-9) out.push([a, at(t0)]);
+  if (t1 < 1 - 1e-9) out.push([at(t1), b]);
+  return out;
+}

@@ -4,16 +4,22 @@ import { Raster } from '../raster/raster.js';
 import { contourPolygons } from '../raster/contours.js';
 import {
   area,
+  bbox,
+  ccw,
   centroid,
+  clipHalfPlane,
   compactness,
   distToRing,
   inset,
   open,
   orientedBox,
   pointInRing,
+  convexOverlapArea,
+  segmentOutsideConvex,
   type Pt,
 } from '../geometry/polygon.js';
 import { relax, unionBoundary, voronoi, type VoronoiCell } from '../geometry/voronoi.js';
+import { Territory } from '../geometry/territory.js';
 import type { TerrainOutput } from '../terrain/stage.js';
 import { landSampler, shoreDistance } from '../terrain/land.js';
 import type { SettlementSite } from './siting.js';
@@ -91,6 +97,11 @@ export interface BlockRecipe {
   /** Year the block emptied when the settlement shrank. */
   abandonedYear?: number;
   disasters?: BlockDisaster[];
+  /**
+   * Ground a works or a rail yard has taken from the block (convex, counter-clockwise): no building
+   * stands on it and its lots are not drawn. The rest of the block is laid out as it always was.
+   */
+  clear?: Ring[];
 }
 
 export interface TownOutput {
@@ -293,7 +304,14 @@ export const townStage = defineStage<TownInput, TownOutput>({
         if (!allLand) {
           const clipped = clipToLand(ring, cell.site, clipLand, localCell);
           if (!clipped) continue;
-          ring = clipped;
+          // The shore is traced on a grid, which can step past the cell's own edges into its
+          // neighbours: keep the trace within the (convex) cell.
+          const cellCcw = ccw(ring);
+          let inCell: Ring = clipped;
+          for (let k = 0; k < cellCcw.length && inCell.length >= 3; k++)
+            inCell = clipHalfPlane(inCell, cellCcw[k]!, cellCcw[(k + 1) % cellCcw.length]!);
+          if (inCell.length < 3) continue;
+          ring = inCell;
           waterfront = true;
         }
       }
@@ -864,6 +882,8 @@ export const townStage = defineStage<TownInput, TownOutput>({
         localCell,
         coreElevationM: innerHeights.length ? median(innerHeights) : height.sample(cx, cy),
         riverDistance: (x, y) => shoreDistance(terrain, x, y, 'water'),
+        // The old town and its gate suburbs are built before any ring: the rings go round them.
+        claimed: patches.filter((p) => p.inner || p.ward === 'gate').map((p) => p.ring),
       });
       ringCount = rings.rings.length;
       bridgeSpans.push(...rings.bridges);
@@ -958,21 +978,93 @@ export const townStage = defineStage<TownInput, TownOutput>({
         (b.disasters ??= []).push({ kind: e.kind, year: e.year, magnitude: e.magnitude });
       }
     }
-    // Reserved land: facilities and yards take their patches; those blocks draw nothing.
+    // Reserved land: facilities and yards take their ground. A patch or block standing mostly on it
+    // goes to the works; a patch that only runs onto it is cut back along its edge, the buildings
+    // of such a block that stand on the ground are cleared, and the town's own streets stop at the
+    // fence. Arteries and roads are left whole: the works is reached by them.
     if (input.reserved?.length) {
-      const reservedFor = (ring: Ring) => {
+      const taken = new Territory<{ id: string; ward: WardId }>(200);
+      for (const r of input.reserved) taken.add(r.ring, { id: r.id, ward: r.ward });
+      const holder = (ring: Ring) => {
         const c = centroid(ring);
-        return input.reserved!.find((r) => pointInRing(c[0], c[1], r.ring));
+        return taken
+          .near({ minX: c[0], minY: c[1], maxX: c[0], maxY: c[1] })
+          .find((t) => pointInRing(c[0], c[1], t.hull))?.tag;
       };
       for (const f of patchFeatures) {
         const ring = f.geometry.coordinates[0]!.map((p) => [p[0]!, p[1]!] as [number, number]);
-        const r = reservedFor(ring);
+        let r = holder(ring);
+        if (!r) {
+          const kept = taken.clear(ring);
+          if (kept.length < 3) r = taken.near(bbox(ring))[0]?.tag;
+          else if (area(kept) < area(ring) - 1) {
+            if (area(kept) < area(ring) * 0.35) r = taken.near(bbox(ring))[0]?.tag;
+            else f.geometry.coordinates = [[...kept, kept[0]!]];
+          }
+        }
         if (r) {
           f.properties.ward = r.ward;
           f.properties.why = `${r.ward}: land taken by ${r.id}`;
         }
       }
-      for (let i = blocks.length - 1; i >= 0; i--) if (reservedFor(blocks[i]!.ring)) blocks.splice(i, 1);
+      // A block keeps its outline and its lots, so what still stands is the same from year to year
+      // wherever the works are; the buildings on the taken ground are cleared.
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        const b = blocks[i]!;
+        if (holder(b.ring)) {
+          blocks.splice(i, 1);
+          continue;
+        }
+        const hit = taken.near(bbox(b.ring)).filter((t) => convexOverlapArea(b.ring, t.hull) > 1);
+        if (hit.length) b.clear = hit.map((t) => t.hull);
+      }
+      const LOCAL = new Set(['street', 'steps', 'lane', 'collector']);
+      const trimmed: typeof streetFeatures = [];
+      for (const f of streetFeatures) {
+        const pts = f.geometry.coordinates as Pt[];
+        if (!LOCAL.has(f.properties.class) || !taken.near(bbox(pts)).length) {
+          trimmed.push(f);
+          continue;
+        }
+        // Each segment keeps its stretches outside every ground it crosses; runs are rejoined.
+        const runs: Pt[][] = [];
+        let run: Pt[] = [];
+        for (let k = 1; k < pts.length; k++) {
+          let pieces: [Pt, Pt][] = [[pts[k - 1]!, pts[k]!]];
+          for (const t of taken.near(bbox([pts[k - 1]!, pts[k]!])))
+            if (t.interior.length >= 3)
+              pieces = pieces.flatMap(([a, b]) => segmentOutsideConvex(a, b, t.interior));
+          for (const [a, b] of pieces) {
+            const last = run[run.length - 1];
+            if (last && Math.hypot(last[0] - a[0], last[1] - a[1]) < 1e-6) run.push(b);
+            else {
+              if (run.length >= 2) runs.push(run);
+              run = [a, b];
+            }
+          }
+        }
+        if (run.length >= 2) runs.push(run);
+        runs
+          .filter(
+            (r) =>
+              r.reduce((d, q, j) => (j ? d + Math.hypot(q[0] - r[j - 1]![0], q[1] - r[j - 1]![1]) : 0), 0) >=
+              8,
+          )
+          .forEach((r, j) =>
+            trimmed.push({
+              ...f,
+              id: j ? `${String(f.id)}#${j}` : f.id,
+              geometry: { ...f.geometry, coordinates: r },
+            }),
+          );
+      }
+      streetFeatures.splice(0, streetFeatures.length, ...trimmed);
+      streetsKm = 0;
+      for (const f of streetFeatures) {
+        const c = f.geometry.coordinates;
+        for (let k = 1; k < c.length; k++)
+          streetsKm += Math.hypot(c[k]![0]! - c[k - 1]![0]!, c[k]![1]! - c[k - 1]![1]!) / 1000;
+      }
     }
     // Authored zones override generated wards for the patches they cover (DESIGN §9.3).
     if (input.zoneEdits?.length) {

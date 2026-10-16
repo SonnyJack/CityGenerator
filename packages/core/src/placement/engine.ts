@@ -83,13 +83,30 @@ export function framesOverlap(a: Frame, b: Frame): boolean {
   );
 }
 
-/** Build the raster-backed context shared by every request. */
+/** Whether the segment a→b enters the ring (an end inside it, or a crossing of one of its edges). */
+export function segmentEntersRing(a: Pt, b: Pt, ring: Ring): boolean {
+  if (pointInRing(a[0], a[1], ring) || pointInRing(b[0], b[1], ring)) return true;
+  const n = ring.length;
+  const cross = (o: Pt, p: Pt, q: Pt) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+  for (let i = 0; i < n; i++) {
+    const c = ring[i]!;
+    const d = ring[(i + 1) % n]!;
+    if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Build the raster-backed context shared by every request. `roads` are the regional roads, laid
+ * before any works: a works may stand beside a main road or a railway but not across one.
+ */
 export function createContext(
   terrain: TerrainOutput,
   sites: SettlementSite[],
   rail: RailOutput | null,
   year: number,
   windFrom: number,
+  roads: Pt[][] = [],
 ): PlacementContext {
   const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
   const { height, water, slope, distToSea, distToWater } = terrain;
@@ -143,6 +160,53 @@ export function createContext(
       }
     }
     return best;
+  };
+  // Lines no ground may straddle: track on the surface (a tunnel or a subway passes under) and the
+  // regional roads, in a coarse grid of their segments.
+  const barrierCell = 250;
+  const barriers = new Map<string, { a: Pt; b: Pt; label: string }[]>();
+  const addBarrier = (pts: Pt[], label: string) => {
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      for (
+        let gx = Math.floor(Math.min(a[0], b[0]) / barrierCell);
+        gx <= Math.floor(Math.max(a[0], b[0]) / barrierCell);
+        gx++
+      )
+        for (
+          let gy = Math.floor(Math.min(a[1], b[1]) / barrierCell);
+          gy <= Math.floor(Math.max(a[1], b[1]) / barrierCell);
+          gy++
+        ) {
+          const k = `${gx},${gy}`;
+          (barriers.get(k) ?? barriers.set(k, []).get(k)!).push({ a, b, label });
+        }
+    }
+  };
+  for (const t of rail?.tracks.features ?? [])
+    if (t.properties.mode !== 'tunnel' && t.properties.mode !== 'subway')
+      addBarrier(
+        t.geometry.coordinates.map((c) => [c[0]!, c[1]!] as Pt),
+        'a railway',
+      );
+  for (const r of roads) addBarrier(r, 'a main road');
+  const lineThrough = (ring: Ring): string | null => {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of ring) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    for (let gx = Math.floor(minX / barrierCell); gx <= Math.floor(maxX / barrierCell); gx++)
+      for (let gy = Math.floor(minY / barrierCell); gy <= Math.floor(maxY / barrierCell); gy++)
+        for (const s of barriers.get(`${gx},${gy}`) ?? [])
+          if (segmentEntersRing(s.a, s.b, ring)) return s.label;
+    return null;
   };
   const rivers = terrain.riverLines.features;
   const riverTangent = (x: number, y: number): Pt | null => {
@@ -207,6 +271,7 @@ export function createContext(
       return [-gy / len, gx / len];
     },
     riverTangent,
+    lineThrough,
   };
 }
 
@@ -316,6 +381,8 @@ export function placeFeatures(
       };
       const info = candidateInfo(frame, host, ctx);
       const problems = type.hard.map((h) => h(info)).filter((r): r is string => !!r);
+      const through = ctx.lineThrough(frameRing(frame));
+      if (through) problems.push(`${through} runs through it`);
       // Pinned features are honoured; problems are reported as warnings through the failure list.
       if (problems.length) fail(`pinned ${type.name} kept although ${problems[0]}`);
       chosen = { frame, front: frontOf(type, frame, ctx) };
@@ -491,6 +558,12 @@ function search(
       }
       if (reason) {
         reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
+        continue;
+      }
+      const through = ctx.lineThrough(frameRing(frame));
+      if (through) {
+        const why = `${through} runs through it`;
+        reasons.set(why, (reasons.get(why) ?? 0) + 1);
         continue;
       }
       if (ctx.placed.some((p) => framesOverlap(p, frame))) {

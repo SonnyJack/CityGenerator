@@ -12,6 +12,7 @@ import {
   frameRing,
   pointInRing,
   railStage,
+  roadsStage,
   sitingStage,
   terrainStage,
   townStage,
@@ -79,11 +80,13 @@ async function bay(seed: string, year: number) {
     mainlines: 1,
     enabled: true,
   });
+  const roads = await runner.run(roadsStage, { seed, terrain, sites: siting.sites });
   const facilities = await runner.run(facilitiesStage, {
     seed,
     terrain,
     sites: siting.sites,
     rail,
+    roads,
     year,
     extent: { widthM: 16_000, heightM: 12_000 },
     requests: [],
@@ -92,7 +95,25 @@ async function bay(seed: string, year: number) {
     customTypes: [],
     scaleCompression: true,
   });
-  return { terrain, siting, rail, facilities };
+  return { terrain, siting, rail, roads, facilities };
+}
+
+/** Whether a polyline enters a ring: a vertex inside it, or a segment crossing one of its edges. */
+function lineEnters(line: number[][], ring: [number, number][]): boolean {
+  const cross = (o: number[], p: number[], q: number[]) =>
+    (p[0]! - o[0]!) * (q[1]! - o[1]!) - (p[1]! - o[1]!) * (q[0]! - o[0]!);
+  for (let i = 0; i < line.length; i++) {
+    const a = line[i]!;
+    if (pointInRing(a[0]!, a[1]!, ring)) return true;
+    if (!i) continue;
+    const b = line[i - 1]!;
+    for (let k = 0; k < ring.length; k++) {
+      const c = ring[k]!;
+      const d = ring[(k + 1) % ring.length]!;
+      if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return true;
+    }
+  }
+  return false;
 }
 
 describe('placement engine', () => {
@@ -118,6 +139,38 @@ describe('placement engine', () => {
       expect(port.properties.realLengthM).toBeGreaterThan(port.properties.lengthM);
     }
     expect(hits).toBeGreaterThanOrEqual(4);
+  }, 120_000);
+
+  it('never lays a works across a railway, a main road or the access of another works', async () => {
+    let grounds = 0;
+    for (const seed of ['bay-1', 'bay-2', 'bay-3']) {
+      const { facilities, rail, roads } = await bay(seed, 1925);
+      const lines = [
+        ...rail.tracks.features
+          .filter((t) => t.properties.mode !== 'tunnel' && t.properties.mode !== 'subway')
+          .map((t) => ({ from: '', pts: t.geometry.coordinates })),
+        ...roads.roads.features
+          .filter((r) => r.properties.mode !== 'tunnel')
+          .map((r) => ({ from: '', pts: r.geometry.coordinates })),
+        // A works' own spur and access road start at its edge; another works' may not cross it.
+        ...facilities.spurs.features
+          .filter((sp) => sp.properties.class === 'spur')
+          .map((sp) => ({ from: String(sp.properties.from), pts: sp.geometry.coordinates })),
+        ...facilities.roads.features.map((r) => ({
+          from: String(r.properties.from),
+          pts: r.geometry.coordinates,
+        })),
+      ];
+      for (const f of facilities.features.features) {
+        if (f.properties.pinned) continue;
+        grounds++;
+        const ring = f.geometry.coordinates[0]!.slice(0, -1).map((q) => [q[0]!, q[1]!] as [number, number]);
+        for (const l of lines)
+          if (l.from !== f.properties.id)
+            expect(lineEnters(l.pts, ring), `${l.from || 'a line'} through ${f.properties.id}`).toBe(false);
+      }
+    }
+    expect(grounds).toBeGreaterThan(10);
   }, 120_000);
 
   it('replaces the quay with a container terminal in 2020 and keeps every facility on its own land', async () => {
@@ -158,7 +211,7 @@ describe('placement engine', () => {
   }, 120_000);
 
   it('connects rail-served facilities with spurs, towns reserve the land, and it is deterministic', async () => {
-    const { terrain, siting, rail, facilities } = await bay('bay-2', 1925);
+    const { terrain, siting, rail, roads, facilities } = await bay('bay-2', 1925);
     expect(facilities.spurs.features.length).toBeGreaterThan(0);
     expect(facilities.roads.features.length).toBeGreaterThan(0);
     // Spurs reach the works; inside the grounds they run on as private sidings along the sheds.
@@ -212,6 +265,7 @@ describe('placement engine', () => {
       terrain,
       sites: siting.sites,
       rail,
+      roads,
       year: 1925,
       extent: { widthM: 16_000, heightM: 12_000 },
       requests: [],

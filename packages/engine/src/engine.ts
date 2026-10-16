@@ -4,6 +4,7 @@ import {
   landcoverStage,
   regionOutlineStage,
   roadsStage,
+  settleTownOverlaps,
   sitingStage,
   societyStage,
   railStage,
@@ -248,14 +249,20 @@ export function createEngine(options: CreateEngineOptions = {}): EngineApi {
         { signal },
       );
       let railMs = performance.now() - t5;
+      // Regional roads depend on the ground and the settlements alone, so they are laid before the
+      // works, which keep off them (a cemetery beside the turnpike, not astride it).
+      const t4 = performance.now();
+      const roads = await runner.run(roadsStage, { seed, terrain, sites }, { signal });
+      const roadsMs = performance.now() - t4;
       // Facilities: ports, industry, institutions and airports, placed before society
       // (they are nuisance sources) and before the towns (which reserve their land).
       const t7 = performance.now();
-      const facilitiesInput = (railAt: typeof rail, year: number) => ({
+      const facilitiesInput = (railAt: typeof rail, roadsAt: typeof roads, year: number) => ({
         seed,
         terrain,
         sites,
         rail: railAt,
+        roads: roadsAt,
         year,
         extent: doc.spec.extent,
         requests: [
@@ -297,7 +304,9 @@ export function createEngine(options: CreateEngineOptions = {}): EngineApi {
         scaleCompression: doc.spec.scaleCompression,
         defaults: doc.spec.defaultFacilities,
       });
-      let facilities = await runner.run(facilitiesStage, facilitiesInput(rail, doc.spec.year), { signal });
+      let facilities = await runner.run(facilitiesStage, facilitiesInput(rail, roads, doc.spec.year), {
+        signal,
+      });
       const facilitiesMs = performance.now() - t7;
       if (Object.keys(renames).length)
         facilities = {
@@ -354,9 +363,10 @@ export function createEngine(options: CreateEngineOptions = {}): EngineApi {
           },
           { signal },
         );
+        const anchorRoads = await runner.run(roadsStage, { seed, terrain, sites: anchorSites }, { signal });
         const anchorFacilities = await runner.run(
           facilitiesStage,
-          { ...facilitiesInput(anchorRail, doc.spec.anchorYear), sites: anchorSites },
+          { ...facilitiesInput(anchorRail, anchorRoads, doc.spec.anchorYear), sites: anchorSites },
           { signal },
         );
         zoningSociety = await runner.run(
@@ -420,10 +430,9 @@ export function createEngine(options: CreateEngineOptions = {}): EngineApi {
           ),
         );
       }
+      // Towns that have grown into each other: the ground built first keeps it.
+      towns.splice(0, towns.length, ...settleTownOverlaps(towns));
       const settlementsMs = performance.now() - t3;
-      const t4 = performance.now();
-      const roads = await runner.run(roadsStage, { seed, terrain, sites }, { signal });
-      const roadsMs = performance.now() - t4;
       // Trams and crossings per town, after the streets exist.
       const t6 = performance.now();
       const trams: TramOutput[] = [];

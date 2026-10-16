@@ -1,13 +1,15 @@
 import type { Feature, FeatureCollection, LineString, Polygon } from 'geojson';
 import { defineStage } from '../pipeline/stage.js';
 import type { Ring } from '../raster/contours.js';
+import { pointInRing } from '../geometry/polygon.js';
 import { landSampler, smoothOnLand } from '../terrain/land.js';
 import { WATER, type TerrainOutput } from '../terrain/stage.js';
 import type { SettlementSite } from '../settlement/siting.js';
 import type { WardId } from '../settlement/wards.js';
 import type { RailOutput, TrackProps } from '../networks/rail.js';
+import type { RoadsOutput } from '../settlement/roads.js';
 import { cellAt, roadCost, routeCells } from '../networks/routing.js';
-import { createContext, placeFeatures } from './engine.js';
+import { createContext, placeFeatures, segmentEntersRing } from './engine.js';
 import { customFeatureType, type CustomFeatureType } from './custom.js';
 import { defaultRequests } from './defaults.js';
 import { populationAt } from '../settlement/history.js';
@@ -33,6 +35,8 @@ export interface FacilitiesInput {
   terrain: TerrainOutput;
   sites: SettlementSite[];
   rail: RailOutput | null;
+  /** The regional roads, which no works may straddle (see the roads stage). */
+  roads?: RoadsOutput | null;
   year: number;
   extent: { widthM: number; heightM: number };
   /** Explicit requests from the spec (region and settlement level). */
@@ -99,7 +103,7 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
   version: 1,
   seedOf: (i) => i.seed,
   keyOf: (i) =>
-    `${i.terrain.key}|${i.rail?.key ?? ''}|${i.seed}|${i.year}|${i.scaleCompression}|${i.windFrom ?? ''}|${i.defaults ?? true}|${JSON.stringify(
+    `${i.terrain.key}|${i.rail?.key ?? ''}|${i.roads?.key ?? ''}|${i.seed}|${i.year}|${i.scaleCompression}|${i.windFrom ?? ''}|${i.defaults ?? true}|${JSON.stringify(
       [
         i.requests,
         i.removed,
@@ -111,7 +115,10 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
   run(input, ctx) {
     const { terrain, sites, year } = input;
     const windFrom = input.windFrom ?? Math.PI;
-    const pctx = createContext(terrain, sites, input.rail, year, windFrom);
+    const roadLines = (input.roads?.roads.features ?? [])
+      .filter((r) => r.properties.mode !== 'tunnel')
+      .map((r) => r.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number]));
+    const pctx = createContext(terrain, sites, input.rail, year, windFrom, roadLines);
     const types = featureTypeMap(input.customTypes.map(customFeatureType));
     const onLand = landSampler(terrain, { rivers: 'land', aboveSea: false });
     const hosts = new Map<string, HostSite>();
@@ -198,6 +205,58 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
       );
     };
     const roadC = roadCost(terrain);
+    // Every works' ground on the routing grid, drawn generously (a cell counts when its centre or a
+    // corner is inside, or a corner of the ground falls in it): a spur or an access road may cross
+    // its own works but no other.
+    const groundOf = new Map<number, string>();
+    {
+      const half = cellSizeM / 2;
+      for (const pf of result.placed) {
+        const ring = pf.ring;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const [x, y] of ring) {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+        const [c0, r0] = cellAt(terrain, minX, minY);
+        const [c1, r1] = cellAt(terrain, maxX, maxY);
+        for (let r = Math.min(r0, r1) - 1; r <= Math.max(r0, r1) + 1; r++)
+          for (let c = Math.min(c0, c1) - 1; c <= Math.max(c0, c1) + 1; c++) {
+            if (c < 0 || r < 0 || c >= height.width || r >= height.height) continue;
+            const x = height.x(c);
+            const y = height.y(r);
+            const probes: Pt[] = [
+              [x, y],
+              [x - half, y - half],
+              [x + half, y - half],
+              [x + half, y + half],
+              [x - half, y + half],
+            ];
+            if (probes.some(([px, py]) => pointInRing(px, py, ring)))
+              groundOf.set(r * height.width + c, pf.id);
+          }
+        for (const [x, y] of ring) {
+          const [c, r] = cellAt(terrain, x, y);
+          groundOf.set(r * height.width + c, pf.id);
+        }
+      }
+    }
+    const clearOfOthers =
+      (base: (v: number) => number, own: string, ends: number[]) =>
+      (v: number): number => {
+        const o = groundOf.get(v);
+        return o !== undefined && o !== own && !ends.includes(v) ? Infinity : base(v);
+      };
+    const entersOther = (line: Ring, own: string) =>
+      result.placed.some(
+        (pf) => pf.id !== own && line.some((q, i) => i > 0 && segmentEntersRing(line[i - 1]!, q, pf.ring)),
+      );
+    const indexOf = ([c, r]: [number, number]) => r * height.width + c;
     // Nearest point on the rail network to a point.
     const nearestTrackPoint = (p: Pt): Pt | null => {
       if (!input.rail) return null;
@@ -215,21 +274,22 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
     for (const rc of result.railConnectors) {
       const target = nearestTrackPoint(rc.from);
       if (!target || Math.hypot(target[0] - rc.from[0], target[1] - rc.from[1]) < 40) continue;
-      const cells = routeCells(
-        terrain,
-        cellAt(terrain, rc.from[0], rc.from[1]),
-        cellAt(terrain, target[0], target[1]),
-        { costOf: railCost },
-      );
+      const start = cellAt(terrain, rc.from[0], rc.from[1]);
+      const goal = cellAt(terrain, target[0], target[1]);
+      const cells = routeCells(terrain, start, goal, {
+        costOf: clearOfOthers(railCost, rc.feature, [indexOf(start), indexOf(goal)]),
+      });
       if (cells.length < 2) continue;
       const raw: Ring = cells.map(([c, r]) => [height.x(c), height.y(r)]);
       raw[0] = rc.from;
       raw[raw.length - 1] = target;
-      const line = smoothOnLand(raw, onLand, {
+      const smooth = smoothOnLand(raw, onLand, {
         preSimplify: cellSizeM * 0.75,
         iterations: 3,
         tolerance: cellSizeM * 0.2,
       });
+      // Smoothing must not swing the line into another works.
+      const line = entersOther(smooth, rc.feature) ? raw : smooth;
       const len = lengthOf(line);
       spurKm += len / 1000;
       const opened = Math.max(1830, rc.opened);
@@ -299,12 +359,11 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
       // Stop at the built-up edge; the town's streets take over inside.
       const stopR = Math.min(site.radiusM * 0.9, dist - 20);
       if (stopR <= 40) continue;
-      const cells = routeCells(
-        terrain,
-        cellAt(terrain, rd.from[0], rd.from[1]),
-        cellAt(terrain, site.center[0], site.center[1]),
-        { costOf: roadC },
-      );
+      const start = cellAt(terrain, rd.from[0], rd.from[1]);
+      const goal = cellAt(terrain, site.center[0], site.center[1]);
+      const cells = routeCells(terrain, start, goal, {
+        costOf: clearOfOthers(roadC, rd.feature, [indexOf(start), indexOf(goal)]),
+      });
       if (cells.length < 2) continue;
       const kept = cells.filter(
         ([c, r]) => Math.hypot(height.x(c) - site.center[0], height.y(r) - site.center[1]) >= stopR,
@@ -312,7 +371,8 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
       if (kept.length < 2) continue;
       const raw: Ring = kept.map(([c, r]) => [height.x(c), height.y(r)]);
       raw[0] = rd.from;
-      const line = smoothOnLand(raw, onLand, { iterations: 2, tolerance: cellSizeM * 0.3 });
+      const smooth = smoothOnLand(raw, onLand, { iterations: 2, tolerance: cellSizeM * 0.3 });
+      const line = entersOther(smooth, rd.feature) ? raw : smooth;
       const len = lengthOf(line);
       roadKm += len / 1000;
       roads.push({

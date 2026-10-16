@@ -54,6 +54,11 @@ export interface PlacementContext {
   coastTangent(x: number, y: number): Pt | null;
   /** Unit tangent of the nearest river within reach, or null. */
   riverTangent(x: number, y: number): Pt | null;
+  /**
+   * What runs through a ground, if anything: 'a railway' or 'a main road' when a surface track or
+   * a regional road crosses the ring (tunnels pass under), else null.
+   */
+  lineThrough(ring: Ring): string | null;
 }
 
 /** The settlement a request belongs to (null for region-level features). */
