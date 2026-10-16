@@ -143,6 +143,12 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
   expect(await page.evaluate(() => window.__citygen.tool())).toBe('select');
   const inside = await screen(page, cx, cy);
   const target = await screen(page, cx + 200, cy + 150);
+  const view = () =>
+    page.evaluate(() => {
+      const c = window.__citygenMap!.getCenter();
+      return `${c.lng.toFixed(6)},${c.lat.toFixed(6)}`;
+    });
+  const viewBefore = await view();
   await page.mouse.move(inside.x, inside.y);
   await page.mouse.down();
   await page.mouse.move(target.x, target.y, { steps: 8 });
@@ -151,7 +157,11 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
   const moved = d.authored.features[0]!;
   const ring = (moved.geometry.coordinates as unknown as number[][][])[0]!;
   const mx = ring.reduce((s, p) => s + p[0]!, 0) / ring.length;
-  expect(Math.abs(mx - (cx + 200))).toBeLessThan(20);
+  // When the move does not take, say what the drag did instead (selected? panned the map?).
+  const why = `building at x=${mx.toFixed(0)}, wanted ${(cx + 200).toFixed(0)}; selection ${JSON.stringify(
+    await page.evaluate(() => window.__citygen.selection()),
+  )}; map centre ${viewBefore} -> ${await view()}`;
+  expect(Math.abs(mx - (cx + 200)), why).toBeLessThan(20);
   // Properties panel: rename, rotate, undo.
   await page.getByLabel('Feature name').fill('Marsh & Sons');
   await page.getByTitle('Rotate 15° clockwise').click();

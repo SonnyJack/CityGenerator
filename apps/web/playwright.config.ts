@@ -12,7 +12,10 @@ export default defineConfig({
   // Tests that need more still say so.
   timeout: 90_000,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
-  use: { baseURL: 'http://localhost:4173', trace: 'on-first-retry' },
+  // The app's offline service worker would sit between the page and the network, and only Chromium
+  // lets a test intercept what passes through one: with it blocked, a mocked host answers in every
+  // browser. (The installable-app test fetches the worker's script; it does not need it running.)
+  use: { baseURL: 'http://localhost:4173', trace: 'on-first-retry', serviceWorkers: 'block' },
   webServer: {
     command: 'pnpm exec vite build && pnpm exec vite preview',
     url: 'http://localhost:4173',
