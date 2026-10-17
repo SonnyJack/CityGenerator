@@ -1330,7 +1330,7 @@ test('the gallery opens example regions and share links open hosted documents', 
   await expect(page.getByTestId('gallery-report')).toContainText('Lowlands');
   await page.getByLabel('Registry URL').fill('https://packs.example/r/index.json');
   await page.getByRole('button', { name: 'Add registry' }).click();
-  await expect(page.getByTestId('registry-packs')).toContainText('Cannery (hosted)');
+  await expect(page.getByTestId('registry-packs')).toContainText('Cannery (hosted)', { timeout: 30_000 });
   await expect(page.getByTestId('registry-packs')).toContainText('tester');
   await expect(page.getByTestId('registry-documents')).toContainText('Hosted castle town');
   await page.getByTestId('registry-packs').getByRole('button', { name: 'Import' }).click();

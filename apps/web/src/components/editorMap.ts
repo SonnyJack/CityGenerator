@@ -262,6 +262,23 @@ export function attachEditor(map: MapLibreMap): () => void {
     hover = null;
   }
 
+  // While a tool drags with the mouse, follow it on the document instead of through the map's own
+  // events: once the press is taken from the map (its default prevented), WebKit stops passing the
+  // map the moves made with the button held, so a drag would see only where it began and ended.
+  let following = false;
+  const followMove = (e: MouseEvent) => {
+    const r = map.getCanvasContainer().getBoundingClientRect();
+    const ll = map.unproject([e.clientX - r.left, e.clientY - r.top]);
+    const p = lonLatToMeters([ll.lng, ll.lat]);
+    lastCursor = p;
+    tools.pointerMove(p, { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey });
+  };
+  const stopFollowing = () => {
+    following = false;
+    document.removeEventListener('mousemove', followMove, true);
+    document.removeEventListener('mouseup', stopFollowing, true);
+  };
+
   const onDown = (e: MapMouseEvent | MapTouchEvent) => {
     // Pressing on the map takes the keyboard with it. Chromium does this by itself, but WebKit
     // leaves the focus on the last form control used, so the next tool shortcut would be typed
@@ -273,11 +290,17 @@ export function attachEditor(map: MapLibreMap): () => void {
     if ('button' in e.originalEvent && e.originalEvent.button !== 0) return;
     tools.hitToleranceM = 6 * metresPerPixel(map);
     downAt = { x: e.point.x, y: e.point.y };
-    if (tools.pointerDown(toXY(e), mods(e))) e.preventDefault();
+    if (!tools.pointerDown(toXY(e), mods(e))) return;
+    e.preventDefault();
+    if ('button' in e.originalEvent && !following) {
+      following = true;
+      document.addEventListener('mousemove', followMove, true);
+      document.addEventListener('mouseup', stopFollowing, true);
+    }
   };
   const onMove = (e: MapMouseEvent | MapTouchEvent) => {
     const s = useApp.getState();
-    if (s.tool === 'navigate') return;
+    if (s.tool === 'navigate' || following) return;
     tools.hitToleranceM = 6 * metresPerPixel(map);
     const p = toXY(e);
     lastCursor = p;
@@ -388,6 +411,7 @@ export function attachEditor(map: MapLibreMap): () => void {
 
   return () => {
     unsubscribe();
+    stopFollowing();
     window.removeEventListener('keydown', onKey);
     map.off('mousedown', onDown);
     map.off('mousemove', onMove);
