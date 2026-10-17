@@ -15,7 +15,6 @@ import {
   orientedBox,
   pointInRing,
   convexOverlapArea,
-  segmentOutsideConvex,
   type Pt,
 } from '../geometry/polygon.js';
 import { relax, unionBoundary, voronoi, type VoronoiCell } from '../geometry/voronoi.js';
@@ -1027,36 +1026,13 @@ export const townStage = defineStage<TownInput, TownOutput>({
           continue;
         }
         // Each segment keeps its stretches outside every ground it crosses; runs are rejoined.
-        const runs: Pt[][] = [];
-        let run: Pt[] = [];
-        for (let k = 1; k < pts.length; k++) {
-          let pieces: [Pt, Pt][] = [[pts[k - 1]!, pts[k]!]];
-          for (const t of taken.near(bbox([pts[k - 1]!, pts[k]!])))
-            if (t.interior.length >= 3)
-              pieces = pieces.flatMap(([a, b]) => segmentOutsideConvex(a, b, t.interior));
-          for (const [a, b] of pieces) {
-            const last = run[run.length - 1];
-            if (last && Math.hypot(last[0] - a[0], last[1] - a[1]) < 1e-6) run.push(b);
-            else {
-              if (run.length >= 2) runs.push(run);
-              run = [a, b];
-            }
-          }
-        }
-        if (run.length >= 2) runs.push(run);
-        runs
-          .filter(
-            (r) =>
-              r.reduce((d, q, j) => (j ? d + Math.hypot(q[0] - r[j - 1]![0], q[1] - r[j - 1]![1]) : 0), 0) >=
-              8,
-          )
-          .forEach((r, j) =>
-            trimmed.push({
-              ...f,
-              id: j ? `${String(f.id)}#${j}` : f.id,
-              geometry: { ...f.geometry, coordinates: r },
-            }),
-          );
+        taken.outside(pts, 8).forEach((r, j) =>
+          trimmed.push({
+            ...f,
+            id: j ? `${String(f.id)}#${j}` : f.id,
+            geometry: { ...f.geometry, coordinates: r },
+          }),
+        );
       }
       streetFeatures.splice(0, streetFeatures.length, ...trimmed);
       streetsKm = 0;

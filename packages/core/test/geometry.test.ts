@@ -110,6 +110,42 @@ describe('clearing older ground', () => {
     expect(t.covers([7, 5])).toBe(false);
     expect(t.covers([3, 3])).toBe(false);
   });
+
+  it('keeps the runs of a line outside every claim', () => {
+    const t = new Territory<string>(50);
+    t.add(shifted(20, 0), 'a');
+    // Through the claim: two runs, ending at the edges of its interior (1.5 m in from the ring).
+    const runs = t.outside([
+      [0, 5],
+      [50, 5],
+    ]);
+    expect(runs).toHaveLength(2);
+    expect(runs[0]![runs[0]!.length - 1]![0]).toBeCloseTo(21.5);
+    expect(runs[1]![0]![0]).toBeCloseTo(28.5);
+    // Short runs go; a line clear of the claim comes back whole.
+    expect(
+      t.outside(
+        [
+          [0, 5],
+          [25, 5],
+        ],
+        30,
+      ),
+    ).toEqual([]);
+    expect(
+      t.outside([
+        [0, 40],
+        [10, 40],
+        [50, 40],
+      ]),
+    ).toEqual([
+      [
+        [0, 40],
+        [10, 40],
+        [50, 40],
+      ],
+    ]);
+  });
 });
 
 describe('voronoi', () => {

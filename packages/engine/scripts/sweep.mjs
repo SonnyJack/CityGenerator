@@ -268,6 +268,40 @@ function overlapFindings(model) {
       }
   }
   if (crossed.size) found.push(`a line runs through ${[...crossed].join(', ')}`);
+  // Nothing built on a railway's bed or a regional road: the town clears the one and stops the
+  // other at its edge (sampled every 2 m along the centre line).
+  const beds = [
+    ...model.roads.features.filter((f) => f.properties?.mode !== 'tunnel'),
+    ...model.rail.features.filter(
+      (f) => !['tunnel', 'subway', 'elevated'].includes(f.properties?.mode) && f.properties?.class !== 'yard',
+    ),
+  ];
+  let onLine = 0;
+  let example = '';
+  for (const b of buildings) {
+    const ring = b.r.slice(0, -1);
+    const hit = beds.find((l) => {
+      const c = l.geometry.coordinates;
+      for (let i = 1; i < c.length; i++) {
+        const [p, q] = [c[i - 1], c[i]];
+        const seg = {
+          minX: Math.min(p[0], q[0]),
+          minY: Math.min(p[1], q[1]),
+          maxX: Math.max(p[0], q[0]),
+          maxY: Math.max(p[1], q[1]),
+        };
+        if (!meet(b.box, seg)) continue;
+        const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 2);
+        for (let k = 0; k <= n; k++)
+          if (pointInRing(p[0] + ((q[0] - p[0]) * k) / n, p[1] + ((q[1] - p[1]) * k) / n, ring)) return true;
+      }
+      return false;
+    });
+    if (!hit) continue;
+    onLine++;
+    example ||= ` (${b.block} on ${hit.id} ${hit.properties?.class}/${hit.properties?.mode ?? '-'})`;
+  }
+  if (onLine) found.push(`${onLine} buildings on a railway or a regional road${example}`);
   return found;
 }
 

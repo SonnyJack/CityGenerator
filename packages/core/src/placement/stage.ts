@@ -246,11 +246,21 @@ export const facilitiesStage = defineStage<FacilitiesInput, FacilitiesOutput>({
         }
       }
     }
+    // The old cores: a spur or an access road goes round a town's old streets rather than through
+    // them (a dock line follows the waterfront to the edge of town), at five times the cost.
+    const cores = [...hosts.values()].map((h) => ({ c: h.site.center, r2: h.coreRadiusM * h.coreRadiusM }));
+    const inCore = (v: number) => {
+      const x = height.x(v % height.width);
+      const y = height.y(Math.floor(v / height.width));
+      return cores.some(({ c, r2 }) => (x - c[0]) ** 2 + (y - c[1]) ** 2 < r2);
+    };
     const clearOfOthers =
       (base: (v: number) => number, own: string, ends: number[]) =>
       (v: number): number => {
         const o = groundOf.get(v);
-        return o !== undefined && o !== own && !ends.includes(v) ? Infinity : base(v);
+        if (o !== undefined && o !== own && !ends.includes(v)) return Infinity;
+        const cost = base(v);
+        return inCore(v) && !ends.includes(v) ? cost * 5 : cost;
       };
     const entersOther = (line: Ring, own: string) =>
       result.placed.some(

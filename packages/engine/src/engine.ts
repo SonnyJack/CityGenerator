@@ -5,6 +5,9 @@ import {
   regionOutlineStage,
   roadsStage,
   settleTownOverlaps,
+  clearAlongLines,
+  stopAtTowns,
+  type TownLine,
   sitingStage,
   societyStage,
   railStage,
@@ -252,7 +255,7 @@ export function createEngine(options: CreateEngineOptions = {}): EngineApi {
       // Regional roads depend on the ground and the settlements alone, so they are laid before the
       // works, which keep off them (a cemetery beside the turnpike, not astride it).
       const t4 = performance.now();
-      const roads = await runner.run(roadsStage, { seed, terrain, sites }, { signal });
+      let roads = await runner.run(roadsStage, { seed, terrain, sites }, { signal });
       const roadsMs = performance.now() - t4;
       // Facilities: ports, industry, institutions and airports, placed before society
       // (they are nuisance sources) and before the towns (which reserve their land).
@@ -432,6 +435,44 @@ export function createEngine(options: CreateEngineOptions = {}): EngineApi {
       }
       // Towns that have grown into each other: the ground built first keeps it.
       towns.splice(0, towns.length, ...settleTownOverlaps(towns));
+      // A railway took its bed out of the blocks it crossed: the buildings in its corridor are
+      // cleared (a tunnel or a subway passes under, an elevated line over the street). A road from
+      // outside stops where the built-up ground begins and the town's own streets carry it on.
+      const railBeds: TownLine[] = [
+        ...rail.tracks.features
+          .filter(
+            (t) =>
+              t.properties.class !== 'yard' && !['tunnel', 'subway', 'elevated'].includes(t.properties.mode),
+          )
+          .map((t) => ({
+            points: t.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number]),
+            halfWidthM:
+              t.properties.class === 'mainline'
+                ? 7
+                : t.properties.class === 'spur' || t.properties.class === 'siding'
+                  ? 4
+                  : 5,
+          })),
+        ...facilities.spurs.features
+          .filter((sp) => sp.properties.class === 'spur')
+          .map((sp) => ({
+            points: sp.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number]),
+            halfWidthM: 4,
+          })),
+      ];
+      roads = { ...roads, roads: { ...roads.roads, features: stopAtTowns(roads.roads.features, towns) } };
+      facilities = {
+        ...facilities,
+        roads: { ...facilities.roads, features: stopAtTowns(facilities.roads.features, towns) },
+      };
+      // What is left of a road still clears its carriageway where it skirts a block's edge.
+      const carriageways: TownLine[] = [...roads.roads.features, ...facilities.roads.features]
+        .filter((r) => (r.properties as { mode?: string }).mode !== 'tunnel')
+        .map((r) => ({
+          points: r.geometry.coordinates.map((c) => [c[0]!, c[1]!] as [number, number]),
+          halfWidthM: 4,
+        }));
+      towns.splice(0, towns.length, ...clearAlongLines(towns, [...railBeds, ...carriageways]));
       const settlementsMs = performance.now() - t3;
       // Trams and crossings per town, after the streets exist.
       const t6 = performance.now();

@@ -1063,7 +1063,9 @@ used, not the source. This policy goes in CONTRIBUTING.md.
   which may not straddle them or surface track, and spurs and access roads
   go round other works; layouts are sized to their ground; the cemetery
   stands on the town's edge; towns grown into each other give way to the
-  ground built first. The sweep audits all of it on every run.
+  ground built first. A surface railway clears the buildings in its corridor
+  through a town, and a regional or access road stops where the built-up
+  ground begins. The sweep audits all of it on every run.
 - **v1.1** — Editor backlog: lasso and by-query selection with alignment
   guides; a vegetation brush that paints land cover and a year brush that
   moves the built year of the ground under the stroke (both read by the land

@@ -909,10 +909,31 @@ test('scrubbing the year keeps what already stands and adds new growth around it
     }
     return hit;
   };
+  // The railways and roads of 1955 on the surface: a building in one's corridor was cleared for it.
+  const lines1955 = geo1955.features
+    .filter(
+      (f) =>
+        (f.properties.layer === 'rail' || f.properties.layer === 'roads') &&
+        f.geometry.type === 'LineString' &&
+        !['tunnel', 'subway', 'elevated'].includes(String((f.properties as { mode?: string }).mode)),
+    )
+    .map((f) => f.geometry.coordinates as unknown as number[][]);
+  const nearLine = (x: number, y: number) =>
+    lines1955.some((l) =>
+      l.some((q, i) => {
+        if (!i) return false;
+        const [ax, ay] = l[i - 1]!;
+        const [dx, dy] = [q[0]! - ax!, q[1]! - ay!];
+        const t = Math.max(0, Math.min(1, ((x - ax!) * dx + (y - ay!) * dy) / (dx * dx + dy * dy || 1)));
+        return Math.hypot(x - ax! - t * dx, y - ay! - t * dy) < 8;
+      }),
+    );
   const onGround = (geometry: string) => {
     const ring = (JSON.parse(geometry) as { coordinates: number[][][] }).coordinates[0]!;
-    return grounds.some(
-      (g) => ring.some(([x, y]) => inside(x!, y!, g)) || g.some(([x, y]) => inside(x!, y!, ring)),
+    return (
+      grounds.some(
+        (g) => ring.some(([x, y]) => inside(x!, y!, g)) || g.some(([x, y]) => inside(x!, y!, ring)),
+      ) || ring.some(([x, y]) => nearLine(x!, y!))
     );
   };
   expect(at1890.size).toBeGreaterThan(50);
@@ -920,8 +941,8 @@ test('scrubbing the year keeps what already stands and adds new growth around it
   // Every building standing in 1890 that has not been replaced by 1955 is still there, unchanged.
   let survivors = 0;
   // Blocks taken by a facility or rail yard between the two years lose their buildings (the land is
-  // reserved), and so does a building standing on part of a works' ground, which is a change of
-  // that place, not a re-roll of the rest.
+  // reserved), and so does a building standing on part of a works' ground or on the bed of a line
+  // opened since, which is a change of that place, not a re-roll of the rest.
   const reserved = new Set(['port', 'industrial', 'institution', 'campus', 'cemetery', 'airfield', 'yard']);
   const reservedBlocks = new Set(
     patchesAt1955

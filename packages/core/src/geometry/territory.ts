@@ -8,6 +8,7 @@ import {
   inset,
   open,
   pointInRing,
+  segmentOutsideConvex,
   type Pt,
   type Ring,
 } from './polygon.js';
@@ -92,6 +93,42 @@ export class Territory<T = unknown> {
       out = clearOfConvex(out, worst.hull, gapM);
     }
     return [];
+  }
+
+  /**
+   * The runs of a polyline outside every claim (inside a claim's interior, so a line along its
+   * edge stays), each at least `minLengthM` long. A line that never enters a claim comes back
+   * whole as one run.
+   */
+  outside(points: Pt[], minLengthM = 0, keep?: (c: Claim<T>) => boolean): Pt[][] {
+    const runs: Pt[][] = [];
+    let run: Pt[] = [];
+    for (let k = 1; k < points.length; k++) {
+      const a = points[k - 1]!;
+      const b = points[k]!;
+      const box = {
+        minX: Math.min(a[0], b[0]),
+        minY: Math.min(a[1], b[1]),
+        maxX: Math.max(a[0], b[0]),
+        maxY: Math.max(a[1], b[1]),
+      };
+      let pieces: [Pt, Pt][] = [[a, b]];
+      for (const c of this.near(box, keep))
+        if (c.interior.length >= 3)
+          pieces = pieces.flatMap(([p, q]) => segmentOutsideConvex(p, q, c.interior));
+      for (const [p, q] of pieces) {
+        const last = run[run.length - 1];
+        if (last && Math.hypot(last[0] - p[0], last[1] - p[1]) < 1e-6) run.push(q);
+        else {
+          if (run.length >= 2) runs.push(run);
+          run = [p, q];
+        }
+      }
+    }
+    if (run.length >= 2) runs.push(run);
+    const length = (r: Pt[]) =>
+      r.reduce((d, q, j) => (j ? d + Math.hypot(q[0] - r[j - 1]![0], q[1] - r[j - 1]![1]) : 0), 0);
+    return runs.filter((r) => length(r) >= minLengthM);
   }
 
   private keys(box: Claim['box']): string[] {

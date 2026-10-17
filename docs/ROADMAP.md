@@ -827,6 +827,18 @@ used fixed offsets that a small ground could not hold.
       works. The quick sweep reports 0 problems (32 runs); facilities placed
       and failed are unchanged in aggregate (307/25 against 306/26).
 
-Still open: a railway that crosses an old town runs over its blocks (the
-blocks do not yet give way to the line), and a regional road can cross the
-blocks of a ring on its way in.
+- [x] Lines through towns (`core/settlement/merge.ts`): a railway on the
+      surface (not a tunnel, subway or elevated line) takes its bed out of
+      the blocks it crosses: the buildings in its corridor (7 m either side
+      of a main line, 5 m of a branch, 4 m of a spur or siding) are cleared
+      with `BlockRecipe.clear`, so the rest of each block is what it would
+      be without the line. A regional road or a works' access road stops
+      where the town's built patches begin (`Territory.outside`; a run along
+      the street at a patch's edge stays) and the town's streets carry it
+      on; what is left still clears its carriageway where it skirts a
+      block. The town's own streets stop at reserved ground the same way.
+      Spurs and access roads cost five times as much through an old core,
+      so they go round it when they can (a port spur whose ends are both in
+      the core still cuts across it, as a dock line did).
+- [x] The sweep also checks that no building stands on a surface railway
+      or a regional road; the quick sweep reports 0 problems (32 runs).
