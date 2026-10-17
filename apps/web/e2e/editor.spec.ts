@@ -149,6 +149,21 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
       return `${c.lng.toFixed(6)},${c.lat.toFixed(6)}`;
     });
   const viewBefore = await view();
+  // Which events the page sees during the drag, for the message below if the move does not take.
+  await page.evaluate(() => {
+    const log: Record<string, number> = {};
+    (window as unknown as { __dragLog: Record<string, number> }).__dragLog = log;
+    for (const type of [
+      'mousedown',
+      'mousemove',
+      'mouseup',
+      'pointermove',
+      'pointercancel',
+      'dragstart',
+      'selectstart',
+    ])
+      document.addEventListener(type, () => (log[type] = (log[type] ?? 0) + 1), true);
+  });
   await page.mouse.move(inside.x, inside.y);
   await page.mouse.down();
   await page.mouse.move(target.x, target.y, { steps: 8 });
@@ -160,7 +175,9 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
   // When the move does not take, say what the drag did instead (selected? panned the map?).
   const why = `building at x=${mx.toFixed(0)}, wanted ${(cx + 200).toFixed(0)}; selection ${JSON.stringify(
     await page.evaluate(() => window.__citygen.selection()),
-  )}; map centre ${viewBefore} -> ${await view()}`;
+  )}; map centre ${viewBefore} -> ${await view()}; events ${JSON.stringify(
+    await page.evaluate(() => (window as unknown as { __dragLog: Record<string, number> }).__dragLog),
+  )}`;
   expect(Math.abs(mx - (cx + 200)), why).toBeLessThan(20);
   // Properties panel: rename, rotate, undo.
   await page.getByLabel('Feature name').fill('Marsh & Sons');

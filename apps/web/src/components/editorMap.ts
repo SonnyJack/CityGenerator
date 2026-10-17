@@ -292,6 +292,9 @@ export function attachEditor(map: MapLibreMap): () => void {
     downAt = { x: e.point.x, y: e.point.y };
     if (!tools.pointerDown(toXY(e), mods(e))) return;
     e.preventDefault();
+    // The press is the tool's: keep the browser from starting a selection or a native drag with it
+    // (WebKit cancels the pointer for either and sends no more moves until the button is released).
+    if (e.originalEvent.cancelable) e.originalEvent.preventDefault();
     if ('button' in e.originalEvent && !following) {
       following = true;
       document.addEventListener('mousemove', followMove, true);
