@@ -1,4 +1,4 @@
-import { useApp } from './store.js';
+import { tools, useApp } from './store.js';
 import { useAssistant } from './assistant/store.js';
 import { scriptedClient, type ScriptedTurn } from '@citygen/assistant';
 import { importFromUrl, importHeightmap, importText } from './import/importFile.js';
@@ -49,6 +49,18 @@ export function installTestApi() {
     setTool: (tool) => useApp.getState().setTool(tool as never),
     setToolOptions: (patch) => useApp.getState().setToolOptions(patch as never),
     selection: () => useApp.getState().selection,
+    // What the tool controller is in the middle of: the drag under way and the previewed features.
+    dragState: () => {
+      const t = tools as unknown as {
+        dragging: { kind: string; moved?: boolean } | null;
+        preview: Map<string, unknown>;
+      };
+      return {
+        dragging: t.dragging?.kind ?? null,
+        moved: t.dragging?.moved ?? null,
+        previews: t.preview.size,
+      };
+    },
     generatedHit: () => useApp.getState().generatedHit,
     recent: () => useApp.getState().recent,
     openRecent: (key) => useApp.getState().openRecent(key),
@@ -109,6 +121,7 @@ declare global {
       setTool(tool: string): void;
       setToolOptions(patch: Record<string, unknown>): void;
       selection(): string[];
+      dragState(): { dragging: string | null; moved: boolean | null; previews: number };
       generatedHit(): unknown;
       recent(): { key: string; name: string; seed: string }[];
       openRecent(key: string): Promise<boolean>;

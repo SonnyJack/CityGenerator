@@ -164,9 +164,17 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
     ])
       document.addEventListener(type, () => (log[type] = (log[type] ?? 0) + 1), true);
   });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  const dragState = () => page.evaluate(() => JSON.stringify(window.__citygen.dragState()));
   await page.mouse.move(inside.x, inside.y);
   await page.mouse.down();
+  const afterDown = await dragState();
   await page.mouse.move(target.x, target.y, { steps: 8 });
+  const afterMoves = await dragState();
   await page.mouse.up();
   d = await doc(page);
   const moved = d.authored.features[0]!;
@@ -175,7 +183,9 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
   // When the move does not take, say what the drag did instead (selected? panned the map?).
   const why = `building at x=${mx.toFixed(0)}, wanted ${(cx + 200).toFixed(0)}; selection ${JSON.stringify(
     await page.evaluate(() => window.__citygen.selection()),
-  )}; map centre ${viewBefore} -> ${await view()}; events ${JSON.stringify(
+  )}; map centre ${viewBefore} -> ${await view()}; after press ${afterDown}, after moves ${afterMoves}; errors ${JSON.stringify(
+    errors,
+  )}; events ${JSON.stringify(
     await page.evaluate(() => (window as unknown as { __dragLog: Record<string, number> }).__dragLog),
   )}`;
   expect(Math.abs(mx - (cx + 200)), why).toBeLessThan(20);
