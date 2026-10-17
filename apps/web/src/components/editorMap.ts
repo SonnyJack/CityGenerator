@@ -262,21 +262,35 @@ export function attachEditor(map: MapLibreMap): () => void {
     hover = null;
   }
 
-  // While a tool drags with the mouse, follow it on the document instead of through the map's own
-  // events: once the press is taken from the map (its default prevented), WebKit stops passing the
-  // map the moves made with the button held, so a drag would see only where it began and ended.
+  // While a tool drags with the mouse, follow it and take its release on the document instead of
+  // through the map's own events: the release can land on a panel over the map (the properties
+  // panel opens as the press selects a feature), where the map never hears of it.
   let following = false;
-  const followMove = (e: MouseEvent) => {
+  const atMouse = (e: MouseEvent) => {
     const r = map.getCanvasContainer().getBoundingClientRect();
-    const ll = map.unproject([e.clientX - r.left, e.clientY - r.top]);
-    const p = lonLatToMeters([ll.lng, ll.lat]);
+    const point = { x: e.clientX - r.left, y: e.clientY - r.top };
+    const ll = map.unproject([point.x, point.y]);
+    return { point, p: lonLatToMeters([ll.lng, ll.lat]) as XY };
+  };
+  const mouseMods = (e: MouseEvent): Modifiers => ({
+    shift: e.shiftKey,
+    alt: e.altKey,
+    ctrl: e.ctrlKey || e.metaKey,
+  });
+  const followMove = (e: MouseEvent) => {
+    const { p } = atMouse(e);
     lastCursor = p;
-    tools.pointerMove(p, { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey });
+    tools.pointerMove(p, mouseMods(e));
+  };
+  const followUp = (e: MouseEvent) => {
+    stopFollowing();
+    const { point, p } = atMouse(e);
+    release(p, point, mouseMods(e));
   };
   const stopFollowing = () => {
     following = false;
     document.removeEventListener('mousemove', followMove, true);
-    document.removeEventListener('mouseup', stopFollowing, true);
+    document.removeEventListener('mouseup', followUp, true);
   };
 
   const onDown = (e: MapMouseEvent | MapTouchEvent) => {
@@ -297,7 +311,7 @@ export function attachEditor(map: MapLibreMap): () => void {
     if ('button' in e.originalEvent && !following) {
       following = true;
       document.addEventListener('mousemove', followMove, true);
-      document.addEventListener('mouseup', stopFollowing, true);
+      document.addEventListener('mouseup', followUp, true);
     }
   };
   const onMove = (e: MapMouseEvent | MapTouchEvent) => {
@@ -322,16 +336,16 @@ export function attachEditor(map: MapLibreMap): () => void {
       }
     }
   };
-  const onUp = (e: MapMouseEvent | MapTouchEvent) => {
+  // A press ends: the tool takes the release, and a click (no drag) inspects what is under it.
+  const release = (p: XY, point: { x: number; y: number }, m: Modifiers) => {
     const s = useApp.getState();
-    const p = toXY(e);
-    const wasClick = downAt && Math.hypot(e.point.x - downAt.x, e.point.y - downAt.y) < 3;
+    const wasClick = downAt && Math.hypot(point.x - downAt.x, point.y - downAt.y) < 3;
     downAt = null;
     if (s.tool === 'navigate') {
       if (wasClick) s.inspect(p[0], p[1]);
       return;
     }
-    tools.pointerUp(p, mods(e));
+    tools.pointerUp(p, m);
     if (s.tool === 'select' && wasClick) {
       if (tools.selection.size === 0) {
         s.selectAnnotation(undefined);
@@ -341,6 +355,11 @@ export function attachEditor(map: MapLibreMap): () => void {
         s.clearInspection();
       }
     }
+  };
+  const onUp = (e: MapMouseEvent | MapTouchEvent) => {
+    // A mouse press the tool took was released on the document already.
+    if (!downAt && 'button' in e.originalEvent && useApp.getState().tool !== 'navigate') return;
+    release(toXY(e), e.point, mods(e));
   };
   const onDblClick = (e: MapMouseEvent) => {
     const s = useApp.getState();

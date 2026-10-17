@@ -176,6 +176,7 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
   await page.mouse.move(target.x, target.y, { steps: 8 });
   const afterMoves = await dragState();
   await page.mouse.up();
+  const afterUp = await dragState();
   d = await doc(page);
   const moved = d.authored.features[0]!;
   const ring = (moved.geometry.coordinates as unknown as number[][][])[0]!;
@@ -183,7 +184,7 @@ test('rectangle tool draws a building; select tool moves it; undo restores it', 
   // When the move does not take, say what the drag did instead (selected? panned the map?).
   const why = `building at x=${mx.toFixed(0)}, wanted ${(cx + 200).toFixed(0)}; selection ${JSON.stringify(
     await page.evaluate(() => window.__citygen.selection()),
-  )}; map centre ${viewBefore} -> ${await view()}; after press ${afterDown}, after moves ${afterMoves}; errors ${JSON.stringify(
+  )}; map centre ${viewBefore} -> ${await view()}; after press ${afterDown}, after moves ${afterMoves}, after release ${afterUp}; errors ${JSON.stringify(
     errors,
   )}; events ${JSON.stringify(
     await page.evaluate(() => (window as unknown as { __dragLog: Record<string, number> }).__dragLog),
