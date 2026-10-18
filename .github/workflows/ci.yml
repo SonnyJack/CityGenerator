@@ -54,9 +54,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' build
       - run: pnpm --filter @citygen/web exec playwright install --with-deps ${{ matrix.browser }}
-      # WebKit runs one test at a time: two map-heavy pages at once have had the browser kill a
-      # page's web process.
-      - run: pnpm --filter @citygen/web e2e --project=${{ matrix.browser }} ${{ matrix.browser == 'webkit' && '--workers=1' || '' }}
+      - run: pnpm --filter @citygen/web e2e --project=${{ matrix.browser }}
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

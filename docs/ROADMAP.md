@@ -854,8 +854,14 @@ used fixed offsets that a small ground could not hold.
       are none. (Joining across a river is left to a later pass with
       bridges.)
 - [x] CI: the runners are pinned to Ubuntu 24.04, the actions moved to their
-      Node 24 releases, WebKit runs one test at a time (two map-heavy pages
-      at once had the browser kill a page), and a page that crashes says so.
+      Node 24 releases, and a page that crashes says so. WebKit kills a
+      page's web process now and then (one or two tests a run, passing on
+      the retry), and not for memory: run alone in Chromium, the tests it
+      hits peak at 480–760 MB, no more than tests it never hits; a long
+      session (eleven regenerations across years and new documents) holds
+      flat at 450–500 MB with a page heap of 12 MB; and the crashes went on
+      with one test at a time on a 16 GB runner. Running WebKit one test at
+      a time was tried and dropped.
       A share link no longer loses to a slow restore of the autosaved
       document: it waits for the restore (an end-to-end test slows IndexedDB
       to prove it).
