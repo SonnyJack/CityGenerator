@@ -13,11 +13,11 @@ concurrency:
 jobs:
   check:
     name: Lint, typecheck, unit tests, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -30,7 +30,7 @@ jobs:
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
       - name: Upload site preview
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: site-preview
           path: apps/web/dist
@@ -38,24 +38,26 @@ jobs:
 
   e2e:
     name: End-to-end (${{ matrix.browser }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: check
     strategy:
       fail-fast: false
       matrix:
         browser: [chromium, firefox, webkit]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter './packages/*' build
       - run: pnpm --filter @citygen/web exec playwright install --with-deps ${{ matrix.browser }}
-      - run: pnpm --filter @citygen/web e2e --project=${{ matrix.browser }}
-      - uses: actions/upload-artifact@v4
+      # WebKit runs one test at a time: two map-heavy pages at once have had the browser kill a
+      # page's web process.
+      - run: pnpm --filter @citygen/web e2e --project=${{ matrix.browser }} ${{ matrix.browser == 'webkit' && '--workers=1' || '' }}
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report-${{ matrix.browser }}

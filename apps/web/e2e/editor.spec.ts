@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 /** World metres → page pixels via the live map. */
 async function screen(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {

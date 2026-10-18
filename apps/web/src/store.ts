@@ -29,6 +29,13 @@ import {
 import { historyThumbnail } from './components/historyThumbnail.js';
 import type { EngineStats, GeneratedHit, Inspection, Thumbnail } from './engine/api.js';
 
+let markRestored: () => void = () => {};
+/**
+ * Settles once the autosaved document (if any) has been restored: a document opened at start-up
+ * (a share link) waits for it, or the restore would replace what was opened.
+ */
+export const restored = new Promise<void>((resolve) => (markRestored = resolve));
+
 /** The authored layers, bottom of the draw order first; the panel reorders this list. */
 const AUTHORED_LAYER_ORDER: AuthoredLayer[] = [
   'zone',
@@ -216,10 +223,12 @@ export const useApp = create<AppState & { dispatchEditorChanged?: () => void }>(
   bus.subscribe((doc, event) => sync(doc, event.kind));
 
   // Restore the autosaved document, if any, then start the engine.
-  void loadAutosave().then((saved) => {
-    if (saved) bus.load(saved);
-    else sync(bus.document, 'load');
-  });
+  void loadAutosave()
+    .then((saved) => {
+      if (saved) bus.load(saved);
+      else sync(bus.document, 'load');
+    })
+    .finally(markRestored);
   void listRecent().then((recent) => set({ recent }));
 
   return {
