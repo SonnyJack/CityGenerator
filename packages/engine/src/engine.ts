@@ -6,6 +6,8 @@ import {
   roadsStage,
   settleTownOverlaps,
   clearAlongLines,
+  joinToStreets,
+  segmentEntersRing,
   stopAtTowns,
   type TownLine,
   sitingStage,
@@ -460,10 +462,41 @@ export function createEngine(options: CreateEngineOptions = {}): EngineApi {
             halfWidthM: 4,
           })),
       ];
-      roads = { ...roads, roads: { ...roads.roads, features: stopAtTowns(roads.roads.features, towns) } };
+      // Each road then runs on to the nearest street of the town it stopped at (a works' access
+      // road keeps only its run from the gate); an end at the edge of the map stays there.
+      const h = terrain.height;
+      const atEdge = ([x, y]: [number, number]) =>
+        x <= h.originX + h.cellSizeM ||
+        y <= h.originY + h.cellSizeM ||
+        x >= h.originX + (h.width - 2) * h.cellSizeM ||
+        y >= h.originY + (h.height - 2) * h.cellSizeM;
+      const onLand = landSampler(terrain, { rivers: 'water' });
+      const grounds = facilities.features.features.map((g) =>
+        g.geometry.coordinates[0]!.map((c) => [c[0]!, c[1]!] as [number, number]),
+      );
+      const blocked = (a: [number, number], b: [number, number]) =>
+        grounds.some((g) => segmentEntersRing(a, b, g));
+      roads = {
+        ...roads,
+        roads: {
+          ...roads.roads,
+          features: joinToStreets(stopAtTowns(roads.roads.features, towns), towns, {
+            onLand,
+            blocked,
+            fixed: (_f, p) => atEdge(p),
+          }),
+        },
+      };
       facilities = {
         ...facilities,
-        roads: { ...facilities.roads, features: stopAtTowns(facilities.roads.features, towns) },
+        roads: {
+          ...facilities.roads,
+          features: joinToStreets(stopAtTowns(facilities.roads.features, towns, 40, true), towns, {
+            onLand,
+            blocked,
+            fixed: (_f, p, which) => which === 'start' || atEdge(p),
+          }),
+        },
       };
       // What is left of a road still clears its carriageway where it skirts a block's edge.
       const carriageways: TownLine[] = [...roads.roads.features, ...facilities.roads.features]

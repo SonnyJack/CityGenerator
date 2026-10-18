@@ -6,7 +6,7 @@ export {
   type SitingOutput,
 } from './siting.js';
 export { townStage, type TownInput, type TownOutput, type BlockRecipe } from './town.js';
-export { settleTownOverlaps, clearAlongLines, stopAtTowns, type TownLine } from './merge.js';
+export { settleTownOverlaps, clearAlongLines, stopAtTowns, joinToStreets, type TownLine } from './merge.js';
 export { growthFootprint, type Footprint, type FootprintOptions } from './footprint.js';
 export {
   gridOrientation,

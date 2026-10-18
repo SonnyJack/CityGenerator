@@ -154,6 +154,12 @@ const boxOf = (r) => {
   }
   return { minX, minY, maxX, maxY };
 };
+const frameOf = (s, reach) => ({
+  minX: s.center[0] - reach,
+  minY: s.center[1] - reach,
+  maxX: s.center[0] + reach,
+  maxY: s.center[1] + reach,
+});
 const meet = (a, b) => a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
 /** Overlap of two rings, sampled on a grid over their common box (exact enough for a check). */
 function sampledOverlap(r1, r2, step) {
@@ -305,6 +311,59 @@ function overlapFindings(model) {
   return found;
 }
 
+/**
+ * A road into a town runs on to one of its streets: no road end within 150 m of a street stops
+ * short of it where a straight piece over land and off every works' ground could reach it (a works' gate, a joint with another road
+ * and the edges of the frame and of the map are ends of their own).
+ */
+async function looseRoadEnds(engine, model, frame, extent) {
+  const segNearest = (p, a, b) => {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    const q = [a[0] + t * dx, a[1] + t * dy];
+    return { q, d: Math.hypot(p[0] - q[0], p[1] - q[1]) };
+  };
+  const near = (p, fs, skip) => {
+    let best = { q: p, d: Infinity };
+    for (const f of fs) {
+      if (f === skip) continue;
+      const c = f.geometry.coordinates;
+      for (let i = 1; i < c.length; i++) {
+        const n = segNearest(p, c[i - 1], c[i]);
+        if (n.d < best.d) best = n;
+      }
+    }
+    return best;
+  };
+  const grounds = model.facilities.features.flatMap((f) => outer(f.geometry));
+  let loose = 0;
+  let example = '';
+  for (const r of model.roads.features) {
+    const c = r.geometry.coordinates;
+    const ends = r.properties?.from ? [c.at(-1)] : [c[0], c.at(-1)];
+    for (const p of ends) {
+      if (p[0] - frame.minX < 2 || frame.maxX - p[0] < 2 || p[1] - frame.minY < 2 || frame.maxY - p[1] < 2)
+        continue;
+      if (Math.abs(p[0]) > extent.widthM / 2 - 50 || Math.abs(p[1]) > extent.heightM / 2 - 50) continue;
+      if (near(p, model.roads.features, r).d <= 1) continue;
+      const { q, d } = near(p, model.streets.features);
+      if (d <= 2 || d > 150) continue;
+      const n = Math.ceil(d / 5);
+      const samples = Array.from({ length: n }, (_, k) => [
+        p[0] + ((q[0] - p[0]) * (k + 1)) / n,
+        p[1] + ((q[1] - p[1]) * (k + 1)) / n,
+      ]);
+      // The generator joins only over land and never across a works' ground.
+      if (samples.some(([x, y]) => grounds.some((g) => pointInRing(x, y, g)))) continue;
+      if ((await engine.landCheck(samples, { rivers: 'water' })).some((ok) => !ok)) continue;
+      loose++;
+      example ||= ` (${r.id} ${d.toFixed(0)} m from a street)`;
+    }
+  }
+  return loose ? [`${loose} road ends short of a street${example}`] : [];
+}
+
 const problems = [];
 const rows = [];
 const selected = range ? runs.slice(range[0], range[1]) : runs;
@@ -358,13 +417,10 @@ for (const run of selected) {
       // The whole of the largest town, for the overlap audit.
       const big = stats.settlements.reduce((a, b) => (b.population > a.population ? b : a), s);
       const reach = Math.min(1500, 250 + Math.sqrt(big.population) * 9);
-      const whole = await engine.exportFrame({
-        minX: big.center[0] - reach,
-        minY: big.center[1] - reach,
-        maxX: big.center[0] + reach,
-        maxY: big.center[1] + reach,
-      });
+      const whole = await engine.exportFrame(frameOf(big, reach));
       for (const f of overlapFindings(whole)) problems.push(`${run.name}: ${f}`);
+      for (const f of await looseRoadEnds(engine, whole, frameOf(big, reach), run.doc.spec.extent))
+        problems.push(`${run.name}: ${f}`);
       if (wetVertices) problems.push(`${run.name}: ${wetVertices} route vertices over water`);
       queries = ` q:${found.length}f ${summary?.premises ?? 0}p ${entries.length}b ${interiorRooms}r ${model.buildings.features.length}xb ${tile ? tile.byteLength : 0}t`;
       if (summary && summary.premises === 0 && s.population > 1000)

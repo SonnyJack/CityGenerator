@@ -842,3 +842,20 @@ used fixed offsets that a small ground could not hold.
       the core still cuts across it, as a dock line did).
 - [x] The sweep also checks that no building stands on a surface railway
       or a regional road; the quick sweep reports 0 problems (32 runs).
+- [x] Roads join the town's streets (`joinToStreets`): a road that stops at
+      the built-up edge, and a works' access road at its town end, runs on in
+      a straight piece to the nearest street point within 150 m that it can
+      reach over land and off every works' ground (the next nearest when the
+      nearest is blocked). A joint with another road and an end at the edge of
+      the map stay as they are, and an access road keeps only its run from
+      the gate. The sweep checks that no road end stops short of a street it
+      could reach this way. Before the join, a first and stricter form of
+      the check found 76 short ends in 29 of the 32 quick runs; now there
+      are none. (Joining across a river is left to a later pass with
+      bridges.)
+- [x] CI: the runners are pinned to Ubuntu 24.04, the actions moved to their
+      Node 24 releases, WebKit runs one test at a time (two map-heavy pages
+      at once had the browser kill a page), and a page that crashes says so.
+      A share link no longer loses to a slow restore of the autosaved
+      document: it waits for the restore (an end-to-end test slows IndexedDB
+      to prove it).

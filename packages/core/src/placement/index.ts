@@ -23,6 +23,7 @@ export {
   frameRing,
   toWorld,
   framesOverlap,
+  segmentEntersRing,
   type PlaceResult,
   type PlaceOptions,
 } from './engine.js';

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clearAlongLines,
+  joinToStreets,
   settleTownOverlaps,
   stopAtTowns,
   type BlockRecipe,
@@ -134,5 +135,130 @@ describe('lines through towns', () => {
       },
     };
     expect(stopAtTowns([clear], [t])[0]).toBe(clear);
+  });
+  it("keep only the run from a works' gate when asked", () => {
+    const access = {
+      id: 'a',
+      geometry: {
+        coordinates: [
+          [-200, 50],
+          [600, 50],
+        ],
+      },
+    };
+    const runs = stopAtTowns([access], [t], 40, true);
+    expect(runs.map((r) => r.id)).toEqual(['a']);
+    expect(runs[0]!.geometry.coordinates[0]).toEqual([-200, 50]);
+    // A line that starts inside the town has no run of its own.
+    expect(
+      stopAtTowns(
+        [
+          {
+            id: 'b',
+            geometry: {
+              coordinates: [
+                [50, 50],
+                [250, 50],
+              ],
+            },
+          },
+        ],
+        [t],
+        40,
+        true,
+      ),
+    ).toEqual([]);
+  });
+
+  it('run a road that stops short on to the nearest street, over land and off blocked ground', () => {
+    const streets = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [0, 100],
+            ],
+          },
+          properties: { class: 'street' },
+        },
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [100, 0],
+              [100, 100],
+            ],
+          },
+          properties: { class: 'street' },
+        },
+      ],
+    };
+    const withStreets = { ...t, streets } as unknown as TownOutput;
+    const road = {
+      geometry: {
+        coordinates: [
+          [-200, 50],
+          [-30, 50],
+        ],
+      },
+    };
+    const [joined] = joinToStreets([road], [withStreets]);
+    expect(joined!.geometry.coordinates.at(-1)).toEqual([0, 50]);
+    // The start is 200 m out: too far to join.
+    expect(joined!.geometry.coordinates[0]).toEqual([-200, 50]);
+    // An end on a street, a fixed end, or another road's end stays where it is.
+    const onStreet = {
+      geometry: {
+        coordinates: [
+          [-200, 50],
+          [0, 50],
+        ],
+      },
+    };
+    expect(joinToStreets([onStreet], [withStreets])[0]).toBe(onStreet);
+    expect(joinToStreets([road], [withStreets], { fixed: () => true })[0]).toBe(road);
+    const next = {
+      geometry: {
+        coordinates: [
+          [-30, 50],
+          [-30, 120],
+        ],
+      },
+    };
+    expect(joinToStreets([road, next], [withStreets])[0]!.geometry.coordinates).toHaveLength(2);
+    // Water in the way: no join. A works in the way of the nearest street: the next one is taken.
+    expect(joinToStreets([road], [withStreets], { onLand: (x) => x < -20 })[0]).toBe(road);
+    const east = {
+      geometry: {
+        coordinates: [
+          [300, 50],
+          [130, 50],
+        ],
+      },
+    };
+    const north = {
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [100, 120],
+          [300, 120],
+        ],
+      },
+      properties: { class: 'street' },
+    };
+    const both = {
+      ...t,
+      streets: { ...streets, features: [...streets.features, north] },
+    } as unknown as TownOutput;
+    const [round] = joinToStreets([east], [both], { blocked: (a, b) => Math.min(a[0], b[0]) <= 100 });
+    expect(round!.geometry.coordinates.at(-1)).toEqual([130, 120]);
+    const [direct] = joinToStreets([east], [withStreets]);
+    expect(direct!.geometry.coordinates.at(-1)).toEqual([100, 50]);
   });
 });
